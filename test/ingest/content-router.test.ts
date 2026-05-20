@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { homedir } from 'node:os';
 import { routeContent, isAIConversation, getAISource } from '../../src/ingest/content-router.js';
 
 // Sample Claude Code session content
@@ -6,7 +7,7 @@ const CLAUDE_SESSION = `# Claude Code Session: 2026-04-13 (abc12345)
 
 **Session ID:** abc12345-def6-7890-abcd-ef1234567890
 **Date:** 2026-04-13T10:00:00Z — 2026-04-13T11:00:00Z
-**Working directory:** \`/Users/valletta/dev/auth-redesign\`
+**Working directory:** \`/home/testuser/dev/auth-redesign\`
 **Git branch:** main
 **Source:** Claude Code 1.0
 
@@ -25,7 +26,7 @@ const CURSOR_SESSION = `# Cursor Session: 2026-04-13 (xyz78901)
 
 **Session ID:** xyz78901-abc2-3456-defg-hi7890123456
 **Date:** 2026-04-13T14:00:00Z — 2026-04-13T15:00:00Z
-**Working directory:** \`/Users/valletta/dev/frontend-app\`
+**Working directory:** \`/home/testuser/dev/frontend-app\`
 **Source:** Cursor
 
 ## Conversation
@@ -78,7 +79,7 @@ describe('routeContent', () => {
 
     it('uses metadata cwd when provided', () => {
       const result = routeContent('session.md', CLAUDE_SESSION, {
-        cwd: '/Users/valletta/Desktop',
+        cwd: `${homedir()}/Desktop`,
       });
       expect(result.cwdClassification?.category).toBe('general');
       expect(result.cwdClassification?.slug).toBe('_general');

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .karpathy/
+.carpathi/
 *.tsbuildinfo
 .DS_Store
 coverage/

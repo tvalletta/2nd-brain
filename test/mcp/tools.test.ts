@@ -250,7 +250,7 @@ describe('MCP Tool Handlers', () => {
 
   it('log_insight creates entity note', async () => {
     const result = await handleLogInsight({
-      title: 'Tom Valletta',
+      title: 'Alex Rivera',
       content: 'Frontend architect working on AI tooling.',
       type: 'entity',
       entity_kind: 'person',
@@ -260,7 +260,7 @@ describe('MCP Tool Handlers', () => {
     expect(parsed.path).toContain('wiki/entities');
 
     const content = await ctx.vault.read(parsed.path);
-    expect(content).toContain('Tom Valletta');
+    expect(content).toContain('Alex Rivera');
     expect(content).toContain('Frontend architect');
   });
 

@@ -5,7 +5,7 @@ Two equivalent surfaces for an external control center:
 ## 1. CLI (one-shot)
 
 ```bash
-/Users/valletta/dev/2nd-brain/bin/karpathy-with-env.sh intel health --json
+<project-root>/bin/karpathy-with-env.sh intel health --json
 ```
 
 Exit codes:
@@ -20,7 +20,7 @@ for an at-a-glance status.
 
 ```bash
 # Optional: start an HTTP server alongside launchd's tick job.
-/Users/valletta/dev/2nd-brain/bin/karpathy-with-env.sh intel serve --port 9123 &
+<project-root>/bin/karpathy-with-env.sh intel serve --port 9123 &
 curl http://127.0.0.1:9123/health
 ```
 
@@ -36,8 +36,8 @@ The same shape comes back from both surfaces. Top-level keys you can rely on:
 ```jsonc
 {
   "projectName": "karpathy",
-  "projectRoot": "/Users/valletta/dev/2nd-brain",
-  "vaultPath": "/Users/valletta/Library/CloudStorage/OneDrive-Adobe/Apps/Test Vault",
+  "projectRoot": "<project-root>",
+  "vaultPath": "<vault-path>",
   "generatedAt": "2026-05-12T14:57:43.984Z",
   "overall": "ok" | "warn" | "critical",
   "checks": [
@@ -93,7 +93,7 @@ The same shape comes back from both surfaces. Top-level keys you can rely on:
 ## Verifying after an upgrade
 
 ```bash
-cd /Users/valletta/dev/2nd-brain
+cd <project-root>
 pnpm build                       # → dist/
 launchctl unload ~/Library/LaunchAgents/com.karpathy.tick.plist
 launchctl load   ~/Library/LaunchAgents/com.karpathy.tick.plist
