@@ -1,0 +1,40 @@
+{
+  "name": "karpathy",
+  "version": "0.1.0",
+  "description": "Local-first knowledge system that captures Claude Code sessions and raw sources into an Obsidian wiki",
+  "type": "module",
+  "bin": {
+    "karpathy": "./dist/bin/karpathy.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "karpathy": "node dist/bin/karpathy.js",
+    "mcp": "node dist/mcp/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true,
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/bedrock-sdk": "^0.28.1",
+    "@aws-sdk/client-bedrock-runtime": "^3.1029.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^11.10.0",
+    "chokidar": "^5.0.0",
+    "gray-matter": "^4.0.3",
+    "nanoid": "^5.1.7",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.6.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.9"
+  }
+}
