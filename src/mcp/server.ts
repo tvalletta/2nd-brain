@@ -1,5 +1,4 @@
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -20,10 +19,13 @@ import { createLogger } from '../shared/logger.js';
 
 const log = createLogger('mcp-server');
 
-// Resolve project root from this file's location so the server works
-// regardless of the working directory Claude Code spawns it from.
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(__dirname, '../..');
+// Resolve project root. When invoked directly (`node dist/mcp/server.js`) or
+// via `karpathy mcp`, the CWD is always the project root — Claude Code sets it
+// explicitly, and hooks run in the project directory. Using process.cwd() is
+// more robust than import.meta.url because tsup may bundle this module as a
+// flat chunk (dist/server-HASH.js) whose dirname is one level shallower than
+// expected, causing resolve(__dirname, '../..') to point at the wrong ancestor.
+const projectRoot = resolve(process.cwd());
 
 // Create context first so we can derive instructions from the actual runtime layout.
 const ctx = await createMCPContext(projectRoot);
@@ -66,17 +68,45 @@ scanRawDirectory(ctx.vault, ctx.config.layout).then((result) => {
   log.error('Startup ingest failed', { error: (err as Error).message });
 });
 
-// Background: watch raw/ for new files and auto-ingest
+// Background: watch raw/ for new files and auto-ingest. Also enqueue
+// per-file FTS sync events for any markdown change/delete inside the vault
+// — keeps the keyword index live during long-running MCP sessions.
 if (ctx.config.ingest.watchEnabled) {
-  const { join } = await import('node:path');
+  const { join, relative } = await import('node:path');
   const watchPaths = ctx.config.ingest.watchPaths.map((p) => join(ctx.config.vaultPath, p));
-  const watcher = await createFileWatcher(watchPaths, async (filePath) => {
-    try {
-      const result = await ingestFile(filePath, ctx.vault, ctx.config.layout);
-      log.info('Auto-ingested new file', { rawPath: result.rawPath, summary: result.sourceSummaryPath });
-    } catch (err) {
-      log.error('Auto-ingest failed', { filePath, error: (err as Error).message });
-    }
+
+  const enqueueFtsSync = async (filePath: string, deleted = false) => {
+    if (!filePath.endsWith('.md')) return;
+    const rel = relative(ctx.config.vaultPath, filePath);
+    if (rel.startsWith('..')) return;
+    await ctx.enqueueJob({
+      type: 'sync-fts-index',
+      payload: deleted ? { deletedFile: rel } : { file: rel },
+      trigger: 'file-watcher',
+      priority: 100,
+      dedupeKey: `sync-fts-index:${rel}`,
+    });
+  };
+
+  const watcher = await createFileWatcher(watchPaths, {
+    async onFile(filePath) {
+      try {
+        const result = await ingestFile(filePath, ctx.vault, ctx.config.layout);
+        log.info('Auto-ingested new file', {
+          rawPath: result.rawPath,
+          summary: result.sourceSummaryPath,
+        });
+      } catch (err) {
+        log.error('Auto-ingest failed', { filePath, error: (err as Error).message });
+      }
+      await enqueueFtsSync(filePath);
+    },
+    async onChange(filePath) {
+      await enqueueFtsSync(filePath);
+    },
+    async onUnlink(filePath) {
+      await enqueueFtsSync(filePath, true);
+    },
   });
   watcher.start();
 

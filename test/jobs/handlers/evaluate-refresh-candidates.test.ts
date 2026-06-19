@@ -47,13 +47,14 @@ describe('evaluate-refresh-candidates handler', () => {
   }
 
   async function writeNote(fields: Record<string, unknown>) {
+    const now = new Date().toISOString();
     const fm = {
       id: 'concept-fsrs',
       type: 'concept',
       title: 'FSRS',
       status: 'active',
-      created_at: '2026-05-01T00:00:00.000Z',
-      updated_at: '2026-05-01T00:00:00.000Z',
+      created_at: now,
+      updated_at: now,
       ...fields,
     };
     await vault.create(notePath, serializeNote(fm, 'body'));
