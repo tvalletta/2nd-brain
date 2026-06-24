@@ -70,19 +70,44 @@ export interface EmbeddingStore {
   getCacheStats(): CacheStats;
   /** Reset the in-memory cache stats (used by tests). */
   resetCacheStats(): void;
+  /**
+   * Delete every row owned by `providerId`. Used by `karpathy maintenance
+   * --prune-provider <id>` after switching the active provider so old vectors
+   * don't accumulate.
+   */
+  pruneProvider(providerId: string): number;
+  /** List distinct provider ids currently stored. */
+  listProviders(): { provider_id: string; rows: number }[];
   close(): void;
 }
 
 export interface EmbeddingStoreOptions {
-  dbPath: string;
+  /** Path to the SQLite file. Required when `db` is not supplied. */
+  dbPath?: string;
   provider: EmbeddingProvider;
+  /**
+   * Optional pre-opened better-sqlite3 handle. When provided, the store does
+   * NOT close the handle in `close()` — the caller (e.g. HybridStore) owns
+   * the connection lifecycle. Used so the FTS index and the embedding store
+   * can share `.karpathy/state/embeddings.sqlite` without two connections.
+   */
+  db?: Database.Database;
 }
 
 export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore {
-  mkdirSync(dirname(opts.dbPath), { recursive: true });
-  const db = new Database(opts.dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('synchronous = NORMAL');
+  const ownsDb = !opts.db;
+  let db: Database.Database;
+  if (opts.db) {
+    db = opts.db;
+  } else {
+    if (!opts.dbPath) {
+      throw new Error('openEmbeddingStore requires either `db` or `dbPath`');
+    }
+    mkdirSync(dirname(opts.dbPath), { recursive: true });
+    db = new Database(opts.dbPath);
+    db.pragma('journal_mode = WAL');
+    db.pragma('synchronous = NORMAL');
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS embeddings (
@@ -223,10 +248,14 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
     },
 
     async replaceDoc(docId: string, inputs: UpsertInput[]) {
-      // Compute embeddings first (outside the txn — async work).
+      // Kick off the existing-rows read in parallel with the embedding call —
+      // both are independent and the SQLite read can finish while Bedrock /
+      // Ollama is still on the wire. `Promise.resolve(...)` over a sync
+      // statement just keeps the await/parallelism shape uniform.
+      const existingPromise = Promise.resolve(this.getByDoc(docId));
       const vectors = inputs.length > 0 ? await embedWithCache(inputs) : [];
+      const existing = await existingPromise;
       const now = new Date().toISOString();
-      const existing = this.getByDoc(docId);
       const wantedIndices = new Set(inputs.map((i) => i.chunk_index));
 
       const tx = db.transaction(() => {
@@ -296,8 +325,22 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
       cacheMisses = 0;
     },
 
+    pruneProvider(providerId: string) {
+      const result = db
+        .prepare(`DELETE FROM embeddings WHERE provider_id = ?`)
+        .run(providerId);
+      return Number(result.changes ?? 0);
+    },
+
+    listProviders() {
+      const rows = db
+        .prepare(`SELECT provider_id, COUNT(*) AS rows FROM embeddings GROUP BY provider_id`)
+        .all() as { provider_id: string; rows: number }[];
+      return rows;
+    },
+
     close() {
-      db.close();
+      if (ownsDb) db.close();
     },
   };
 }

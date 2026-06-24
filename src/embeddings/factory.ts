@@ -8,6 +8,7 @@ import {
   type EmbeddingStore,
   createBedrockTitanProvider,
   createDeterministicProvider,
+  createOllamaProvider,
   openEmbeddingStore,
 } from './index.js';
 
@@ -18,6 +19,13 @@ export function createProviderFromConfig(config: KarpathyConfig): EmbeddingProvi
         region: config.embeddings.region ?? config.llm.region,
         modelId: config.embeddings.model,
         dimensions: config.embeddings.dimensions as 256 | 512 | 1024 | undefined,
+      });
+    case 'ollama':
+      return createOllamaProvider({
+        baseUrl: config.embeddings.baseUrl,
+        model: config.embeddings.model ?? 'nomic-embed-text',
+        dimensions: config.embeddings.dimensions ?? 768,
+        timeoutMs: config.embeddings.timeoutMs,
       });
     case 'deterministic':
     default:

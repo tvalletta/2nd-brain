@@ -5,6 +5,11 @@ export {
   cosineSimilarity,
 } from './provider.js';
 export {
+  type OllamaProviderOptions,
+  createOllamaProvider,
+  isOllamaAvailable,
+} from './ollama.js';
+export {
   type EmbeddingStore,
   type EmbeddingRow,
   type SearchHit,

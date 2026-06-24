@@ -736,9 +736,13 @@ Expose the vault to AI tools through MCP only after the local workflow is stable
 
 MCP SHOULD begin with read-oriented operations. Expanded mutation behavior MAY be added later under explicit control.
 
+### Phase 7: Hybrid search
+
+Replace the siloed `search_vault` (keyword) and `get_related` (semantic) tools with a single unified `search` tool backed by an FTS5 keyword index over the entire vault and an Ollama-powered semantic pool, fused via Reciprocal Rank Fusion. See §24.
+
 ## 19. MCP scope
 
-The MCP server exposes 20 tools organized by function. Server instructions are derived at startup from the actual runtime vault layout so paths shown to the LLM match what is on disk.
+The MCP server exposes 20+ tools organized by function. Server instructions are derived at startup from the actual runtime vault layout so paths shown to the LLM match what is on disk.
 
 ### Search decision table
 
@@ -747,15 +751,18 @@ The server instructions MUST include a routing table telling the LLM which searc
 | Goal | Tool |
 |------|------|
 | Orient at session start | `get_hot_cache` |
-| Find notes by keyword | `search_vault` |
+| Find notes by keyword OR concept | `search` |
+| Find notes similar to one I have | `search` (with `path`) |
 | Find a specific person/tool/project | `get_entity` or `search_entities` |
-| Find semantically related notes | `get_related` |
 | Surface past decisions | `get_decisions` |
 | Recent session context | `get_recent_sessions` |
 
-### Read tools (12)
+`search_vault` and `get_related` are deprecated; their definitions remain registered with `Deprecated — use search instead.` descriptions for one major version. New callers MUST use `search`. See §24 for the hybrid retrieval design.
+
+### Read tools (13)
 - `get_hot_cache` — active context from the hotcache (CLAUDE.md or Curated/hotcache.md per layout); MUST be called first at session start;
-- `search_vault` — full-text keyword search with stemming across all note types; ranking: title exact > title contains > title term hits > heading hits > body frequency; excludes `_index.md` category files; supports partial matching ("analysis" finds "analyses");
+- `search` — **unified hybrid search**. FTS5 BM25 keyword pool over every markdown file in the vault, fused with the configured embedding provider's semantic pool (Ollama by default — fully local) via Reciprocal Rank Fusion + recency weighting. Accepts a free-text `query` OR a vault note `path` (anchor — uses the note's `title + tldr + body[:800]`). Degrades to keyword-only mode when the embedding provider is unreachable; never errors on provider unavailability;
+- `search_vault` — *Deprecated — use `search` instead. Will be removed in the next major version.*
 - `get_note` — read by exact path or title, with detail levels (metadata / summary / full);
 - `get_recent_sessions` — session summaries sorted by date; when frontmatter `prompt_summary`/`outcome_summary` are unpopulated, automatically extracts from the `decisions` protected region;
 - `get_entity` — direct lookup by name or path, with detail levels;
@@ -764,7 +771,7 @@ The server instructions MUST include a routing table telling the LLM which searc
 - `get_review_queue` — items pending human review;
 - `get_backlinks` — all notes linking to a target via wikilinks;
 - `search_by_tags` — search notes by aliases, links, or tags (AND/OR);
-- `get_related` — semantic similarity via Bedrock-Titan embeddings with recency boost (`α·sim + β·recency`); returns a clear fallback message when AWS credentials are expired, suggesting `search_vault` as an alternative;
+- `get_related` — *Deprecated — use `search` with a `path` parameter instead. Will be removed in the next major version.*
 - `batch_get_notes` — read multiple known notes in one round-trip, with detail levels.
 
 ### Write tools (4)
@@ -933,4 +940,62 @@ The job MUST NOT overwrite any protected regions during re-enrichment. Only the 
 - `last_verified` MUST be updated to the current ISO timestamp after successful re-enrichment (even for no-op enrichment — the note was "verified" as of that moment).
 - If entity extraction produces no results, the job completes successfully — no-op enrichment is valid.
 - Re-enrichment of a note that does not exist in the vault MUST fail with a clear error, not silently succeed.
+
+## 24. Hybrid search
+
+The full design lives in [`docs/superpowers/specs/2026-06-17-hybrid-search-design.md`](../docs/superpowers/specs/2026-06-17-hybrid-search-design.md). This section captures the normative requirements that flow from that design.
+
+### 24.1 Goals
+
+A single unified `search` MCP tool MUST combine an FTS5 BM25 keyword pool over the entire vault with the configured embedding provider's semantic pool, fused via Reciprocal Rank Fusion + recency weighting. The tool MUST:
+
+- accept either a free-text `query` or a vault note `path` (anchor — uses the note's `title + tldr + body[:800]`);
+- cover **every** markdown file in the vault for the keyword pool, regardless of whether the embedding pipeline has touched it;
+- degrade to keyword-only mode (`searchMode: 'keyword-only'`) with a `degradation_note` when the embedding provider is unavailable — never raise an error on provider unavailability;
+- exclude the anchor doc itself from results when invoked with `path`;
+- support `scope` (`vault` | `this-week` | `project`), `note_type`, and `limit` filters;
+- emit per-hit scores: `{ rrf, recency, final, keyword_rank?, semantic_sim? }`.
+
+### 24.2 Storage
+
+The keyword index lives in `notes_fts` (FTS5 virtual table) inside the existing `.karpathy/state/embeddings.sqlite`. A companion `fts_meta` table (`doc_id PRIMARY KEY, file_mtime INTEGER, indexed_at TEXT`) drives mtime-based incremental sync. No new database file.
+
+### 24.3 Sync layers
+
+The keyword index MUST be kept current via four cooperating layers:
+
+1. **Scheduled (`sync-fts-index` job, 5-minute cadence, priority 100)** — primary path. Walks every configured wiki + outputs folder, diffs `{path, mtime}` against `fts_meta`, incrementally upserts changed/new files and removes vanished ones. Cheap (~56ms stat walk + ~8ms per changed file at 22k-file scale per the design doc); requires the intel tick cron to fire at least every 5 minutes.
+2. **Stop hook** — enqueues `sync-fts-index` with `dedupeKey: 'sync-fts-index'` so any session-created content is indexed before the next session begins.
+3. **Ingest pipeline** — `HybridStore.upsertDoc(docId, title, body, chunks)` updates both `notes_fts` and the embedding store atomically per doc. Real-time during enrichment.
+4. **File watcher** — chokidar `change` and `unlink` events enqueue single-file `sync-fts-index` jobs. The watcher MUST handle all three of `add`, `change`, and `unlink`.
+
+Embedding coverage remains ingest-pipeline-only (per the design doc — embedding all 22k files is wasteful at ~18 minutes per run). FTS coverage is total from day 1.
+
+### 24.4 Embedding providers
+
+`config.embeddings.provider` accepts `deterministic`, `bedrock-titan`, or `ollama`. Ollama is the default-recommended provider behind hybrid search:
+
+- always-on local daemon (typical macOS launchd-managed); no credential expiry
+- default model `nomic-embed-text` (768-dim, L2-normalized at the provider)
+- `config.embeddings.baseUrl` (default `http://localhost:11434`) and `config.embeddings.timeoutMs` (default `5000`)
+- `isOllamaAvailable(baseUrl, timeoutMs)` MUST be a non-throwing probe used by `HybridStore.search` before calling the embedding pool
+
+### 24.5 Maintenance commands
+
+The CLI MUST expose `karpathy maintenance` with three flags:
+
+- `--populate-fts` — one-shot: walks every configured folder and seeds `notes_fts` + `fts_meta`. Idempotent on `(doc_id, mtime)`.
+- `--re-embed` — enqueues `embedding-index` over `layout.wiki` to refresh embeddings under the currently-configured provider.
+- `--prune-provider <id>` — deletes every embedding row owned by `<id>` (used after switching providers, e.g. `titan-v2-1024` → `ollama-nomic-embed-text-768`).
+
+### 24.6 Migration sequence
+
+After implementation, an operator switching to Ollama:
+
+1. `brew install ollama && ollama pull nomic-embed-text` — daemon auto-starts via launchd.
+2. Update `~/.karpathy/config.json` to set `embeddings.provider: "ollama"`.
+3. `karpathy maintenance --populate-fts` — one-time FTS seeding (~4 minutes for ~22k files).
+4. `karpathy maintenance --re-embed` — re-embed existing notes under the new provider id.
+5. `karpathy maintenance --prune-provider titan-v2-1024` — drop stale Bedrock rows.
+6. Configure intel tick cron at 5-minute cadence (see §24.3).
 

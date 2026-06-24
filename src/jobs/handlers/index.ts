@@ -32,6 +32,7 @@ import { researchExecuteHandler } from './research-execute.js';
 import { evaluateRefreshCandidatesHandler } from './evaluate-refresh-candidates.js';
 import { detectEntityDupesHandler } from './detect-entity-dupes.js';
 import { reEnrichNoteHandler } from './re-enrich-note.js';
+import { syncFtsIndexHandler } from './sync-fts-index.js';
 
 export function createHandlerRegistry(): Map<JobType, JobHandler> {
   const map = new Map<JobType, JobHandler>();
@@ -69,6 +70,7 @@ export function createHandlerRegistry(): Map<JobType, JobHandler> {
   map.set('evaluate-refresh-candidates', evaluateRefreshCandidatesHandler);
   map.set('detect-entity-dupes', detectEntityDupesHandler);
   map.set('re-enrich-note', reEnrichNoteHandler);
+  map.set('sync-fts-index', syncFtsIndexHandler);
 
   // Verify every job type has a registered handler
   for (const jobType of JobType.options) {

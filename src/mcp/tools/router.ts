@@ -21,6 +21,7 @@ import { handle as getRelated } from './get-related.js';
 import { handle as approveResearch } from './approve-research.js';
 import { handle as reconcileEntities } from './reconcile-entities.js';
 import { handle as reEnrichNote } from './re-enrich-note.js';
+import { handle as search } from './search.js';
 import { createLogger } from '../../shared/logger.js';
 import { appendUsageEntry, sanitizeArgs, parseResultCount } from '../usage-log.js';
 
@@ -30,6 +31,7 @@ type ToolHandler = (args: Record<string, unknown>, ctx: MCPContext) => Promise<{
 
 const handlers: Record<string, ToolHandler> = {
   get_hot_cache: getHotCache,
+  search: search,
   search_vault: searchVault,
   get_note: getNote,
   get_recent_sessions: getRecentSessions,

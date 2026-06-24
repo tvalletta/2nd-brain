@@ -26,7 +26,8 @@ const InputSchema = z.object({
 export const definition = {
   name: 'search_vault',
   description:
-    'Full-text keyword search with stemming across all vault notes. Searches wiki, sessions, sources, and review. Ranking: title exact > title contains > title term hits > heading hits > body frequency. Supports partial/stem matching ("analysis" finds "analyses", "configure" finds "configured"). Excludes _index.md category files. Use get_related for semantic/conceptual search, search_entities to find a specific person or tool.',
+    'Deprecated — use `search` instead. Will be removed in the next major version. ' +
+    '(Legacy: full-text keyword search with stemming across all vault notes. Ranking: title exact > title contains > title term hits > heading hits > body frequency.)',
   inputSchema: {
     type: 'object' as const,
     properties: {

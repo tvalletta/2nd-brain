@@ -20,9 +20,11 @@ import { definition as getRelated } from './get-related.js';
 import { definition as approveResearch } from './approve-research.js';
 import { definition as reconcileEntities } from './reconcile-entities.js';
 import { definition as reEnrichNote } from './re-enrich-note.js';
+import { definition as search } from './search.js';
 
 export const TOOL_DEFINITIONS = [
   getHotCache,
+  search,
   searchVault,
   getNote,
   getRecentSessions,

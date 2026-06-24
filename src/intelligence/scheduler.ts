@@ -29,6 +29,7 @@ export interface ScheduledJob {
 
 export interface SchedulerState {
   lastFire: Record<string, string>; // ISO timestamps keyed by job type
+  [k: string]: unknown; // preserve extra keys (e.g. autoBackfillCompletedAt) through read/write cycles
 }
 
 export interface TickResult {
@@ -40,6 +41,17 @@ const STATE_FILENAME = 'intel-scheduler.json';
 
 export function defaultSchedule(): ScheduledJob[] {
   return [
+    {
+      // Hybrid-search FTS5 keyword index sync. Cheap (~56ms stat walk for 22k
+      // files + ~8ms per changed file), so it runs on a 5-minute cadence —
+      // matches OneDrive/VoiceInk/Plaud arrival latency. Requires the intel
+      // tick cron to fire at least every 5 minutes.
+      type: 'sync-fts-index',
+      cadence: 'every-5-min',
+      intervalSec: 300,
+      priority: 100,
+      dedupeKey: 'sync-fts-index',
+    },
     {
       type: 'decay-scan',
       cadence: 'daily',
@@ -82,8 +94,10 @@ export function readSchedulerState(stateDir: string): SchedulerState {
   const path = join(stateDir, STATE_FILENAME);
   try {
     const raw = readFileSync(path, 'utf-8');
-    const parsed = JSON.parse(raw) as { lastFire?: Record<string, string> };
-    return { lastFire: parsed.lastFire ?? {} };
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    // Spread the full file so extra keys (e.g. autoBackfillCompletedAt written
+    // by maybeRunAutoBackfill) survive the tickScheduler read/write cycle.
+    return { ...parsed, lastFire: (parsed['lastFire'] as Record<string, string>) ?? {} };
   } catch {
     return { lastFire: {} };
   }

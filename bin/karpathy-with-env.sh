@@ -36,16 +36,25 @@ for k in ("AWS_BEARER_TOKEN_BEDROCK","AWS_REGION","AWS_PROFILE","CLAUDE_CODE_USE
 fi
 
 # Find node — launchd's PATH is minimal, so we explicitly check common locations
-# including nvm and homebrew.
+# including nvm and homebrew. We resolve nvm's `default` alias FIRST so we
+# follow whatever the user has configured globally, rather than pinning a
+# specific version (e.g. v22.18.0) that can drift out of sync with the
+# native modules compiled by `pnpm install` (which uses the user's interactive
+# node version). Mismatched ABI manifests as `NODE_MODULE_VERSION` errors
+# from better-sqlite3.node.
 NODE_BIN=""
+NVM_DEFAULT=""
+if [ -e "$HOME/.nvm/alias/default" ]; then
+  NVM_DEFAULT="$(cat "$HOME/.nvm/alias/default" 2>/dev/null)"
+fi
 for candidate in \
-  "$HOME/.nvm/versions/node/v22.18.0/bin/node" \
-  "$HOME/.nvm/versions/node/$(readlink "$HOME/.nvm/alias/default" 2>/dev/null)/bin/node" \
+  "$HOME/.nvm/versions/node/${NVM_DEFAULT}/bin/node" \
+  "$HOME/.nvm/versions/node/v$(echo "$NVM_DEFAULT" | sed 's/^v//')/bin/node" \
   "/opt/homebrew/bin/node" \
   "/usr/local/bin/node" \
   "$(command -v node 2>/dev/null)" \
 ; do
-  if [ -x "$candidate" ]; then
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
     NODE_BIN="$candidate"
     break
   fi
@@ -57,4 +66,4 @@ fi
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:$(dirname "$NODE_BIN"):${PATH:-}"
 
-exec "$NODE_BIN" "$ROOT/dist/bin/karpathy.js" "$@"
+exec nice -n 20 "$NODE_BIN" "$ROOT/dist/bin/karpathy.js" "$@"

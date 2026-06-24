@@ -41,6 +41,8 @@ export const JobType = z.enum([
   // Curator reconciliation (§22) -------------------------------------------
   'detect-entity-dupes',
   're-enrich-note',
+  // Hybrid search ----------------------------------------------------------
+  'sync-fts-index',
 ]);
 export type JobType = z.infer<typeof JobType>;
 
@@ -103,6 +105,7 @@ export const DEFAULT_PRIORITIES: Record<string, number> = {
   'evaluate-refresh-candidates': 50,
   'detect-entity-dupes': 80,
   're-enrich-note': 55,
+  'sync-fts-index': 100,
 };
 
 export interface JobHandler {

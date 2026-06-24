@@ -73,12 +73,18 @@ CREATE TABLE IF NOT EXISTS embeddings (
   PRIMARY KEY (provider_id, doc_id, chunk_index)
 );
 
--- New: FTS5 virtual table for keyword search
+-- New: FTS5 virtual table for keyword search.
+-- Body text IS stored (no `content=''` clause). Required so that snippet()
+-- can highlight match windows for HybridHit.excerpt — contentless tables
+-- cannot generate snippets, and we'd otherwise have to re-tokenize the body
+-- on every query to extract a window. Storage overhead at full vault
+-- (~22 200 files): ~40 MB term index + body, ~30 MB savings would not be
+-- worth losing snippet support. BM25 column weighting (title 3×, body 1×)
+-- is applied at query time, see HybridStore.search.
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
   doc_id UNINDEXED,
   title,
-  body,
-  content=''                -- contentless: no stored text, index only
+  body
 );
 
 -- New: companion table for mtime-based change detection
@@ -407,7 +413,7 @@ Re-embeds the 737 existing Bedrock Titan docs with Ollama (~60 seconds). Removes
 - multi-word query — all terms must be present in results
 - delete removes doc from query results
 - `snippet()` extracts text around the match position
-- contentless FTS5 table — no stored body text returned (only index)
+- BM25 column weighting (title 3×, body 1×) — title-only matches outrank body-only matches at equal term frequency
 - `sync()` with mtime comparison: detects new/changed/deleted/unchanged files
 
 **`test/search/rrf.test.ts`**

@@ -83,7 +83,8 @@ Helpers in `src/vault/paths.ts`: `layoutFromConfig(config)`, `kindToFolder(layou
 - `src/enrichment/` — LLM client (Bedrock), prompts, summarizer, entity extractor
 - `src/maintenance/` — Backlinks scanner, index rebuilder
 - `src/review/` — Contradiction/duplicate detection, review queue
-- `src/embeddings/` — Pluggable embedding provider (deterministic / Bedrock Titan) + SQLite content-addressable store. See `factory.ts` for config-driven instantiation.
+- `src/embeddings/` — Pluggable embedding provider (deterministic / Bedrock Titan / Ollama) + SQLite content-addressable store. See `factory.ts` for config-driven instantiation.
+- `src/search/` — Hybrid search module (§24): `FTSIndex` (FTS5 BM25 over the entire vault), `rrf` (Reciprocal Rank Fusion), `HybridStore` (composes FTSIndex + EmbeddingStore + recency fusion). Backs the unified `search` MCP tool.
 - `src/intelligence/` — Implementation of the intelligence plan: TL;DR (CoD), retrieval-with-recency, clustering, weekly digest, topic refresh, decay scan, rot scan, research propose/execute, significance gate, Slack notify
 - `test/` — Mirrors src/ structure, uses temp directories for isolation
 
@@ -131,7 +132,13 @@ Implements [specs/intelligence-plan.md](specs/intelligence-plan.md). Hot paths:
 
 ```jsonc
 {
-  "embeddings": { "provider": "deterministic" | "bedrock-titan", "dimensions": 1024 },
+  "embeddings": {
+    "provider": "deterministic" | "bedrock-titan" | "ollama",
+    "model": "nomic-embed-text",        // for "ollama"
+    "baseUrl": "http://localhost:11434", // for "ollama"
+    "timeoutMs": 5000,                   // for "ollama" probe + per-call timeout
+    "dimensions": 1024
+  },
   "llm": {
     "model": "us.anthropic.claude-sonnet-4-6",
     "models": {
@@ -157,6 +164,18 @@ Implements [specs/intelligence-plan.md](specs/intelligence-plan.md). Hot paths:
 ## Hook System
 
 Hooks are configured as `type: "command"` in `~/.claude/settings.json`. They call `node dist/bin/karpathy.js hook <event>` with JSON on stdin and return JSON on stdout. Critical hooks (SessionStart, PostCompact, Stop) are synchronous; capture hooks (UserPromptSubmit, PostToolUse) are async.
+
+## Hybrid search (§24)
+
+- **Unified MCP `search` tool** — combines FTS5 BM25 keyword search (covers every markdown file in the vault) with the configured embedding provider's semantic pool via Reciprocal Rank Fusion + recency weighting. Accepts a free-text `query` OR a vault note `path` anchor. Replaces `search_vault` and `get_related` (both kept registered with `Deprecated — use search instead.` descriptions).
+- **`HybridStore`** — entry point in `src/search/hybrid-store.ts`. Constructed via `openHybridStoreFromConfig(config, projectRoot)` from `src/search/factory.ts`. Owns one SQLite handle housing both the embeddings table and the `notes_fts` FTS5 virtual table. Falls back to keyword-only mode (with a `degradation_note`) when the embedding provider is unreachable.
+- **Sync layers** — keep the FTS index current via four cooperating layers:
+  1. Scheduled `sync-fts-index` job (5-min cadence in `defaultSchedule()`, priority 100). Triggered every intel tick.
+  2. Stop hook (`src/hooks/stop.ts`) enqueues `sync-fts-index` at session end.
+  3. Ingest pipeline calls `hybridStore.upsertDoc(...)` per doc.
+  4. File watcher (`src/ingest/watcher.ts`) handles `add`/`change`/`unlink` events; the MCP server enqueues per-file FTS sync jobs.
+- **Maintenance CLI** — `karpathy maintenance --populate-fts` (one-shot full FTS seed), `--re-embed` (refresh embeddings under current provider), `--prune-provider <id>` (drop stale provider rows).
+- **Ollama provider** — `createOllamaProvider({ baseUrl, model, dimensions, timeoutMs })` in `src/embeddings/ollama.ts`. POSTs to `/api/embeddings`, returns L2-normalized `Float32Array`. Companion `isOllamaAvailable(baseUrl, timeoutMs)` is a non-throwing probe used by `HybridStore.search` before fanning out semantic queries.
 
 ## Common Tasks
 

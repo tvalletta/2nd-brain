@@ -22,10 +22,8 @@ const InputSchema = z.object({
 export const definition = {
   name: 'get_related',
   description:
-    'Semantic similarity search using Bedrock-Titan embeddings with recency boost (α·similarity + β·recency). ' +
-    'Best for conceptual/thematic queries where keywords miss the point. ' +
-    'Requires active AWS credentials — returns a clear message and suggests search_vault as fallback when credentials are expired. ' +
-    'Provide either a vault note path (uses its title + body as query) or a free-text query.',
+    'Deprecated — use `search` with a `path` parameter instead. Will be removed in the next major version. ' +
+    '(Legacy: semantic similarity search with recency boost. Required active AWS credentials.)',
   inputSchema: {
     type: 'object' as const,
     properties: {

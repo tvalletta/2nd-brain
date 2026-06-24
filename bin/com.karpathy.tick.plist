@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.karpathy.tick</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/valletta/dev/2nd-brain/bin/karpathy-with-env.sh</string>
+        <string>intel</string>
+        <string>tick</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/valletta/dev/2nd-brain</string>
+
+    <!-- Fire every 5 minutes — required by hybrid-search §24.3 so the
+         FTS5 sync stays within the 5-minute lag the spec promises and so
+         OneDrive/VoiceInk/Plaud arrivals show up promptly. -->
+    <key>StartInterval</key>
+    <integer>300</integer>
+
+    <!-- Also fire once at load so we don't wait 5 min to see anything -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/valletta/dev/2nd-brain/.karpathy/logs/launchd.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/valletta/dev/2nd-brain/.karpathy/logs/launchd.err.log</string>
+
+    <!-- Limit how often it restarts if it crashes — protect from runaway loops -->
+    <key>ThrottleInterval</key>
+    <integer>300</integer>
+
+    <!-- Don't keep it alive: this is a periodic one-shot, not a daemon -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Run at background QoS so macOS deprioritizes CPU and I/O for this
+         process relative to interactive work (keyboard input, foreground apps).
+         LowPriorityIO additionally tells the I/O scheduler to yield to
+         foreground disk requests during the FTS stat walk. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+</dict>
+</plist>

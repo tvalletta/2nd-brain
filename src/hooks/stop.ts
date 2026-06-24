@@ -30,6 +30,10 @@ export async function handleStop(
 
   await ctx.hotCache.flush();
 
+  // Make sure the queue's persisted jobs are in memory before we enqueue —
+  // otherwise our flush() would overwrite the file with just the new job.
+  await ctx.queue.load();
+
   // Export session transcript to raw/ for ingest pipeline
   if (ctx.config.session.exportToRaw && parsed.transcript_path) {
     try {
@@ -67,6 +71,16 @@ export async function handleStop(
       log.warn('Session export failed', { error: (err as Error).message });
     }
   }
+
+  // Catch any session-created content (session summaries, entity pages) before
+  // the next session starts. Cheap stat-walk only re-indexes changed files.
+  await ctx.queue.enqueue({
+    type: 'sync-fts-index',
+    trigger: 'hook',
+    priority: 100,
+    dedupeKey: 'sync-fts-index',
+  });
+  await ctx.queue.flush();
 
   // Drain the job queue in a background process (non-blocking)
   ctx.backgroundDrain();

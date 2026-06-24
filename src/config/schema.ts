@@ -71,13 +71,21 @@ export const AgentConfigSchema = z.object({
 });
 
 export const EmbeddingsConfigSchema = z.object({
-  /** `deterministic` is offline & test-grade; `bedrock-titan` is production. */
-  provider: z.enum(['deterministic', 'bedrock-titan']).default('deterministic'),
+  /**
+   * `deterministic` is offline & test-grade; `bedrock-titan` was the legacy
+   * production provider; `ollama` is the always-on local provider behind the
+   * hybrid-search module.
+   */
+  provider: z.enum(['deterministic', 'bedrock-titan', 'ollama']).default('deterministic'),
   /** Override LLM region; defaults to llm.region when unset. */
   region: z.string().optional(),
   model: z.string().optional(),
-  /** Titan v2 supports 256 / 512 / 1024. */
+  /** Titan v2 supports 256 / 512 / 1024; Ollama nomic-embed-text returns 768. */
   dimensions: z.number().int().positive().optional(),
+  /** Ollama HTTP endpoint. Default points at the local launchd-managed daemon. */
+  baseUrl: z.string().default('http://localhost:11434'),
+  /** Ollama probe timeout (ms). Used by `isOllamaAvailable()` and per-call embed timeouts. */
+  timeoutMs: z.number().int().positive().default(5000),
 });
 
 export const IntelligenceConfigSchema = z.object({

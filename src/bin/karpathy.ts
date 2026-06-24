@@ -1487,6 +1487,113 @@ async function touchCommand(args: string[]): Promise<void> {
   process.stdout.write(`Re-enrichment complete. ${processed} job(s) processed.\n`);
 }
 
+async function maintenanceCommand(args: string[]): Promise<void> {
+  const populateFts = args.includes('--populate-fts');
+  const reEmbed = args.includes('--re-embed');
+  const pruneArg = args.find((a) => a.startsWith('--prune-provider'));
+  const folderArgIdx = args.indexOf('--folder');
+  const folderArg = folderArgIdx !== -1 ? args[folderArgIdx + 1] : undefined;
+
+  if (!populateFts && !reEmbed && !pruneArg) {
+    process.stderr.write(
+      [
+        'Usage: karpathy maintenance <flag>',
+        '',
+        'Flags:',
+        '  --populate-fts          One-shot scan: build/refresh the FTS5 keyword index',
+        '                          across every markdown file in the vault.',
+        '  --re-embed [--folder <path>]  Re-run the embedding pipeline over vault notes.',
+        '                          Defaults to the wiki folder. Use --folder to target',
+        '                          any vault-relative path (e.g. "AI Conversations").',
+        '  --prune-provider <id>   Delete every embedding row owned by <id>. Use after',
+        '                          switching providers (e.g. titan-v2-1024 -> ollama).',
+        '',
+      ].join('\n'),
+    );
+    process.exit(1);
+  }
+
+  const config = await loadConfig();
+  const projectRoot = config.projectRoot ?? process.cwd();
+
+  if (populateFts) {
+    const { openHybridStoreFromConfig } = await import('../search/factory.js');
+    // Per design doc §2: cover the entire vault. The walker skips dotfiles
+    // so .obsidian/, .git/, .trash/ are excluded automatically.
+    const dirs = ['.'];
+    const store = openHybridStoreFromConfig(config, projectRoot);
+    process.stdout.write(`Populating FTS5 index over the full vault...\n`);
+    try {
+      const stats = await store.syncFTS(dirs);
+      process.stdout.write(
+        `FTS sync complete. Added ${stats.added}, updated ${stats.updated}, removed ${stats.removed}, unchanged ${stats.unchanged}.\n`,
+      );
+    } finally {
+      store.close();
+    }
+  }
+
+  if (reEmbed) {
+    const stateDir = resolveStateDir(config);
+    const lockDir = resolveLockDir(config);
+    const queuePath = join(stateDir, 'job-queue.json');
+    const queue = createJobQueue(queuePath);
+    await queue.load();
+    await queue.enqueue({
+      type: 'embedding-index',
+      trigger: 'cli',
+      priority: 45,
+      payload: { folder: folderArg ?? config.layout.wiki },
+      dedupeKey: `embedding-index:${folderArg ?? 'wiki'}`,
+    });
+    const vault = createFsAdapter(config.vaultPath);
+    const llm = createLLMFromConfig(config);
+    const lock = createFileLock(lockDir);
+    const handlers = createHandlerRegistry();
+    const runner = createJobRunner({
+      queue,
+      lock,
+      handlers,
+      vaultPath: config.vaultPath,
+      projectRoot: config.projectRoot!,
+      llm,
+      vault,
+      config,
+    });
+    process.stdout.write('Re-embedding wiki notes...\n');
+    const processed = await runner.runAll();
+    process.stdout.write(`Re-embed complete. ${processed} job(s) processed.\n`);
+  }
+
+  if (pruneArg) {
+    const providerId = pruneArg.includes('=')
+      ? pruneArg.split('=')[1]
+      : args[args.indexOf(pruneArg) + 1];
+    if (!providerId) {
+      process.stderr.write('Usage: karpathy maintenance --prune-provider <id>\n');
+      process.exit(1);
+    }
+    const { openStoreFromConfig } = await import('../embeddings/factory.js');
+    const store = openStoreFromConfig(config, projectRoot);
+    try {
+      const before = store.listProviders();
+      const target = before.find((p) => p.provider_id === providerId);
+      if (!target) {
+        process.stdout.write(
+          `No rows found for provider "${providerId}". Known providers: ${before.map((p) => p.provider_id).join(', ') || '(none)'}\n`,
+        );
+        return;
+      }
+      const removed = store.pruneProvider(providerId);
+      process.stdout.write(
+        `Pruned ${removed} embedding row(s) under provider "${providerId}".\n`,
+      );
+    } finally {
+      store.close();
+    }
+  }
+}
+
 async function specVersionsCommand(args: string[]): Promise<void> {
   const subcommand = args[0];
 
@@ -1541,6 +1648,9 @@ async function main(): Promise<void> {
       break;
     case 'maintain':
       await maintainCommand();
+      break;
+    case 'maintenance':
+      await maintenanceCommand(args.slice(1));
       break;
     case 'drain-queue':
       await drainQueueCommand();
@@ -1611,6 +1721,10 @@ async function main(): Promise<void> {
           '  init [vault-path]   Initialize a new vault',
           '  status              Show vault status',
           '  maintain            Run deterministic maintenance',
+          '  maintenance <flags>  Hybrid-search maintenance:',
+          '                        --populate-fts          Build/refresh the FTS5 keyword index',
+          '                        --re-embed              Re-embed wiki notes with the current provider',
+          '                        --prune-provider <id>   Drop rows under a stale provider id',
           '  drain-queue         Drain pending jobs (used by background hooks)',
           '  ingest <file> [--enrich]  Ingest a raw source file (--enrich for LLM enrichment)',
           '  reingest [--no-enrich]    Re-ingest all raw files through the pipeline',
