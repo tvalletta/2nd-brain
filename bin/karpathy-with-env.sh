@@ -45,20 +45,37 @@ fi
 NODE_BIN=""
 NVM_DEFAULT=""
 if [ -e "$HOME/.nvm/alias/default" ]; then
-  NVM_DEFAULT="$(cat "$HOME/.nvm/alias/default" 2>/dev/null)"
+  NVM_DEFAULT="$(cat "$HOME/.nvm/alias/default" 2>/dev/null | tr -d 'v')"
 fi
-for candidate in \
-  "$HOME/.nvm/versions/node/${NVM_DEFAULT}/bin/node" \
-  "$HOME/.nvm/versions/node/v$(echo "$NVM_DEFAULT" | sed 's/^v//')/bin/node" \
-  "/opt/homebrew/bin/node" \
-  "/usr/local/bin/node" \
-  "$(command -v node 2>/dev/null)" \
-; do
+
+# Try glob-expand the major-version alias to a versioned path (e.g. "24" → v24.16.0)
+if [ -n "$NVM_DEFAULT" ]; then
+  for dir in "$HOME/.nvm/versions/node/v${NVM_DEFAULT}".*/ "$HOME/.nvm/versions/node/v${NVM_DEFAULT}/"; do
+    if [ -x "${dir}bin/node" ]; then
+      NODE_BIN="${dir}bin/node"
+      break
+    fi
+  done
+fi
+
+# Fallback: source nvm and ask it directly
+if [ -z "$NODE_BIN" ] && [ -s "$HOME/.nvm/nvm.sh" ]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.nvm/nvm.sh" --no-use 2>/dev/null
+  _NVM_NODE="$(nvm which default 2>/dev/null)"
+  if [ -x "$_NVM_NODE" ]; then
+    NODE_BIN="$_NVM_NODE"
+  fi
+fi
+
+# Last-resort system paths
+for candidate in "/opt/homebrew/bin/node" "/usr/local/bin/node" "$(command -v node 2>/dev/null)"; do
   if [ -n "$candidate" ] && [ -x "$candidate" ]; then
     NODE_BIN="$candidate"
     break
   fi
 done
+
 if [ -z "$NODE_BIN" ]; then
   echo "karpathy-with-env: node binary not found" >&2
   exit 127
