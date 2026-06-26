@@ -360,13 +360,20 @@ async function hookCommand(eventName: string): Promise<void> {
   const config = await loadConfigOrNull();
   if (!config) return;
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk as Buffer);
-  }
-  const raw = Buffer.concat(chunks).toString('utf-8');
-  const input = raw.trim() ? JSON.parse(raw) : {};
+  const raw = await new Promise<string>((resolve) => {
+    const chunks: Buffer[] = [];
+    process.stdin.on('data', (chunk: Buffer) => chunks.push(chunk));
+    // Resolve on close OR end — whichever comes first.
+    // This handles the half-close case where EOF is never sent.
+    const finish = () => resolve(Buffer.concat(chunks).toString('utf-8'));
+    process.stdin.once('close', finish);
+    process.stdin.once('end', finish);
+    // Fallback timeout: if stdin neither closes nor ends within 3s, proceed
+    // with whatever we have (handles degenerate half-close where no event fires).
+    setTimeout(finish, 3000);
+  });
 
+  const input = raw.trim() ? JSON.parse(raw) : {};
   const result = await dispatchHook(eventName, input, config);
   if (result) {
     process.stdout.write(JSON.stringify(result));
