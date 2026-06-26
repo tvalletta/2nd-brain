@@ -19,14 +19,14 @@ export function buildInstructions(layout: VaultLayout = DEFAULT_LAYOUT): string 
 | Goal | Tool |
 |------|------|
 | "What have I worked on recently?" | get_recent_sessions |
-| "Find notes about X" (keyword) | search_vault |
-| "Find the person/tool/project named X" | get_entity or search_entities |
-| "Find notes semantically related to X" | get_related (needs AWS creds) |
+| "Find notes about X" (any query) | **search** — fast hybrid BM25 + semantic, covers entire vault |
+| "Find the person/tool/project named X" | get_entity (direct) or search_entities (ranked) |
 | "What decisions have I made?" | get_decisions |
 | "Find notes tagged with X or linked to Y" | search_by_tags |
 | "Read a specific note" | get_note or batch_get_notes |
 | "Find and resolve duplicate entity pages" | reconcile_entities |
-| "Re-process a note I just edited" | re_enrich_note |
+
+**Always use \`search\` for vault-wide queries.** It runs in <100ms against a pre-built SQLite FTS5 index with BM25 ranking and optional Ollama semantic search. Do not use \`search_vault\` — it does a sequential file scan (7–11s) and is deprecated.
 
 ## When to use which tool
 
@@ -35,14 +35,13 @@ export function buildInstructions(layout: VaultLayout = DEFAULT_LAYOUT): string 
 2. **vault_status** — Optional quick count of notes and review queue size.
 
 ### Reading
+- **search** — The primary search tool. Accepts any free-text query. BM25 keyword matching over all 22,000+ vault notes; optional semantic layer via Ollama. Returns hits with title, path, score, and snippet. Default: up to 20 results.
 - **get_note** — Read a specific note by exact path or title. Prefer detail:"metadata" or "summary" to save tokens.
-- **get_recent_sessions** — Recent AI session summaries with what was worked on and decided. Falls back to the decisions protected region when frontmatter is not yet populated.
+- **get_recent_sessions** — Recent AI session summaries with what was worked on and decided.
 - **get_entity** — Direct lookup of a known entity by name. Faster than search_entities for known names.
-- **search_entities** — Ranked keyword search across entity notes (people, orgs, tools, projects, concepts). Filter by kind to narrow. Results sorted by relevance.
-- **get_decisions** — All decision notes sorted by date. Useful for surfacing past architectural or strategic choices before making a new one.
-- **search_vault** — Full-text keyword search with stemming across wiki, sessions, sources, and review. Use when you don't know exactly where something is. Supports partial matches ("analysis" finds "analyses"). Returns up to 20 results ranked by title > heading > body frequency.
-- **get_related** — Semantic similarity search using Bedrock-Titan embeddings + recency boost. Best for "what else is like this?" queries. Requires active AWS credentials — returns a clear fallback message if credentials are expired.
-- **get_backlinks** — All notes that link to a given note. Use to understand who references a person, decision, or concept.
+- **search_entities** — Ranked keyword search across entity notes (people, orgs, tools, projects, concepts). Filter by kind to narrow.
+- **get_decisions** — All decision notes sorted by date.
+- **get_backlinks** — All notes that link to a given note.
 - **batch_get_notes** — Read multiple known notes in one round-trip. Use detail:"summary" for efficiency.
 - **search_by_tags** — Find notes by frontmatter aliases, links, or tags.
 - **get_review_queue** — Notes flagged for human review (contradictions, low-confidence claims).
@@ -57,24 +56,22 @@ export function buildInstructions(layout: VaultLayout = DEFAULT_LAYOUT): string 
 - **run_maintenance** — After any write operations, call once to update backlinks and rebuild indexes.
 - **lint_vault** — Health check: orphan notes, broken links, stale notes, missing frontmatter, duplicate titles.
 - **approve_research** — Approve pending research candidates from the research queue.
-- **reconcile_entities** — Manage the entity reconciliation queue. Call with no args to see pending duplicate/variant entity pairs. Call with { id, decision } to apply a resolution (merge, rename, skip, manual). Merge executes atomically and rebuilds backlinks.
-- **re_enrich_note** — Re-run entity extraction and concept-linking on an existing wiki note after you manually add content outside its protected regions. Pass { notePath } (vault-relative path).
+- **reconcile_entities** — Manage the entity reconciliation queue.
+- **re_enrich_note** — Re-run entity extraction on an existing wiki note after manual edits.
 
 ## Tips
 - Default to detail:"summary" for exploration; use detail:"full" only when you need the complete body.
 - After log_session_summary, log_insight, or update_note, call run_maintenance once to keep the graph current.
-- Notes use [[wikilinks]] for cross-referencing. Mention entity names in double brackets to create links.
-- search_vault excludes _index.md category files — it only returns content notes.
-- get_related will tell you if AWS credentials are expired and suggest search_vault as a fallback.
+- Notes use [[wikilinks]] for cross-referencing.
+- search excludes _index.md category files — it only returns content notes.
 
 ## Performance
-- search_vault and lint_vault scan files sequentially — avoid calling in tight loops.
+- **search** uses a pre-built SQLite FTS5 index — fast (<100ms). Use it freely.
+- search_vault and lint_vault scan files sequentially — avoid these; search_vault is deprecated.
 - run_maintenance is idempotent. One call after a batch of writes is enough.
-- The server is single-threaded. Avoid many parallel calls that each trigger large vault scans.
 
 ## Usage audit
-Every tool call is logged to .karpathy/logs/mcp-usage.jsonl with tool name, args, duration, result count, and success/error. Use this to analyze which tools are most useful and refine descriptions over time:
-  cat .karpathy/logs/mcp-usage.jsonl | jq -r '.tool' | sort | uniq -c | sort -rn
+Every tool call is logged to .karpathy/logs/mcp-usage.jsonl with tool name, args, duration, result count, and success/error.
 `;
 }
 

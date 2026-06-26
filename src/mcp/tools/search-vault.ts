@@ -26,8 +26,7 @@ const InputSchema = z.object({
 export const definition = {
   name: 'search_vault',
   description:
-    'Deprecated — use `search` instead. Will be removed in the next major version. ' +
-    '(Legacy: full-text keyword search with stemming across all vault notes. Ranking: title exact > title contains > title term hits > heading hits > body frequency.)',
+    'DEPRECATED — use `search` instead. search_vault does a sequential file scan (7–11s); `search` uses a pre-built FTS5 SQLite index (<100ms) with better ranking. This tool will be removed in the next major version.',
   inputSchema: {
     type: 'object' as const,
     properties: {

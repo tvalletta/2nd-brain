@@ -22,8 +22,7 @@ const InputSchema = z.object({
 export const definition = {
   name: 'get_related',
   description:
-    'Deprecated — use `search` with a `path` parameter instead. Will be removed in the next major version. ' +
-    '(Legacy: semantic similarity search with recency boost. Required active AWS credentials.)',
+    'Deprecated — use `search` instead. `search` now combines BM25 keyword ranking with Ollama semantic embeddings via Reciprocal Rank Fusion. get_related required AWS Bedrock credentials and is no longer the recommended semantic search path.',
   inputSchema: {
     type: 'object' as const,
     properties: {
