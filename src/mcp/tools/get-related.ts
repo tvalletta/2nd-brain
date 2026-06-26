@@ -92,7 +92,7 @@ export async function handle(args: Record<string, unknown>, ctx: MCPContext) {
           content: [
             {
               type: 'text' as const,
-              text: 'Semantic search unavailable: AWS credentials expired or missing. Use `search_vault` for keyword search instead.',
+              text: 'Semantic search unavailable: AWS credentials expired or missing. Use `search` for keyword search instead.',
             },
           ],
         };
