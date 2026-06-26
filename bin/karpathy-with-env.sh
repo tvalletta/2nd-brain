@@ -50,12 +50,14 @@ fi
 
 # Try glob-expand the major-version alias to a versioned path (e.g. "24" → v24.16.0)
 if [ -n "$NVM_DEFAULT" ]; then
+  shopt -s nullglob
   for dir in "$HOME/.nvm/versions/node/v${NVM_DEFAULT}".*/ "$HOME/.nvm/versions/node/v${NVM_DEFAULT}/"; do
     if [ -x "${dir}bin/node" ]; then
       NODE_BIN="${dir}bin/node"
       break
     fi
   done
+  shopt -u nullglob
 fi
 
 # Fallback: source nvm and ask it directly
@@ -68,13 +70,15 @@ if [ -z "$NODE_BIN" ] && [ -s "$HOME/.nvm/nvm.sh" ]; then
   fi
 fi
 
-# Last-resort system paths
-for candidate in "/opt/homebrew/bin/node" "/usr/local/bin/node" "$(command -v node 2>/dev/null)"; do
-  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
-    NODE_BIN="$candidate"
-    break
-  fi
-done
+# Last-resort system paths (only when NVM resolution above failed)
+if [ -z "$NODE_BIN" ]; then
+  for candidate in "/opt/homebrew/bin/node" "/usr/local/bin/node" "$(command -v node 2>/dev/null)"; do
+    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+      NODE_BIN="$candidate"
+      break
+    fi
+  done
+fi
 
 if [ -z "$NODE_BIN" ]; then
   echo "karpathy-with-env: node binary not found" >&2
