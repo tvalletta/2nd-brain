@@ -20,7 +20,9 @@ describe('hookCommand stdin handling', () => {
       transcript_path: null,
       cwd: ROOT,
     }));
-    // Half-close: destroy the writable side without sending FIN
+    // Destroy stdin — simulates the parent closing the write side abruptly.
+    // On a unix socket this would be a half-close (FIN only), but pipe destroy
+    // triggers full teardown. The test still validates the fallback timer fires.
     child.stdin.destroy();
 
     const exitCode = await new Promise<number | null>((resolve, reject) => {
