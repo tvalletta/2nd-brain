@@ -16,16 +16,15 @@ import { scanRawDirectory } from '../ingest/scanner.js';
 import { createFileWatcher } from '../ingest/watcher.js';
 import { ingestFile } from '../ingest/pipeline.js';
 import { createLogger } from '../shared/logger.js';
+import { parseProjectRootArg } from './server-args.js';
 
 const log = createLogger('mcp-server');
 
-// Resolve project root. When invoked directly (`node dist/mcp/server.js`) or
-// via `karpathy mcp`, the CWD is always the project root — Claude Code sets it
-// explicitly, and hooks run in the project directory. Using process.cwd() is
-// more robust than import.meta.url because tsup may bundle this module as a
-// flat chunk (dist/server-HASH.js) whose dirname is one level shallower than
-// expected, causing resolve(__dirname, '../..') to point at the wrong ancestor.
-const projectRoot = resolve(process.cwd());
+// Resolve project root. Prefer the --project-root CLI flag so the server
+// always opens the correct SQLite DB regardless of which project window
+// Claude Code happens to be in when it spawns this process. Falls back to
+// process.cwd() for backwards compatibility with direct / hook invocations.
+const projectRoot = parseProjectRootArg(process.argv.slice(2)) ?? resolve(process.cwd());
 
 // Create context first so we can derive instructions from the actual runtime layout.
 const ctx = await createMCPContext(projectRoot);
@@ -58,6 +57,17 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 
 log.info('Karpathy MCP server started', { vault: ctx.config.vaultPath });
+
+// Exit when the parent (Claude Code) closes the stdio pipe or sends a signal.
+// Without these handlers, an active file watcher keeps the event loop alive
+// indefinitely, causing orphaned processes to accumulate across sessions.
+const shutdown = (reason: string) => {
+  log.info('MCP server shutting down', { reason });
+  process.exit(0);
+};
+process.stdin.on('close', () => shutdown('stdin-close'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGHUP', () => shutdown('SIGHUP'));
 
 // Background: scan raw/ for un-ingested files (layout-aware)
 scanRawDirectory(ctx.vault, ctx.config.layout).then((result) => {
