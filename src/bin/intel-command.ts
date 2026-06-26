@@ -300,7 +300,7 @@ export async function intelCommand(args: string[]): Promise<void> {
       process.stdout.write(
         `Scheduler tick: fired ${fired}; skipped ${skipped}; drained ${processed} job(s).\n`,
       );
-      return;
+      process.exit(0);
     }
     case 'schedule': {
       const config = await loadConfig();
