@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { parseNote } from '../../vault/frontmatter.js';
 import { slugify } from '../../vault/paths.js';
 import type { MCPContext } from '../context.js';
+import { handle as searchEntitiesHandle } from './search-entities.js';
 
 const DetailLevel = z.enum(['metadata', 'summary', 'full']).default('full');
 
@@ -13,7 +14,7 @@ const InputSchema = z.object({
 
 export const definition = {
   name: 'get_entity',
-  description: 'Fetch an entity note (person, project, concept, decision) by name or path. Use detail levels to control token cost.',
+  description: 'Fetch an entity note (person, project, concept, decision) by name or path. Automatically falls back to fuzzy search if the exact name is not found. Use detail:"metadata" or "summary" to reduce token cost. If still not found, use search_entities directly.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -66,7 +67,9 @@ export async function handle(args: Record<string, unknown>, ctx: MCPContext) {
     }
 
     for (const file of files) {
-      if (file.toLowerCase().includes(slug)) {
+      const lowerFile = file.toLowerCase();
+      const lowerName = input.name!.toLowerCase();
+      if (lowerFile.includes(slug) || lowerFile.includes(lowerName)) {
         const raw = await ctx.vault.read(file);
         const { data, body } = parseNote(raw);
         return {
@@ -76,8 +79,32 @@ export async function handle(args: Record<string, unknown>, ctx: MCPContext) {
     }
   }
 
+  // Fuzzy fallback: delegate to search_entities
+  try {
+    const searchResult = await searchEntitiesHandle({ query: input.name, limit: 1 }, ctx);
+    const text = searchResult.content[0]?.text ?? '';
+    if (text && text !== 'No matching entities found.') {
+      const hits = JSON.parse(text) as Array<{ path: string }>;
+      if (hits.length > 0) {
+        const matchPath = hits[0].path;
+        const raw = await ctx.vault.read(matchPath);
+        const { data, body } = parseNote(raw);
+        const resultObj = {
+          ...formatResult(matchPath, data, body, input.detail),
+          fuzzy_match: true,
+          fuzzy_note: `Exact name "${input.name}" not found; returning closest match via search_entities.`,
+        };
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(resultObj, null, 2) }],
+        };
+      }
+    }
+  } catch {
+    // fallback failed — fall through to the error below
+  }
+
   return {
-    content: [{ type: 'text' as const, text: `Entity not found: "${input.name}"` }],
+    content: [{ type: 'text' as const, text: `Entity not found: "${input.name}". Try search_entities for a broader search.` }],
     isError: true,
   };
 }

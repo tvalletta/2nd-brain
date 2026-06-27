@@ -48,7 +48,7 @@ export const definition = {
           'source_summary', 'session_summary', 'entity', 'project',
           'decision', 'concept', 'contradiction', 'index',
         ],
-        description: 'Filter by note type',
+        description: 'Filter by note type. IMPORTANT: meeting transcripts and Plaud recordings are stored as "source_summary", not "session_summary". Use source_summary when searching for meeting content. session_summary is for AI coding session logs.',
       },
       scope: {
         type: 'string' as const,
