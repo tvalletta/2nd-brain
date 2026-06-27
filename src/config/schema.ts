@@ -93,7 +93,7 @@ export const IntelligenceConfigSchema = z.object({
   recencyWeight: z
     .object({
       session: z.number().min(0).max(1).default(0.3),
-      transcript: z.number().min(0).max(1).default(0.3),
+      transcript: z.number().min(0).max(1).default(0.2),
       concept: z.number().min(0).max(1).default(0.1),
       topic: z.number().min(0).max(1).default(0.2),
       project: z.number().min(0).max(1).default(0.15),

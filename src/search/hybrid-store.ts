@@ -238,7 +238,8 @@ export function createHybridStore(opts: HybridStoreOptions): HybridStore {
           if (metadata.project_slug !== options.projectSlug) continue;
         }
         if (options.noteType) {
-          if (metadata.type !== options.noteType) continue;
+          const effectiveType = (metadata.type as string | undefined) ?? inferTypeFromPath(docId);
+          if (effectiveType !== options.noteType) continue;
         }
         if (options.filter && !options.filter(hit)) continue;
 
@@ -277,6 +278,22 @@ export function createHybridStore(opts: HybridStoreOptions): HybridStore {
   };
 }
 
+/**
+ * Infer note type from vault-relative path for keyword-only hits that have no
+ * companion embedding row (entity/decision/concept pages are compiler outputs,
+ * not embedding-pipeline inputs).
+ */
+function inferTypeFromPath(docId: string): string | undefined {
+  if (docId.includes('/wiki/entities/')) return 'entity';
+  if (docId.includes('/wiki/projects/')) return 'project';
+  if (docId.includes('/wiki/decisions/')) return 'decision';
+  if (docId.includes('/wiki/concepts/')) return 'concept';
+  if (docId.includes('/wiki/meetings/')) return 'session_summary';
+  if (docId.includes('/_summaries/')) return 'session_summary';
+  if (docId.includes('/sources/')) return 'source_summary';
+  return undefined;
+}
+
 function inferContentType(metadata: Record<string, unknown>): ContentType {
   const t = typeof metadata.type === 'string' ? metadata.type : '';
   if (t === 'session_summary') return 'session';
@@ -292,7 +309,8 @@ function recencyScore(updatedAtIso: string | undefined, nowMs: number): number {
   const t = new Date(updatedAtIso).getTime();
   if (Number.isNaN(t)) return 0;
   const days = Math.max(0, (nowMs - t) / 86400_000);
-  return Math.exp(-days / 30);
+  // Cap at 0.5: notes from the last ~24 days share equal recency so relevance determines rank.
+  return Math.min(0.5, Math.exp(-days / 30));
 }
 
 function defaultProviderProbe(config: KarpathyConfig): () => Promise<boolean> {
