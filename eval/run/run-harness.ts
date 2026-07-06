@@ -24,8 +24,10 @@ function snapshot(dbPath: string): { docCount: number; newestIndexedAt: string }
 }
 
 /** Core loop: run every non-stub item through every variant (warm-median latency
- * over 3 calls), capturing normalized hits + token/char cost. Read-only: throws
- * if the index changed between start and end. */
+ * over 3 calls), capturing normalized hits + token/char cost. Read-only: warns
+ * (but does not throw) if the index changed between start and end, since a
+ * live vault has background jobs (intel tick, embedding-index, enrichment)
+ * that legitimately mutate the index independent of this harness. */
 export async function executeRun(
   items: { id: string; query: string }[],
   variants: Variant[],
@@ -65,7 +67,10 @@ export async function executeRun(
   }
   const after = snapshot(dbPath);
   if (after.docCount !== before.docCount || after.newestIndexedAt !== before.newestIndexedAt) {
-    throw new Error(`Index changed during run (read-only violated): before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+    console.warn(
+      `[eval] Index changed during run (expected on a live vault with background jobs): ` +
+      `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
+    );
   }
   return results;
 }
@@ -75,14 +80,19 @@ export async function runHarness(): Promise<HarnessRun> {
   const dbPath = join(REPO_ROOT, config.stateDir, 'embeddings.sqlite');
   const items = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/queries.json'), 'utf8')) as { id: string; query: string }[];
   const variants = buildVariants(config, REPO_ROOT);
+  const before = snapshot(dbPath);
   const results = await executeRun(items, variants, dbPath);
+  const after = snapshot(dbPath);
   const run: HarnessRun = {
     generatedAt: new Date().toISOString(),
-    dbSnapshot: snapshot(dbPath),
+    dbSnapshot: after,
     variants: variants.map((v) => v.name),
     k: variants[0]?.topK ?? 10,
     itemCount: items.length,
     results,
+    ...(after.docCount !== before.docCount || after.newestIndexedAt !== before.newestIndexedAt
+      ? { indexChangedDuringRun: { before, after } }
+      : {}),
   };
   const outDir = join(REPO_ROOT, 'eval', 'results');
   mkdirSync(outDir, { recursive: true });

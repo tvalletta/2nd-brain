@@ -46,4 +46,12 @@ export interface HarnessRun {
   k: number;
   itemCount: number;
   results: RunResult[];
+  /** Present if the live index changed between the start and end snapshot
+   * (expected on a live vault with background ingestion/enrichment jobs —
+   * NOT necessarily a bug, since this harness only ever calls store.search()).
+   * Absent/undefined means no change was detected. */
+  indexChangedDuringRun?: {
+    before: { docCount: number; newestIndexedAt: string };
+    after: { docCount: number; newestIndexedAt: string };
+  };
 }
