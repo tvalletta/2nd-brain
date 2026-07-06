@@ -34,8 +34,8 @@ Spec: `docs/superpowers/specs/2026-07-06-carpathi-retrieval-evaluation-design.md
 | Phase | Status | Deliverable |
 |-------|--------|-------------|
 | 0 — Mining & diagnostics | ✅ **DONE** (2026-07-06, commit e772d4f) | `eval/` pipeline, 74-item draft set, findings report |
-| 1 — Harness (**variant runner**) | ⏳ **NEXT** | `eval/run/` = pluggable variant runner (grep-first / full-cov hybrid / as-deployed ref); serves Track A *and* the Track B bake-off. Captures recall/precision/latency/tokens |
-| 2 — Pool + judge + calibrate | ⬜ pending | Pooled ground truth; LLM judge; **Tom calibration gate**; refined `queries.json` |
+| 1 — Harness (**variant runner**) | ✅ **DONE** (2026-07-06) | `eval/run/` = pluggable variant runner (grep-first / as-deployed, full-cov hybrid deferred to Track B §4.2); serves Track A *and* the Track B bake-off. Captures hits/latency/tokens per item×variant; wired via `eval:run` |
+| 2 — Pool + judge + calibrate | ⏳ **NEXT** | Pooled ground truth; LLM judge; **Tom calibration gate**; refined `queries.json` |
 | 3 — Score + report | ⬜ pending | Baseline scorecard (before/after ruler ready) |
 | 4 — Regression suite | ⬜ pending | Frozen set + pass bar; guards Track B changes |
 
@@ -79,14 +79,21 @@ means "forget." Severity: 🔴 high / 🟡 med / 🟢 low.
 | I5 | `get_note` on a directory path throws `EISDIR` | log error | 🟢 | input validation |
 | I6 | Hot-topic/digest curator not producing output ("No weekly digest yet") | intelligence-plan, banner | 🟡 | curation/digest layer |
 | I7 | `search_vault` scans only 4 folders while hybrid indexes all — corpus asymmetry | `src/mcp/tools/search-vault.ts` | 🟢 | deprecation / consistency |
+| I8 | Variant-runner smoke run (Task 5) executed against the `.worktrees/feat-eval-variant-runner` copy of `.karpathy/state/embeddings.sqlite`, which is empty (0 rows in `fts_meta`/`notes_fts`/`embeddings`) with a stale, unrecognized WAL — unlike the main checkout's index (23,372 docs / 18,685 embeddings). All 146 item×variant results came back with 0 hits; harness code itself is correct (read-only guard held, no errors). Re-run `eval:run` from a checkout with a synced index before trusting Phase-1 numbers. | `eval/results/2026-07-06-runs.json` (`dbSnapshot.docCount: 0`) | 🟡 | environment/worktree hygiene — not a code defect |
 
 ---
 
 ## You are here
 
-Phase 0 complete. **Decision point:** which track to push next (see the session
-where this was written). Recommended: build Track A Phase 1 harness → run a
-baseline → then open Track B brainstorm designed against that baseline.
+Phase 1 (variant runner) shipped: `eval/run/run-harness.ts` + `pnpm eval:run`
+wire `buildVariants` → `executeRun` → `eval/results/<date>-runs.json`, guarded
+read-only. The committed smoke run against this worktree's local index came
+back all-zero-hits (see issue I8) because that local `.karpathy/state` copy is
+empty — re-run from a checkout with a synced index to get real baseline
+numbers. **Next:** Track A Phase 2 — pooling + LLM judge + Tom calibration
+gate (builds `pool.json`/`judgments.json` from `eval/results/*-runs.json` +
+`eval/dataset/behavioral-signal.json` + a keyword sweep; also triages the
+74-item draft set's categories). See task-5-brief.md "Notes for the next plan."
 
 ## Update protocol
 - End of each session: update the phase status table, the issues log, and "You
