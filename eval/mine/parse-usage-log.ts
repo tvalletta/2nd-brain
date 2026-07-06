@@ -32,8 +32,6 @@ interface LogEntry {
 
 /** Tools that serve a free-text `query` and should route to the fast path. */
 const SEARCH_CLASS = new Set(['search', 'search_vault', 'search_entities']);
-/** The deprecated slow tool — every call is a routing miss (should be `search`). */
-const DEPRECATED = 'search_vault';
 
 function median(xs: number[]): number {
   if (!xs.length) return 0;

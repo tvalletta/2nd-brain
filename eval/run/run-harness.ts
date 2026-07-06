@@ -52,7 +52,15 @@ export async function executeRun(
           const { chars, tokensEst } = measurePayload(returned);
           results.push({
             itemId: item.id, variant: variant.name, query: item.query, returned,
-            searchMode: res.searchMode, degradationNote: res.degradationNote,
+            searchMode: res.searchMode,
+            // The keyword-only variant forces config.embeddings.provider to 'ollama'
+            // purely to trip HybridStore's availability gate (see eval/run/open-store.ts).
+            // store.search()'s own degradationNote text assumes any keyword-only result
+            // means Ollama is actually down, which is false here — override it with an
+            // accurate note rather than surfacing a misleading "Ollama not running" claim.
+            degradationNote: variant.keywordOnly
+              ? 'Keyword-only by design (this variant forces the keyword-only path for evaluation purposes; Ollama status is not applicable here).'
+              : res.degradationNote,
             latencyMs: median(lat), responseChars: chars, responseTokensEst: tokensEst,
           });
         } catch (err) {
