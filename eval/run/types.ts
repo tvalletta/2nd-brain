@@ -39,6 +39,15 @@ export interface RunResult {
   error?: string;          // set if the search threw (item scored as a miss later)
 }
 
+/** Return shape of `executeRun`: the per-item×variant results plus the
+ * before/after index snapshot pair it already computed, so callers (e.g.
+ * `runHarness`) can reuse those exact values instead of re-querying the db. */
+export interface ExecuteRunOutcome {
+  results: RunResult[];
+  before: { docCount: number; newestIndexedAt: string };
+  after: { docCount: number; newestIndexedAt: string };
+}
+
 export interface HarnessRun {
   generatedAt: string;
   dbSnapshot: { docCount: number; newestIndexedAt: string };

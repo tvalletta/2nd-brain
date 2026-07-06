@@ -5,7 +5,7 @@ import { loadConfig } from '../../src/config/loader.js';
 import { buildVariants } from './variants.js';
 import { toRunHits } from './normalize.js';
 import { measurePayload } from '../score/tokens.js';
-import type { RunResult, HarnessRun, Variant } from './types.js';
+import type { RunResult, HarnessRun, Variant, ExecuteRunOutcome } from './types.js';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
 
@@ -32,7 +32,7 @@ export async function executeRun(
   items: { id: string; query: string }[],
   variants: Variant[],
   dbPath: string,
-): Promise<RunResult[]> {
+): Promise<ExecuteRunOutcome> {
   const before = snapshot(dbPath);
   const results: RunResult[] = [];
   for (const variant of variants) {
@@ -72,7 +72,7 @@ export async function executeRun(
       `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
     );
   }
-  return results;
+  return { results, before, after };
 }
 
 export async function runHarness(): Promise<HarnessRun> {
@@ -80,9 +80,7 @@ export async function runHarness(): Promise<HarnessRun> {
   const dbPath = join(REPO_ROOT, config.stateDir, 'embeddings.sqlite');
   const items = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/queries.json'), 'utf8')) as { id: string; query: string }[];
   const variants = buildVariants(config, REPO_ROOT);
-  const before = snapshot(dbPath);
-  const results = await executeRun(items, variants, dbPath);
-  const after = snapshot(dbPath);
+  const { results, before, after } = await executeRun(items, variants, dbPath);
   const run: HarnessRun = {
     generatedAt: new Date().toISOString(),
     dbSnapshot: after,

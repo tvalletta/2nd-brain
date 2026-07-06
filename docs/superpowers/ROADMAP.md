@@ -79,7 +79,7 @@ means "forget." Severity: 🔴 high / 🟡 med / 🟢 low.
 | I5 | `get_note` on a directory path throws `EISDIR` | log error | 🟢 | input validation |
 | I6 | Hot-topic/digest curator not producing output ("No weekly digest yet") | intelligence-plan, banner | 🟡 | curation/digest layer |
 | I7 | `search_vault` scans only 4 folders while hybrid indexes all — corpus asymmetry | `src/mcp/tools/search-vault.ts` | 🟢 | deprecation / consistency |
-| I8 | Variant-runner smoke run (Task 5) executed against the `.worktrees/feat-eval-variant-runner` copy of `.karpathy/state/embeddings.sqlite`, which is empty (0 rows in `fts_meta`/`notes_fts`/`embeddings`) with a stale, unrecognized WAL — unlike the main checkout's index (23,372 docs / 18,685 embeddings). All 146 item×variant results came back with 0 hits; harness code itself is correct (read-only guard held, no errors). Re-run `eval:run` from a checkout with a synced index before trusting Phase-1 numbers. | `eval/results/2026-07-06-runs.json` (`dbSnapshot.docCount: 0`) | 🟡 | environment/worktree hygiene — not a code defect |
+| I8 | Variant-runner smoke run (Task 5) initially executed against the `.worktrees/feat-eval-variant-runner` copy of `.karpathy/state/embeddings.sqlite`, which was empty (0 rows in `fts_meta`/`notes_fts`/`embeddings`, untracked/gitignored worktree-local state) — unlike the main checkout's index (23,372 docs / 18,685 embeddings). Fixed by symlinking the worktree's `.karpathy` to the main checkout's shared state. Re-running against the real index then surfaced a second issue: the harness's before/after read-only guard threw on any index delta, but the live vault has continuously-running background jobs (intel tick, embedding-index, enrichment) that legitimately mutate `fts_meta` mid-run — so the guard was too eager. Fixed by changing throw→warn and adding an `indexChangedDuringRun` field to the written `HarnessRun` JSON so a genuine mid-run change is recorded, not fatal. Both fixes landed; the re-run then completed cleanly with real baseline numbers (see "You are here"). Keeping this row for institutional memory: worktrees don't share gitignored local state, and the live vault is never static. | `eval/results/2026-07-06-runs.json` (final run: `dbSnapshot.docCount: 23372`, `indexChangedDuringRun` present) | 🟡 | resolved — worktree hygiene fixed via symlink; harness guard fixed via throw→warn |
 
 ---
 
@@ -87,10 +87,15 @@ means "forget." Severity: 🔴 high / 🟡 med / 🟢 low.
 
 Phase 1 (variant runner) shipped: `eval/run/run-harness.ts` + `pnpm eval:run`
 wire `buildVariants` → `executeRun` → `eval/results/<date>-runs.json`, guarded
-read-only. The committed smoke run against this worktree's local index came
-back all-zero-hits (see issue I8) because that local `.karpathy/state` copy is
-empty — re-run from a checkout with a synced index to get real baseline
-numbers. **Next:** Track A Phase 2 — pooling + LLM judge + Tom calibration
+read-only (warns rather than throws on a live-vault index delta — see issue
+I8). After fixing the worktree-local-state and guard issues in I8, a real run
+against the live, populated production index (23,372 docs) produced the
+first empirical Phase-1 baseline (latency only — accuracy scoring awaits
+Phase 2's pooled ground truth): **grep-first** median latency ~27.20ms
+(n=73), **as-deployed** median latency ~198.41ms (n=73), **as-deployed**
+searchMode 100% hybrid (Ollama was up throughout, no degradation). Hybrid
+search costs roughly 7x grep-first's latency in this run — a real cost worth
+tracking as Track B's bake-off proceeds. **Next:** Track A Phase 2 — pooling + LLM judge + Tom calibration
 gate (builds `pool.json`/`judgments.json` from `eval/results/*-runs.json` +
 `eval/dataset/behavioral-signal.json` + a keyword sweep; also triages the
 74-item draft set's categories). See task-5-brief.md "Notes for the next plan."
