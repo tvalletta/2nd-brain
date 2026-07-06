@@ -1,0 +1,90 @@
+# Carpathi Second Memory — Program Roadmap
+
+**Single source of truth** for two interlocking efforts. Update this file at the
+end of every working session so no thread is lost across sessions. If you are
+resuming work, **start here.**
+
+Last updated: 2026-07-06
+
+---
+
+## Why two tracks
+
+Tom's goal: retrieval that is fast, accurate, token-efficient, and captures all
+his content (Plaud + AI sessions). Phase 0 of the eval revealed the current
+hybrid-search + RAG architecture underperforms for concrete, architectural
+reasons. So we run two tracks that **zipper together**:
+
+- **Track A — Evaluation (the ruler).** Builds the measurement instrument that
+  tells us, objectively, whether retrieval is good and whether a change helped.
+- **Track B — Architecture remediation (the fixes).** A thoughtful, holistic
+  redesign of the retrieval/ingestion/curation architecture, designed against
+  measured reality — not vibes, not reactive patches.
+
+**The dependency:** Track B is designed against a *baseline* produced by Track A,
+and every Track B change is *validated* by re-running Track A. The eval is the
+test harness for the architecture work. Neither track is "done" alone.
+
+---
+
+## Track A — Evaluation harness
+
+Spec: `docs/superpowers/specs/2026-07-06-carpathi-retrieval-evaluation-design.md`
+
+| Phase | Status | Deliverable |
+|-------|--------|-------------|
+| 0 — Mining & diagnostics | ✅ **DONE** (2026-07-06, commit e772d4f) | `eval/` pipeline, 74-item draft set, findings report |
+| 1 — Harness | ⏳ **NEXT** | `eval/run/` drives both `search` + `search_vault`; captures recall/precision/latency/tokens |
+| 2 — Pool + judge + calibrate | ⬜ pending | Pooled ground truth; LLM judge; **Tom calibration gate**; refined `queries.json` |
+| 3 — Score + report | ⬜ pending | Baseline scorecard (before/after ruler ready) |
+| 4 — Regression suite | ⬜ pending | Frozen set + pass bar; guards Track B changes |
+
+**Draft set needs a triage/refinement pass** (categories are heuristic; see
+Phase-0 findings §"Known limitations"). This is folded into Phase 2 calibration.
+
+---
+
+## Track B — Architecture remediation
+
+Status: ⬜ **not started** — awaits a holistic brainstorm → spec → plan.
+Do NOT patch issues reactively; design the whole. Brainstorm will be triggered
+via `superpowers:brainstorming` once we choose to open it (see sequencing).
+
+Design must address the whole retrieval architecture, informed by the issues log
+below and the Track A baseline. Candidate scope (to be refined in brainstorm):
+- Embedding/enrichment coverage (Plaud + Curated/sources are ~0% embedded).
+- Tool routing (fast `search` used only ~10%; instructions/description layer).
+- Entity/people recall.
+- Ingestion completeness + sync reliability.
+- Curator/digest (hot-topics) layer — currently not producing output.
+- Correctness bugs.
+
+---
+
+## Issues log (captured as we encounter them — triage into Track B)
+
+Every problem we hit goes here immediately, so "fix holistically later" never
+means "forget." Severity: 🔴 high / 🟡 med / 🟢 low.
+
+| # | Issue | Evidence | Severity | Track B disposition |
+|---|-------|----------|----------|---------------------|
+| I1 | Semantic layer covers only 34% of vault; **Plaud 0/591, Curated/sources 1/10,860 embedded** — RAG doesn't cover Tom's key content | `eval/results/coverage-funnel.json` | 🔴 | enrichment/embedding coverage redesign |
+| I2 | Fast-tool routing ~10% and **declining** (May 15.8%→Jun 7.9%→Jul 0%); search_vault 6.4s median vs search 110ms | `eval/results/routing-analysis.json` | 🔴 | routing / tool-description / deprecation strategy |
+| I3 | People/entity searches return **zero hits** in production (Araik Kutunian, Haik Asatrian, Hovannis, Eric Kubicki) | `routing-analysis.json` zero_hits | 🔴 | entity index + recall |
+| I4 | `search_vault` crashes: `b.updated_at.localeCompare is not a function` | log error | 🟡 | correctness fix (also: is search_vault even kept?) |
+| I5 | `get_note` on a directory path throws `EISDIR` | log error | 🟢 | input validation |
+| I6 | Hot-topic/digest curator not producing output ("No weekly digest yet") | intelligence-plan, banner | 🟡 | curation/digest layer |
+| I7 | `search_vault` scans only 4 folders while hybrid indexes all — corpus asymmetry | `src/mcp/tools/search-vault.ts` | 🟢 | deprecation / consistency |
+
+---
+
+## You are here
+
+Phase 0 complete. **Decision point:** which track to push next (see the session
+where this was written). Recommended: build Track A Phase 1 harness → run a
+baseline → then open Track B brainstorm designed against that baseline.
+
+## Update protocol
+- End of each session: update the phase status table, the issues log, and "You
+  are here."
+- Mirror the one-line status in the memory note `carpathi-retrieval-eval`.
