@@ -29,7 +29,7 @@ export function buildVariants(config: KarpathyConfig, projectRoot: string, topK 
       profile: {
         runtimeDeps: ['ollama'],
         storageGbBeyondFts: 1,
-        maintenanceJobs: ['embedding-index', 'embedding-sync'],
+        maintenanceJobs: ['embedding-index'],
         silentDegradationModes: ['provider-down->keyword-only'],
         codeSurface: 'high',
       },
