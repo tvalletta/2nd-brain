@@ -34,7 +34,7 @@ Spec: `docs/superpowers/specs/2026-07-06-carpathi-retrieval-evaluation-design.md
 | Phase | Status | Deliverable |
 |-------|--------|-------------|
 | 0 — Mining & diagnostics | ✅ **DONE** (2026-07-06, commit e772d4f) | `eval/` pipeline, 74-item draft set, findings report |
-| 1 — Harness | ⏳ **NEXT** | `eval/run/` drives both `search` + `search_vault`; captures recall/precision/latency/tokens |
+| 1 — Harness (**variant runner**) | ⏳ **NEXT** | `eval/run/` = pluggable variant runner (grep-first / full-cov hybrid / as-deployed ref); serves Track A *and* the Track B bake-off. Captures recall/precision/latency/tokens |
 | 2 — Pool + judge + calibrate | ⬜ pending | Pooled ground truth; LLM judge; **Tom calibration gate**; refined `queries.json` |
 | 3 — Score + report | ⬜ pending | Baseline scorecard (before/after ruler ready) |
 | 4 — Regression suite | ⬜ pending | Frozen set + pass bar; guards Track B changes |
@@ -46,9 +46,13 @@ Phase-0 findings §"Known limitations"). This is folded into Phase 2 calibration
 
 ## Track B — Architecture remediation
 
-Status: ⬜ **not started** — awaits a holistic brainstorm → spec → plan.
-Do NOT patch issues reactively; design the whole. Brainstorm will be triggered
-via `superpowers:brainstorming` once we choose to open it (see sequencing).
+Status: 🟡 **spec written** (2026-07-06) — `docs/superpowers/specs/2026-07-06-architecture-bakeoff-remediation-design.md`.
+Structure: **Stage 1 bake-off** (measure grep-first vs full-coverage hybrid on a
+weighted scorecard — accuracy 0.50 / latency 0.20 / tokens 0.15 / simplicity 0.15,
+simplicity breaks a ≤0.03 tie) → **Stage 2 holistic remediation** toward the
+winner (architecture-dependent scope deferred until the verdict). The bake-off
+runs on Track A Phase 1's variant runner, so the two tracks share the harness.
+Next: writing-plans for Stage 1 (first step = build the variant runner).
 
 Design must address the whole retrieval architecture, informed by the issues log
 below and the Track A baseline. Candidate scope (to be refined in brainstorm):
