@@ -1,0 +1,270 @@
+{
+  "generated_at": "2026-07-06T17:00:10.710Z",
+  "tool_distribution": [
+    {
+      "tool": "search_vault",
+      "n": 165,
+      "median_ms": 6389,
+      "p95_ms": 9893
+    },
+    {
+      "tool": "get_note",
+      "n": 107,
+      "median_ms": 1,
+      "p95_ms": 20
+    },
+    {
+      "tool": "get_entity",
+      "n": 21,
+      "median_ms": 2,
+      "p95_ms": 10
+    },
+    {
+      "tool": "get_recent_sessions",
+      "n": 19,
+      "median_ms": 132,
+      "p95_ms": 2197
+    },
+    {
+      "tool": "search_entities",
+      "n": 16,
+      "median_ms": 7.5,
+      "p95_ms": 26
+    },
+    {
+      "tool": "batch_get_notes",
+      "n": 8,
+      "median_ms": 6,
+      "p95_ms": 17
+    },
+    {
+      "tool": "get_hot_cache",
+      "n": 7,
+      "median_ms": 2,
+      "p95_ms": 18
+    },
+    {
+      "tool": "search",
+      "n": 3,
+      "median_ms": 110,
+      "p95_ms": 183
+    },
+    {
+      "tool": "vault_status",
+      "n": 1,
+      "median_ms": 4478,
+      "p95_ms": 4478
+    },
+    {
+      "tool": "log_session_summary",
+      "n": 1,
+      "median_ms": 11,
+      "p95_ms": 11
+    },
+    {
+      "tool": "get_decisions",
+      "n": 1,
+      "median_ms": 6,
+      "p95_ms": 6
+    }
+  ],
+  "routing": {
+    "overall_fast_pct": 10.3,
+    "overall": {
+      "correct": 19,
+      "total": 184
+    },
+    "by_month": {
+      "2026-05": {
+        "correct": 9,
+        "total": 57
+      },
+      "2026-06": {
+        "correct": 10,
+        "total": 126
+      },
+      "2026-07": {
+        "correct": 0,
+        "total": 1
+      }
+    }
+  },
+  "zero_hits": [
+    {
+      "tool": "search_vault",
+      "query": "AMGOS RCAS governance",
+      "chars": 44
+    },
+    {
+      "tool": "search_vault",
+      "query": "Brian 1:1 May 18 4pm",
+      "chars": 43
+    },
+    {
+      "tool": "search_vault",
+      "query": "not contributing AI behind skeptic not there yet coasting",
+      "chars": 80
+    },
+    {
+      "tool": "search_vault",
+      "query": "Jeff Brown MCP consolidation AI tools guild leading",
+      "chars": 74
+    },
+    {
+      "tool": "search_vault",
+      "query": "Spectre",
+      "chars": 30
+    },
+    {
+      "tool": "search_entities",
+      "query": "Araik Kutunian",
+      "chars": 27
+    },
+    {
+      "tool": "search_entities",
+      "query": "Haik Asatrian",
+      "chars": 27
+    },
+    {
+      "tool": "search_entities",
+      "query": "Hovannis",
+      "chars": 27
+    },
+    {
+      "tool": "search_entities",
+      "query": "Eric Kubicki",
+      "chars": 27
+    },
+    {
+      "tool": "search_vault",
+      "query": "Araik Kutunian architect",
+      "chars": 47
+    },
+    {
+      "tool": "search_vault",
+      "query": "Eric Kubicki proof viewer Redrock replacement",
+      "chars": 68
+    },
+    {
+      "tool": "search_vault",
+      "query": "Arabik architect contribution GenStudio Armenia",
+      "chars": 70
+    },
+    {
+      "tool": "search_vault",
+      "query": "Hovhannes Babayan Hovannis GenStudio impact",
+      "chars": 66
+    },
+    {
+      "tool": "search_vault",
+      "query": "monolith scaling must-have priorities",
+      "chars": 60
+    },
+    {
+      "tool": "search_vault",
+      "query": "monolith scaling cost per feature instrumentation",
+      "chars": 72
+    },
+    {
+      "tool": "search_entities",
+      "query": "Brian Scott",
+      "chars": 27
+    },
+    {
+      "tool": "search_vault",
+      "query": "meeting",
+      "chars": 30
+    },
+    {
+      "tool": "search_vault",
+      "query": "2026-06-02 2026-06-03",
+      "chars": 44
+    },
+    {
+      "tool": "search_vault",
+      "query": "06-01 meeting MCP testing monthly delivery project priorities astrazeneca",
+      "chars": 96
+    },
+    {
+      "tool": "search_entities",
+      "query": "Clint Goodman",
+      "chars": 27
+    },
+    {
+      "tool": "search_entities",
+      "query": "Clint Goodman",
+      "chars": 27
+    },
+    {
+      "tool": "search_vault",
+      "query": "context fabric AEP cross-product context initiative",
+      "chars": 74
+    },
+    {
+      "tool": "search_vault",
+      "query": "deployment lane hub preview stage QA Kubernetes namespace Ethos",
+      "chars": 86
+    },
+    {
+      "tool": "search_vault",
+      "query": "enterprise-context namespace Kubernetes Ethos Flex cluster",
+      "chars": 81
+    },
+    {
+      "tool": "search_vault",
+      "query": "enterprise-context namespace Ethos Flex cluster Workfront K8s",
+      "chars": 84
+    },
+    {
+      "tool": "search_vault",
+      "query": "wf-instance-resolver AI Dev US experience-stage deployment cluster",
+      "chars": 89
+    },
+    {
+      "tool": "search_vault",
+      "query": "Workfront stage cluster OR2 OR1 US East West AWS region MCP namespace",
+      "chars": 92
+    },
+    {
+      "tool": "search_vault",
+      "query": "Hamilton Lucas Jonathan Raymond K8s Kubernetes deployment namespace enterprise-context",
+      "chars": 109
+    },
+    {
+      "tool": "search_vault",
+      "query": "ai-dev-us cluster Workfront k8s wfk8s deployment MCP review app",
+      "chars": 86
+    },
+    {
+      "tool": "search_vault",
+      "query": "Workfront wfk8s a-us-common cluster kubernetes namespace deployment",
+      "chars": 90
+    },
+    {
+      "tool": "search_vault",
+      "query": "fluffyjaws MCP pipeline execution error",
+      "chars": 62
+    }
+  ],
+  "errors": [
+    {
+      "tool": "search_vault",
+      "args": {
+        "query": "AI code review production readiness trust",
+        "detail": "summary",
+        "limit": 10
+      },
+      "error": "b.updated_at.localeCompare is not a function",
+      "ts": "2026-05-19T13:48:07.785Z"
+    },
+    {
+      "tool": "get_note",
+      "args": {
+        "path": "Curated/wiki/digests",
+        "detail": "metadata"
+      },
+      "error": "Failed to read Curated/wiki/digests: EISDIR: illegal operation on a directory, read",
+      "ts": "2026-06-15T21:59:07.834Z"
+    }
+  ]
+}

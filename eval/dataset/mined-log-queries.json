@@ -1,0 +1,1206 @@
+[
+  {
+    "query": "AMGOS RCAS governance",
+    "tool": "search_vault",
+    "ts": "2026-05-18T21:45:21.739Z",
+    "result_count": null,
+    "duration_ms": 74
+  },
+  {
+    "query": "Workfront AI course badge",
+    "tool": "search_vault",
+    "ts": "2026-05-18T21:45:22.687Z",
+    "result_count": 9,
+    "duration_ms": 52
+  },
+  {
+    "query": "Spectra Arrow governance pipeline",
+    "tool": "search_vault",
+    "ts": "2026-05-18T21:45:29.126Z",
+    "result_count": 1,
+    "duration_ms": 51
+  },
+  {
+    "query": "meeting weekly team discussion",
+    "tool": "search_vault",
+    "ts": "2026-05-18T21:54:06.853Z",
+    "result_count": 15,
+    "duration_ms": 58
+  },
+  {
+    "query": "transcript recording Plaud conversation",
+    "tool": "search_vault",
+    "ts": "2026-05-18T21:54:07.740Z",
+    "result_count": 4,
+    "duration_ms": 53
+  },
+  {
+    "query": "Brian meeting May 18",
+    "tool": "search_vault",
+    "ts": "2026-05-18T22:55:08.791Z",
+    "result_count": 10,
+    "duration_ms": 212
+  },
+  {
+    "query": "Brian 1:1 May 18 4pm",
+    "tool": "search_vault",
+    "ts": "2026-05-18T22:55:38.949Z",
+    "result_count": null,
+    "duration_ms": 131
+  },
+  {
+    "query": "meeting ai leadership calibration MCP unity alignment May 18",
+    "tool": "search_vault",
+    "ts": "2026-05-18T22:56:21.587Z",
+    "result_count": 3,
+    "duration_ms": 111
+  },
+  {
+    "query": "manager employee check-in project work personal well-being May 18",
+    "tool": "search_vault",
+    "ts": "2026-05-18T22:56:23.063Z",
+    "result_count": 3,
+    "duration_ms": 121
+  },
+  {
+    "query": "AI leader leading charge contribution dark factory agent",
+    "tool": "search_vault",
+    "ts": "2026-05-18T23:08:18.853Z",
+    "result_count": 9,
+    "duration_ms": 132
+  },
+  {
+    "query": "engineer architect AI",
+    "tool": "search_entities",
+    "ts": "2026-05-18T23:08:20.120Z",
+    "result_count": 20,
+    "duration_ms": 19
+  },
+  {
+    "query": "not contributing AI behind skeptic not there yet coasting",
+    "tool": "search_vault",
+    "ts": "2026-05-18T23:08:21.174Z",
+    "result_count": null,
+    "duration_ms": 99
+  },
+  {
+    "query": "Chinna Dustin Bowman Keiong Josh Jake Russell performance AI",
+    "tool": "search_vault",
+    "ts": "2026-05-18T23:13:13.138Z",
+    "result_count": 3,
+    "duration_ms": 113
+  },
+  {
+    "query": "Jeff Brown MCP consolidation AI tools guild leading",
+    "tool": "search_vault",
+    "ts": "2026-05-18T23:13:25.764Z",
+    "result_count": null,
+    "duration_ms": 97
+  },
+  {
+    "query": "architecture council",
+    "tool": "search_vault",
+    "ts": "2026-05-19T13:48:03.415Z",
+    "result_count": 10,
+    "duration_ms": 379
+  },
+  {
+    "query": "dark factory AI code production",
+    "tool": "search_vault",
+    "ts": "2026-05-19T13:48:05.776Z",
+    "result_count": 10,
+    "duration_ms": 205
+  },
+  {
+    "query": "AI code review production readiness trust",
+    "tool": "search_vault",
+    "ts": "2026-05-19T13:48:07.785Z",
+    "result_count": null,
+    "duration_ms": 218
+  },
+  {
+    "query": "project consolidation AI agents MCP gateway unity",
+    "tool": "search_vault",
+    "ts": "2026-05-19T13:48:18.251Z",
+    "result_count": 8,
+    "duration_ms": 206
+  },
+  {
+    "query": "UX product engineering AI vibe coding citizen developer",
+    "tool": "search_vault",
+    "ts": "2026-05-19T13:48:20.223Z",
+    "result_count": 4,
+    "duration_ms": 187
+  },
+  {
+    "query": "dark factory spec driven verification spec intake validation harness",
+    "tool": "search_vault",
+    "ts": "2026-05-19T13:48:29.056Z",
+    "result_count": 5,
+    "duration_ms": 190
+  },
+  {
+    "query": "DeLorean stakeholders meeting May 19",
+    "tool": "search_vault",
+    "ts": "2026-05-19T16:18:31.880Z",
+    "result_count": 10,
+    "duration_ms": 361
+  },
+  {
+    "query": "Project DeLorean",
+    "tool": "search_vault",
+    "ts": "2026-05-19T16:18:33.570Z",
+    "result_count": 15,
+    "duration_ms": 195
+  },
+  {
+    "query": "Spectre development AI agent",
+    "tool": "search_vault",
+    "ts": "2026-05-19T16:18:58.976Z",
+    "result_count": 8,
+    "duration_ms": 333
+  },
+  {
+    "query": "Spectre",
+    "tool": "search_vault",
+    "ts": "2026-05-19T16:19:28.882Z",
+    "result_count": null,
+    "duration_ms": 267
+  },
+  {
+    "query": "HAL reviewer Cadence sandbox orchestration",
+    "tool": "search_vault",
+    "ts": "2026-05-19T16:19:32.957Z",
+    "result_count": 6,
+    "duration_ms": 243
+  },
+  {
+    "query": "evals evaluation Brett Reese Art Craig Kevin May 19",
+    "tool": "search_vault",
+    "ts": "2026-05-19T21:57:32.109Z",
+    "result_count": 2,
+    "duration_ms": 393
+  },
+  {
+    "query": "Brett Reese evals evaluation framework",
+    "tool": "search_vault",
+    "ts": "2026-05-19T21:57:33.470Z",
+    "result_count": 5,
+    "duration_ms": 197
+  },
+  {
+    "query": "Ryan Orth",
+    "tool": "search_entities",
+    "ts": "2026-05-20T13:11:07.958Z",
+    "result_count": 3,
+    "duration_ms": 15
+  },
+  {
+    "query": "Matt Newman",
+    "tool": "search_entities",
+    "ts": "2026-05-20T13:11:09.555Z",
+    "result_count": 3,
+    "duration_ms": 5
+  },
+  {
+    "query": "Craig Mathis",
+    "tool": "search_entities",
+    "ts": "2026-05-20T13:11:11.305Z",
+    "result_count": 1,
+    "duration_ms": 4
+  },
+  {
+    "query": "Araik Kutunian",
+    "tool": "search_entities",
+    "ts": "2026-05-20T13:11:12.884Z",
+    "result_count": null,
+    "duration_ms": 5
+  },
+  {
+    "query": "Haik Asatrian",
+    "tool": "search_entities",
+    "ts": "2026-05-20T13:11:14.262Z",
+    "result_count": null,
+    "duration_ms": 4
+  },
+  {
+    "query": "Hovannis",
+    "tool": "search_entities",
+    "ts": "2026-05-20T13:11:15.782Z",
+    "result_count": null,
+    "duration_ms": 5
+  },
+  {
+    "query": "Baba Yan",
+    "tool": "search_entities",
+    "ts": "2026-05-20T13:11:17.177Z",
+    "result_count": 3,
+    "duration_ms": 6
+  },
+  {
+    "query": "Eric Kubicki",
+    "tool": "search_entities",
+    "ts": "2026-05-20T13:11:18.757Z",
+    "result_count": null,
+    "duration_ms": 4
+  },
+  {
+    "query": "Araik Kutunian architect",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:11:38.297Z",
+    "result_count": null,
+    "duration_ms": 274
+  },
+  {
+    "query": "Baba Yan architect",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:11:40.082Z",
+    "result_count": 2,
+    "duration_ms": 191
+  },
+  {
+    "query": "Haik architect Workfront",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:11:51.329Z",
+    "result_count": 5,
+    "duration_ms": 274
+  },
+  {
+    "query": "Arabik architect Armenia",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:11:53.660Z",
+    "result_count": 5,
+    "duration_ms": 252
+  },
+  {
+    "query": "Eric Kubicki proof viewer Redrock replacement",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:12:58.461Z",
+    "result_count": null,
+    "duration_ms": 257
+  },
+  {
+    "query": "Arabik architect contribution GenStudio Armenia",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:13:00.706Z",
+    "result_count": null,
+    "duration_ms": 246
+  },
+  {
+    "query": "Hovhannes Babayan Hovannis GenStudio impact",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:13:02.252Z",
+    "result_count": null,
+    "duration_ms": 259
+  },
+  {
+    "query": "Ryan Orth AI factory guild problem solver",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:13:05.294Z",
+    "result_count": 4,
+    "duration_ms": 234
+  },
+  {
+    "query": "Arabik architecture Workfront project",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:13:14.288Z",
+    "result_count": 5,
+    "duration_ms": 278
+  },
+  {
+    "query": "Eric Kubicki spec driven development architecture council",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:13:16.151Z",
+    "result_count": 4,
+    "duration_ms": 245
+  },
+  {
+    "query": "Hovannis React monorepo migration GenStudio",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:13:18.940Z",
+    "result_count": 2,
+    "duration_ms": 260
+  },
+  {
+    "query": "Arabik contribution work architecture",
+    "tool": "search_vault",
+    "ts": "2026-05-20T13:13:34.292Z",
+    "result_count": 3,
+    "duration_ms": 313
+  },
+  {
+    "query": "Architecture Council meeting May 19 2026",
+    "tool": "search_vault",
+    "ts": "2026-05-21T20:01:24.686Z",
+    "result_count": 5,
+    "duration_ms": 2527
+  },
+  {
+    "query": "Architecture Council action items",
+    "tool": "search_vault",
+    "ts": "2026-05-21T20:01:32.460Z",
+    "result_count": 5,
+    "duration_ms": 69
+  },
+  {
+    "query": "calibration meeting performance",
+    "tool": "search_vault",
+    "ts": "2026-05-28T14:33:29.200Z",
+    "result_count": 10,
+    "duration_ms": 7747
+  },
+  {
+    "query": "Hayk Arevik Dale Hovhannes Irek Ryan Craig Matt architect",
+    "tool": "search_vault",
+    "ts": "2026-05-28T14:33:38.353Z",
+    "result_count": 1,
+    "duration_ms": 6758
+  },
+  {
+    "query": "scorched earth phase 8 phase 9",
+    "tool": "search_vault",
+    "ts": "2026-05-28T16:39:22.462Z",
+    "result_count": 20,
+    "duration_ms": 7260
+  },
+  {
+    "query": "architecture meeting all-hands",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:05:09.871Z",
+    "result_count": 10,
+    "duration_ms": 9232
+  },
+  {
+    "query": "Brian Pino Brent Rudwick",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:05:20.101Z",
+    "result_count": 10,
+    "duration_ms": 7972
+  },
+  {
+    "query": "AI enablement engineering",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:05:30.158Z",
+    "result_count": 10,
+    "duration_ms": 7661
+  },
+  {
+    "query": "monolith scaling must-have priorities",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:05:53.791Z",
+    "result_count": null,
+    "duration_ms": 7721
+  },
+  {
+    "query": "must-have requirements priorities",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:06:10.513Z",
+    "result_count": 6,
+    "duration_ms": 7576
+  },
+  {
+    "query": "monolith scaling cost per feature instrumentation",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:06:19.546Z",
+    "result_count": null,
+    "duration_ms": 7576
+  },
+  {
+    "query": "MCP gateway initiative release strategy",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:58:10.586Z",
+    "result_count": 8,
+    "duration_ms": 7057
+  },
+  {
+    "query": "MCP server architecture Workfront",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:58:18.533Z",
+    "result_count": 8,
+    "duration_ms": 6295
+  },
+  {
+    "query": "Brian Scott ATS",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:58:40.796Z",
+    "result_count": 10,
+    "duration_ms": 6416
+  },
+  {
+    "query": "Brian Scott",
+    "tool": "search_entities",
+    "ts": "2026-06-01T14:58:43.195Z",
+    "result_count": null,
+    "duration_ms": 12
+  },
+  {
+    "query": "ATS Workfront enterprise MCP",
+    "tool": "search_vault",
+    "ts": "2026-06-01T14:59:03.366Z",
+    "result_count": 8,
+    "duration_ms": 6389
+  },
+  {
+    "query": "plaud transcript",
+    "tool": "search_vault",
+    "ts": "2026-06-01T15:43:07.918Z",
+    "result_count": 30,
+    "duration_ms": 7238
+  },
+  {
+    "query": "Tom Valletta speaker",
+    "tool": "search_vault",
+    "ts": "2026-06-01T15:43:17.653Z",
+    "result_count": 20,
+    "duration_ms": 7192
+  },
+  {
+    "query": "Arevik Katyunyan",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:52:44.007Z",
+    "result_count": 4,
+    "duration_ms": 6789
+  },
+  {
+    "query": "Hayk Asatryan",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:52:51.593Z",
+    "result_count": 9,
+    "duration_ms": 6347
+  },
+  {
+    "query": "Hovhannes Babayan",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:52:59.263Z",
+    "result_count": 10,
+    "duration_ms": 6262
+  },
+  {
+    "query": "Irek Kubicki",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:53:06.714Z",
+    "result_count": 10,
+    "duration_ms": 6097
+  },
+  {
+    "query": "Dale Whitchurch",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:53:14.335Z",
+    "result_count": 10,
+    "duration_ms": 6314
+  },
+  {
+    "query": "Craig Mathis MCP",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:53:22.089Z",
+    "result_count": 10,
+    "duration_ms": 6229
+  },
+  {
+    "query": "Matt Newman business context",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:53:29.596Z",
+    "result_count": 10,
+    "duration_ms": 5973
+  },
+  {
+    "query": "Hayk architect monolith performance",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:54:05.491Z",
+    "result_count": 8,
+    "duration_ms": 6190
+  },
+  {
+    "query": "Arevik architect work project",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:54:13.314Z",
+    "result_count": 8,
+    "duration_ms": 6544
+  },
+  {
+    "query": "Craig Mathis conversational AI harness Workfront MCP gateway",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:55:13.467Z",
+    "result_count": 5,
+    "duration_ms": 6304
+  },
+  {
+    "query": "Dale Whitchurch Agency planning integration components WF",
+    "tool": "search_vault",
+    "ts": "2026-06-01T16:55:20.610Z",
+    "result_count": 6,
+    "duration_ms": 5763
+  },
+  {
+    "query": "business context enterprise context",
+    "tool": "search_vault",
+    "ts": "2026-06-01T17:12:08.416Z",
+    "result_count": 15,
+    "duration_ms": 6469
+  },
+  {
+    "query": "Steve Wierig Matt Newman",
+    "tool": "search_vault",
+    "ts": "2026-06-01T17:12:16.534Z",
+    "result_count": 2,
+    "duration_ms": 6442
+  },
+  {
+    "query": "05-29 enterprise context business context",
+    "tool": "search_vault",
+    "ts": "2026-06-01T17:12:30.411Z",
+    "result_count": 15,
+    "duration_ms": 6176
+  },
+  {
+    "query": "Brian Pino Jeff Brown all hands agenda engineering leads meeting",
+    "tool": "search_vault",
+    "ts": "2026-06-01T17:18:06.166Z",
+    "result_count": 1,
+    "duration_ms": 3979
+  },
+  {
+    "query": "all hands enablement training course present agenda May 27",
+    "tool": "search_vault",
+    "ts": "2026-06-01T17:18:13.849Z",
+    "result_count": 20,
+    "duration_ms": 6303
+  },
+  {
+    "query": "Brian Pino Jeff Brown engineering leads May 2026",
+    "tool": "search_vault",
+    "ts": "2026-06-01T17:18:22.549Z",
+    "result_count": 3,
+    "duration_ms": 98
+  },
+  {
+    "query": "all hands agenda engineering leads 2026-05-27 2026-05-28",
+    "tool": "search_vault",
+    "ts": "2026-06-01T17:18:30.348Z",
+    "result_count": 20,
+    "duration_ms": 6410
+  },
+  {
+    "query": "ATS Brian Scott MCP strategy",
+    "tool": "search_vault",
+    "ts": "2026-06-01T20:19:06.660Z",
+    "result_count": 8,
+    "duration_ms": 7255
+  },
+  {
+    "query": "AI Collaborators",
+    "tool": "search_entities",
+    "ts": "2026-06-01T20:47:01.658Z",
+    "result_count": 3,
+    "duration_ms": 26
+  },
+  {
+    "query": "meeting",
+    "tool": "search_vault",
+    "ts": "2026-06-01T21:28:02.657Z",
+    "result_count": null,
+    "duration_ms": 72
+  },
+  {
+    "query": "Workfront MCP gateway",
+    "tool": "search_vault",
+    "ts": "2026-06-01T21:55:17.516Z",
+    "result_count": 20,
+    "duration_ms": 7232
+  },
+  {
+    "query": "Architecture Council May 19",
+    "tool": "search_vault",
+    "ts": "2026-06-02T13:40:09.559Z",
+    "result_count": 20,
+    "duration_ms": 9475
+  },
+  {
+    "query": "AI-native operating model priorities OKR",
+    "tool": "search_vault",
+    "ts": "2026-06-02T16:26:56.792Z",
+    "result_count": 2,
+    "duration_ms": 7229
+  },
+  {
+    "query": "spec creation backlog prioritization AI engineering",
+    "tool": "search_vault",
+    "ts": "2026-06-02T16:27:04.826Z",
+    "result_count": 8,
+    "duration_ms": 6637
+  },
+  {
+    "query": "business context MCP workfront planning mapper",
+    "tool": "search_vault",
+    "ts": "2026-06-03T15:28:51.706Z",
+    "result_count": 12,
+    "duration_ms": 7677
+  },
+  {
+    "query": "business context project goals vision",
+    "tool": "search_vault",
+    "ts": "2026-06-03T15:29:01.170Z",
+    "result_count": 10,
+    "duration_ms": 7620
+  },
+  {
+    "query": "meeting 2026-06-03",
+    "tool": "search_vault",
+    "ts": "2026-06-04T13:49:15.301Z",
+    "result_count": 2,
+    "duration_ms": 292
+  },
+  {
+    "query": "meeting 2026-06-02",
+    "tool": "search_vault",
+    "ts": "2026-06-04T13:49:17.077Z",
+    "result_count": 2,
+    "duration_ms": 30
+  },
+  {
+    "query": "meeting june 2026",
+    "tool": "search_vault",
+    "ts": "2026-06-04T13:49:32.433Z",
+    "result_count": 1,
+    "duration_ms": 8800
+  },
+  {
+    "query": "2026-06-02 2026-06-03",
+    "tool": "search_vault",
+    "ts": "2026-06-04T13:49:39.520Z",
+    "result_count": null,
+    "duration_ms": 55
+  },
+  {
+    "query": "meeting weekly june",
+    "tool": "search_vault",
+    "ts": "2026-06-04T13:50:03.466Z",
+    "result_count": 30,
+    "duration_ms": 8583
+  },
+  {
+    "query": "architecture council june 2",
+    "tool": "search_vault",
+    "ts": "2026-06-04T13:50:30.469Z",
+    "result_count": 5,
+    "duration_ms": 8120
+  },
+  {
+    "query": "06-03 meeting tuesday june 3",
+    "tool": "search_vault",
+    "ts": "2026-06-04T13:50:46.302Z",
+    "result_count": 10,
+    "duration_ms": 7518
+  },
+  {
+    "query": "06-01 meeting MCP testing monthly delivery project priorities astrazeneca",
+    "tool": "search_vault",
+    "ts": "2026-06-04T13:52:09.390Z",
+    "result_count": null,
+    "duration_ms": 7638
+  },
+  {
+    "query": "Workfront MCP Gemini setup",
+    "tool": "search_vault",
+    "ts": "2026-06-04T16:23:14.331Z",
+    "result_count": 1,
+    "duration_ms": 4398
+  },
+  {
+    "query": "Workfront MCP Gemini",
+    "tool": "search_vault",
+    "ts": "2026-06-04T16:41:16.728Z",
+    "result_count": 5,
+    "duration_ms": 4621
+  },
+  {
+    "query": "Craig Mathis business context MCP OAuth",
+    "tool": "search_vault",
+    "ts": "2026-06-04T17:49:00.469Z",
+    "result_count": 10,
+    "duration_ms": 9430
+  },
+  {
+    "query": "Craig Mathis MCP authentication deployment",
+    "tool": "search_vault",
+    "ts": "2026-06-05T17:34:07.484Z",
+    "result_count": 5,
+    "duration_ms": 6648
+  },
+  {
+    "query": "MCP gateway authentication local setup",
+    "tool": "search_vault",
+    "ts": "2026-06-05T17:34:15.334Z",
+    "result_count": 5,
+    "duration_ms": 6491
+  },
+  {
+    "query": "Brian meeting architecture",
+    "tool": "search_vault",
+    "ts": "2026-06-08T14:05:02.622Z",
+    "result_count": 10,
+    "duration_ms": 4195
+  },
+  {
+    "query": "meeting Brian DeLorean HAL dark factory architects",
+    "tool": "search_vault",
+    "ts": "2026-06-08T14:05:58.955Z",
+    "result_count": 3,
+    "duration_ms": 4223
+  },
+  {
+    "query": "Workfront Planning test data business context",
+    "tool": "search_vault",
+    "ts": "2026-06-08T17:24:49.299Z",
+    "result_count": 6,
+    "duration_ms": 4336
+  },
+  {
+    "query": "Workfront maestro workspace record type seed data",
+    "tool": "search_vault",
+    "ts": "2026-06-08T17:24:57.359Z",
+    "result_count": 1,
+    "duration_ms": 6488
+  },
+  {
+    "query": "Craig MCP bearer token authentication Workfront",
+    "tool": "search_vault",
+    "ts": "2026-06-08T17:48:00.553Z",
+    "result_count": 5,
+    "duration_ms": 7493
+  },
+  {
+    "query": "Craig",
+    "tool": "search_entities",
+    "ts": "2026-06-08T17:48:02.129Z",
+    "result_count": 1,
+    "duration_ms": 6
+  },
+  {
+    "query": "Brian Pino asked priority follow up action",
+    "tool": "search_vault",
+    "ts": "2026-06-08T19:06:52.188Z",
+    "result_count": 6,
+    "duration_ms": 8118
+  },
+  {
+    "query": "business context",
+    "tool": "search_vault",
+    "ts": "2026-06-09T14:29:46.400Z",
+    "result_count": 20,
+    "duration_ms": 7219
+  },
+  {
+    "query": "enterprise context",
+    "tool": "search_vault",
+    "ts": "2026-06-09T14:29:55.157Z",
+    "result_count": 20,
+    "duration_ms": 7309
+  },
+  {
+    "query": "Brian Pino",
+    "tool": "search_vault",
+    "ts": "2026-06-09T14:30:02.261Z",
+    "result_count": 20,
+    "duration_ms": 5720
+  },
+  {
+    "query": "Steve Wierig",
+    "tool": "search_vault",
+    "ts": "2026-06-09T14:30:09.717Z",
+    "result_count": 20,
+    "duration_ms": 5883
+  },
+  {
+    "query": "Craig Mathis enterprise context",
+    "tool": "search_vault",
+    "ts": "2026-06-09T14:30:21.433Z",
+    "result_count": 15,
+    "duration_ms": 6090
+  },
+  {
+    "query": "Snowflake context user customer",
+    "tool": "search_vault",
+    "ts": "2026-06-09T14:30:28.802Z",
+    "result_count": 15,
+    "duration_ms": 5929
+  },
+  {
+    "query": "AEP Workfront enterprise context",
+    "tool": "search_vault",
+    "ts": "2026-06-09T14:30:36.181Z",
+    "result_count": 15,
+    "duration_ms": 5743
+  },
+  {
+    "query": "Arnav customer context grounding",
+    "tool": "search_vault",
+    "ts": "2026-06-09T14:30:43.534Z",
+    "result_count": 15,
+    "duration_ms": 5844
+  },
+  {
+    "query": "ai-dev-us instance Workfront MCP provisioning Craig Mathis access",
+    "tool": "search_vault",
+    "ts": "2026-06-09T15:45:09.042Z",
+    "result_count": 8,
+    "duration_ms": 6345
+  },
+  {
+    "query": "business context MCP Workfront planning",
+    "tool": "search_vault",
+    "ts": "2026-06-10T19:45:45.491Z",
+    "result_count": 10,
+    "duration_ms": 7142
+  },
+  {
+    "query": "Plaud recording meeting",
+    "tool": "search_vault",
+    "ts": "2026-06-12T20:36:35.981Z",
+    "result_count": 20,
+    "duration_ms": 10101
+  },
+  {
+    "query": "meeting weekly 2026-06",
+    "tool": "search_vault",
+    "ts": "2026-06-12T20:37:43.208Z",
+    "result_count": 20,
+    "duration_ms": 7401
+  },
+  {
+    "query": "MCP deployment",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:43:50.573Z",
+    "result_count": 15,
+    "duration_ms": 12350
+  },
+  {
+    "query": "MCP gateway",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:44:05.798Z",
+    "result_count": 15,
+    "duration_ms": 13149
+  },
+  {
+    "query": "Clint Goodman",
+    "tool": "search_entities",
+    "ts": "2026-06-15T16:44:06.878Z",
+    "result_count": null,
+    "duration_ms": 9
+  },
+  {
+    "query": "Split feature flag toggle",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:44:26.634Z",
+    "result_count": 10,
+    "duration_ms": 9225
+  },
+  {
+    "query": "external availability MCP server",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:44:37.994Z",
+    "result_count": 10,
+    "duration_ms": 10083
+  },
+  {
+    "query": "authentication IMS OAuth token",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:45:02.194Z",
+    "result_count": 10,
+    "duration_ms": 9930
+  },
+  {
+    "query": "compliance security audit logging",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:45:13.372Z",
+    "result_count": 10,
+    "duration_ms": 9893
+  },
+  {
+    "query": "Craig Mathis gateway MCP",
+    "tool": "search_entities",
+    "ts": "2026-06-15T16:45:14.645Z",
+    "result_count": 1,
+    "duration_ms": 11
+  },
+  {
+    "query": "wf-business-context context MCP",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:45:34.408Z",
+    "result_count": 10,
+    "duration_ms": 8767
+  },
+  {
+    "query": "AI rider agreement usage data customer",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:45:44.005Z",
+    "result_count": 8,
+    "duration_ms": 8234
+  },
+  {
+    "query": "Clint Goodman deployment instructions",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:45:54.449Z",
+    "result_count": 8,
+    "duration_ms": 8086
+  },
+  {
+    "query": "tenant management TMS IMS entitlements per-org",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:46:16.091Z",
+    "result_count": 6,
+    "duration_ms": 10018
+  },
+  {
+    "query": "context fabric AEP cross-product context initiative",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:46:34.513Z",
+    "result_count": null,
+    "duration_ms": 8806
+  },
+  {
+    "query": "AI dev US environment setup workspace Lumina seed",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:46:50.439Z",
+    "result_count": 6,
+    "duration_ms": 8575
+  },
+  {
+    "query": "MCP release readiness audit logging evaluation",
+    "tool": "search_vault",
+    "ts": "2026-06-15T16:47:10.770Z",
+    "result_count": 5,
+    "duration_ms": 8525
+  },
+  {
+    "query": "MCP deployment lanes environments",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:56:54.741Z",
+    "result_count": 5,
+    "duration_ms": 8461
+  },
+  {
+    "query": "MongoDB Atlas cluster Workfront provisioning",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:57:11.240Z",
+    "result_count": 5,
+    "duration_ms": 9320
+  },
+  {
+    "query": "MCP deployment QA staging preview production environment",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:57:34.749Z",
+    "result_count": 4,
+    "duration_ms": 9222
+  },
+  {
+    "query": "deployment lane hub preview stage QA Kubernetes namespace Ethos",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:57:49.679Z",
+    "result_count": null,
+    "duration_ms": 9555
+  },
+  {
+    "query": "MongoDB DocumentDB database provisioning access cluster",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:57:59.814Z",
+    "result_count": 8,
+    "duration_ms": 8364
+  },
+  {
+    "query": "MCP deployment research gateway infrastructure",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:58:13.305Z",
+    "result_count": 3,
+    "duration_ms": 7817
+  },
+  {
+    "query": "MongoDB Atlas deployment lanes Workfront MCP",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:58:21.728Z",
+    "result_count": 10,
+    "duration_ms": 7832
+  },
+  {
+    "query": "Ethos Flex cluster Workfront deployment environment",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:58:35.662Z",
+    "result_count": 10,
+    "duration_ms": 7007
+  },
+  {
+    "query": "MCP deployment research 2026-06-15",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:58:46.267Z",
+    "result_count": 3,
+    "duration_ms": 6738
+  },
+  {
+    "query": "enterprise-context namespace Kubernetes Ethos Flex cluster",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:58:55.176Z",
+    "result_count": null,
+    "duration_ms": 6986
+  },
+  {
+    "query": "enterprise-context namespace Ethos Flex cluster Workfront K8s",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:59:19.921Z",
+    "result_count": null,
+    "duration_ms": 7148
+  },
+  {
+    "query": "MongoDB Atlas Adobe shared cluster database provisioning",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:59:28.298Z",
+    "result_count": 5,
+    "duration_ms": 7118
+  },
+  {
+    "query": "Workfront deployment lanes dev QA preview production environment",
+    "tool": "search_vault",
+    "ts": "2026-06-15T21:59:47.496Z",
+    "result_count": 7,
+    "duration_ms": 9453
+  },
+  {
+    "query": "wf-instance-resolver AI Dev US experience-stage deployment cluster",
+    "tool": "search_vault",
+    "ts": "2026-06-15T22:00:09.103Z",
+    "result_count": null,
+    "duration_ms": 9083
+  },
+  {
+    "query": "Workfront stage cluster OR2 OR1 US East West AWS region MCP namespace",
+    "tool": "search_vault",
+    "ts": "2026-06-15T22:00:35.932Z",
+    "result_count": null,
+    "duration_ms": 8868
+  },
+  {
+    "query": "Hamilton Lucas Jonathan Raymond K8s Kubernetes deployment namespace enterprise-context",
+    "tool": "search_vault",
+    "ts": "2026-06-15T22:00:46.476Z",
+    "result_count": null,
+    "duration_ms": 8835
+  },
+  {
+    "query": "ai-dev-us cluster Workfront k8s wfk8s deployment MCP review app",
+    "tool": "search_vault",
+    "ts": "2026-06-15T22:01:00.291Z",
+    "result_count": null,
+    "duration_ms": 9008
+  },
+  {
+    "query": "review app MCP gateway deployment wfk8s",
+    "tool": "search_vault",
+    "ts": "2026-06-15T22:01:11.572Z",
+    "result_count": 1,
+    "duration_ms": 7317
+  },
+  {
+    "query": "Workfront wfk8s a-us-common cluster kubernetes namespace deployment",
+    "tool": "search_vault",
+    "ts": "2026-06-15T22:01:49.112Z",
+    "result_count": null,
+    "duration_ms": 11033
+  },
+  {
+    "query": "workfront light Brian Pino 2026-06-10",
+    "tool": "search_vault",
+    "ts": "2026-06-16T14:05:45.223Z",
+    "result_count": 20,
+    "duration_ms": 10694
+  },
+  {
+    "query": "FSRS spaced repetition",
+    "tool": "search",
+    "ts": "2026-06-19T15:32:43.034Z",
+    "result_count": null,
+    "duration_ms": 183
+  },
+  {
+    "query": "hybrid search BM25 Ollama FTS5",
+    "tool": "search",
+    "ts": "2026-06-19T15:32:44.935Z",
+    "result_count": null,
+    "duration_ms": 80
+  },
+  {
+    "query": "Claude Code session karpathy",
+    "tool": "search",
+    "ts": "2026-06-19T15:32:46.964Z",
+    "result_count": null,
+    "duration_ms": 110
+  },
+  {
+    "query": "enterprise context deployment",
+    "tool": "search_vault",
+    "ts": "2026-06-19T15:47:00.189Z",
+    "result_count": 20,
+    "duration_ms": 9178
+  },
+  {
+    "query": "enterprise context MCP AEM pipeline",
+    "tool": "search_entities",
+    "ts": "2026-06-19T15:47:01.968Z",
+    "result_count": 20,
+    "duration_ms": 16
+  },
+  {
+    "query": "AEM pipeline build failure Cloud Manager",
+    "tool": "search_vault",
+    "ts": "2026-06-19T15:47:25.085Z",
+    "result_count": 20,
+    "duration_ms": 7555
+  },
+  {
+    "query": "fluffyjaws MCP pipeline execution error",
+    "tool": "search_vault",
+    "ts": "2026-06-19T15:47:34.281Z",
+    "result_count": null,
+    "duration_ms": 7523
+  },
+  {
+    "query": "enterprise-context GitLab Kubernetes deployment worker",
+    "tool": "search_vault",
+    "ts": "2026-06-19T15:47:59.262Z",
+    "result_count": 2,
+    "duration_ms": 4558
+  },
+  {
+    "query": "Node 24 Dockerfile ArgoCD OpsLevel Split feature flag Harness",
+    "tool": "search_vault",
+    "ts": "2026-06-19T15:48:07.683Z",
+    "result_count": 1,
+    "duration_ms": 7154
+  },
+  {
+    "query": "consolidate planning discovery service Split toggle feature flag",
+    "tool": "search_vault",
+    "ts": "2026-06-19T15:48:23.254Z",
+    "result_count": 1,
+    "duration_ms": 4549
+  },
+  {
+    "query": "Workfront planning discovery MCP endpoint user context",
+    "tool": "search_vault",
+    "ts": "2026-06-19T15:48:45.470Z",
+    "result_count": 8,
+    "duration_ms": 4614
+  },
+  {
+    "query": "discovery service consolidation design 2026-06-16 wf-business-context",
+    "tool": "search_vault",
+    "ts": "2026-06-19T15:49:30.789Z",
+    "result_count": 6,
+    "duration_ms": 7279
+  },
+  {
+    "query": "enterprise-context pipeline deploy MR IMS_CLIENT_ID ArgoCD kubectl",
+    "tool": "search_vault",
+    "ts": "2026-07-06T15:26:13.995Z",
+    "result_count": 4,
+    "duration_ms": 6189
+  }
+]

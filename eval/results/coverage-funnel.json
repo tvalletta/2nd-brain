@@ -1,0 +1,111 @@
+{
+  "generated_at": "2026-07-06T16:59:00.903Z",
+  "totals": {
+    "fts_total": 22864,
+    "emb_total": 7849,
+    "newest_indexed_at": "2026-07-06T16:58:26.518Z",
+    "provider_id": "ollama-nomic-embed-text-768"
+  },
+  "funnel": [
+    {
+      "prefix": "Plaud/",
+      "on_disk": 591,
+      "in_fts": 591,
+      "in_embeddings": 0,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 591,
+      "pct_fts": 100,
+      "pct_emb": 0
+    },
+    {
+      "prefix": "AI Conversations/",
+      "on_disk": 7594,
+      "in_fts": 7594,
+      "in_embeddings": 7478,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 116,
+      "pct_fts": 100,
+      "pct_emb": 98.5
+    },
+    {
+      "prefix": "AI Conversations/_summaries/",
+      "on_disk": 5007,
+      "in_fts": 5007,
+      "in_embeddings": 4901,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 106,
+      "pct_fts": 100,
+      "pct_emb": 97.9
+    },
+    {
+      "prefix": "AI Conversations/claude/",
+      "on_disk": 2292,
+      "in_fts": 2292,
+      "in_embeddings": 2284,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 8,
+      "pct_fts": 100,
+      "pct_emb": 99.7
+    },
+    {
+      "prefix": "Curated/wiki/",
+      "on_disk": 372,
+      "in_fts": 372,
+      "in_embeddings": 370,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 2,
+      "pct_fts": 100,
+      "pct_emb": 99.5
+    },
+    {
+      "prefix": "Curated/sources/",
+      "on_disk": 10860,
+      "in_fts": 10860,
+      "in_embeddings": 1,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 10859,
+      "pct_fts": 100,
+      "pct_emb": 0
+    },
+    {
+      "prefix": "Curated/wiki/meetings/",
+      "on_disk": 215,
+      "in_fts": 215,
+      "in_embeddings": 215,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 0,
+      "pct_fts": 100,
+      "pct_emb": 100
+    },
+    {
+      "prefix": "Curated/wiki/decisions/",
+      "on_disk": 10,
+      "in_fts": 10,
+      "in_embeddings": 10,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 0,
+      "pct_fts": 100,
+      "pct_emb": 100
+    },
+    {
+      "prefix": "Curated/wiki/entities/",
+      "on_disk": 23,
+      "in_fts": 23,
+      "in_embeddings": 23,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 0,
+      "pct_fts": 100,
+      "pct_emb": 100
+    },
+    {
+      "prefix": "Curated/wiki/digests/",
+      "on_disk": 8,
+      "in_fts": 8,
+      "in_embeddings": 6,
+      "drop_disk_to_fts": 0,
+      "drop_fts_to_emb": 2,
+      "pct_fts": 100,
+      "pct_emb": 75
+    }
+  ]
+}
