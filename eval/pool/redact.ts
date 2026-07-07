@@ -14,7 +14,7 @@ export function redactSecrets(text: string): string {
     '$1=[REDACTED]',
   );
   // Pattern 2: standalone long base64/hex-like tokens (20+ chars, no spaces) that
-  // often appear after a colon (e.g. "user-AWS1812-DEV-at-593299485344:cfftBJ1t...").
+  // often appear after a colon (e.g. "user-EXAMPLE-DEV-at-000000000000:fakeExampleTokenValue1234...").
   // Kept at a high threshold deliberately — short `word:value` runs are common,
   // benign structural syntax elsewhere (e.g. this vault's Obsidian fold-comment
   // markers `%% begin:<id> %%` / `%% end:<id> %%`), so a low threshold here
@@ -26,7 +26,7 @@ export function redactSecrets(text: string): string {
   // Pattern 3: a short/partial token (6+ chars) after a colon, but ONLY when the
   // identifier immediately before the colon itself looks credential-shaped —
   // long (15+ chars) AND containing both a hyphen and a digit, e.g.
-  // "user-AWS1812-DEV-at-593299485344" or "bedrock-api-user-...-at-<acct id>".
+  // "user-EXAMPLE-DEV-at-000000000000" or "bedrock-api-user-...-at-<acct id>".
   // This exists because a leaked fragment may already be partial/truncated at
   // the source (trailing off as "..."), so even a short visible remainder is
   // real secret material — but restricting to a credential-shaped prefix (long,
