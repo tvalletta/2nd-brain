@@ -35,19 +35,19 @@ Each candidate shows the judge's label plus its one-sentence reasoning. **You do
 ## Category/Subtype Triage Proposals
 
 - **plaud-ai-session-001** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific meeting recording/transcript by date, participants, and topic keywords.
-  - Tom's call: [ ] agree   [ ] correct to: ____
+  - Tom's call: [x] agree   [ ] correct to: ____
 - **plaud-ai-session-002** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific 1:1 meeting recording by participant name, date, and time.
-  - Tom's call: [ ] agree   [ ] correct to: ____
+  - Tom's call: [x] agree   [ ] correct to: ____
 - **plaud-ai-session-003** -> category: plaud-ai-session, subtype: lookup, DROP — This is a file-system/git task request (clone, compare, delete files), not a retrieval question against a personal knowledge base.
-  - Tom's call: [ ] agree   [ ] correct to: ____
+  - Tom's call: [x] agree   [ ] correct to: ____
 - **plaud-ai-session-004** -> category: plaud-ai-session, subtype: lookup, DROP — This is a how-to/configuration question about using CMUX with Claude, not a retrieval query against stored notes or session history.
-  - Tom's call: [ ] agree   [ ] correct to: ____
+  - Tom's call: [x] agree   [ ] correct to: ____
 - **plaud-ai-session-005** -> category: plaud-ai-session, subtype: synthesis — While it includes a downstream action (drafting recognition posts), the core task is synthesizing across multiple recent Plaud transcripts in the vault to identify people — a legitimate multi-note retrieval/synthesis query; subtype should be synthesis, not lookup.
-  - Tom's call: [ ] agree   [ ] correct to: ____
+  - Tom's call: [x] agree   [ ] correct to: ____
 - **plaud-ai-session-006** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking action items from a specific Architecture Council meeting recording stored in the vault.
-  - Tom's call: [ ] agree   [ ] correct to: ____
+  - Tom's call: [x] agree   [ ] correct to: ____
 - **plaud-ai-session-007** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking notes/transcript from a specific meeting with named participants on a known day.
-  - Tom's call: [ ] agree   [ ] correct to: ____
+  - Tom's call: [x] agree   [ ] correct to: ____
 - **plaud-ai-session-008** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific prior AI coding session record (Workfront MCP setup in Gemini) stored in the vault.
   - Tom's call: [ ] agree   [ ] correct to: ____
 - **plaud-ai-session-009** -> category: plaud-ai-session, subtype: synthesis — Genuine retrieval query seeking to extract and compile action items from an Architecture Council recording; synthesis subtype is correctly assigned.
