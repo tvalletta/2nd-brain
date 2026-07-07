@@ -33,4 +33,20 @@ describe('judgePrompt', () => {
     const prompt = judgePrompt('q', '', [{ doc_id: 'a.md', title: 'A', excerpt: 'e' }]);
     expect(prompt).not.toContain('undefined');
   });
+
+  describe('judgePrompt escaping instruction', () => {
+    it('instructs the model to escape quote characters within string values', () => {
+      const prompt = judgePrompt('q', 'i', [{ doc_id: 'a.md', title: 'A', excerpt: 'e' }]);
+      expect(prompt.toLowerCase()).toContain('escape');
+      expect(prompt).toContain('\\"');
+    });
+  });
+});
+
+describe('triagePrompt escaping instruction', () => {
+  it('instructs the model to escape quote characters within string values', () => {
+    const prompt = triagePrompt([{ id: 'x', query: 'q', category: 'decisions', subtype: 'lookup', source: 'log', intent: '' }]);
+    expect(prompt.toLowerCase()).toContain('escape');
+    expect(prompt).toContain('\\"');
+  });
 });

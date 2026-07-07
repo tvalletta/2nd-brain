@@ -34,7 +34,7 @@ ${body}
 
 For each item, return an object with: id, proposed_category, proposed_subtype, drop (true if this is NOT a genuine retrieval question — e.g. it's a coding task request, an installation request, or an acknowledgement that slipped through), and a one-sentence reason.
 
-Respond with only a JSON array, one object per item, wrapped in \`\`\`json code fences.`;
+Respond with only a JSON array, one object per item, wrapped in \`\`\`json code fences. If a query contains a double-quote character, escape it as \\" inside your "reason" string so the JSON stays valid.`;
 }
 
 export function judgePrompt(query: string, intent: string, candidates: JudgeCandidate[]): string {
@@ -61,5 +61,5 @@ ${body}
 
 Return a JSON array with one object per candidate: { "doc_id": "...", "label": 0|1|2, "reason": "<one sentence>" }. Include every candidate exactly once, in any order.
 
-Respond with only the JSON array, wrapped in \`\`\`json code fences.`;
+Respond with only the JSON array, wrapped in \`\`\`json code fences. If a title or excerpt contains a double-quote character, escape it as \\" inside your "reason" string so the JSON stays valid.`;
 }
