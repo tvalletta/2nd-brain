@@ -9,6 +9,52 @@ export interface LLMClient {
   extractStructured<T>(prompt: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): Promise<T>;
 }
 
+/** Scan `raw` from the first `{` or `[`, tracking string/escape state and
+ * bracket depth, and return the substring up to the TRUE matching closing
+ * bracket of the SAME type as the opener — not just the first/last
+ * occurrence anywhere in the text. A naive greedy regex (`/\{[\s\S]*\}/`)
+ * can overshoot past trailing prose that happens to contain a stray `}`,
+ * and never matched array-shaped JSON at all. This also correctly skips
+ * brace-like characters that appear inside string values. */
+function findBalancedJsonValue(raw: string): string | null {
+  let start = -1;
+  let opener = '';
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === '{' || raw[i] === '[') {
+      start = i;
+      opener = raw[i];
+      break;
+    }
+  }
+  if (start === -1) return null;
+  const closer = opener === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < raw.length; i++) {
+    const ch = raw[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === opener) {
+      depth++;
+    } else if (ch === closer) {
+      depth--;
+      if (depth === 0) return raw.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 /**
  * Extract JSON from an LLM response with hardened parsing.
  * Prefers the last ```json code block (the actual output, not examples).
@@ -33,10 +79,12 @@ export function extractJSON(raw: string): unknown {
     }
   }
 
-  // Fallback: find outermost { ... } in the raw text
-  const braceMatch = raw.match(/\{[\s\S]*\}/);
-  if (braceMatch) {
-    return JSON.parse(braceMatch[0]);
+  // Fallback: find the true balanced { ... } or [ ... ] in the raw text,
+  // respecting string boundaries so embedded braces/brackets and trailing
+  // prose don't cause overshoot (see findBalancedJsonValue).
+  const balanced = findBalancedJsonValue(raw);
+  if (balanced) {
+    return JSON.parse(balanced);
   }
 
   // Last resort: try parsing the entire raw text
