@@ -1,6 +1,36 @@
 # Judge Calibration Sample
 
-For each candidate, mark agree or write a correction.
+## How to review this (read this first)
+
+**What this is.** An LLM ("the judge") graded Carpathi's search results below, but nobody has verified it's grading sensibly yet. This file is a small spot-check sample — you're the human calibration gate the whole evaluation project has been building toward.
+
+**Why it matters.** These judgments become the "ground truth" used later to score whether search is actually good (recall, precision, and eventually the keyword-vs-hybrid architecture decision). If the judge's labels are wrong and nobody catches it here, every downstream number built on top is unreliable.
+
+**Two sections to review, in order:**
+
+### 1. Category/Subtype Triage Proposals (right below) — quick pass, ~10-15 min
+
+For each of the 74 draft eval questions, the judge proposed a corrected `category` (plaud-ai-session / entities / hot-topics / decisions), `subtype` (lookup / synthesis / relationship / absent), and whether it should be **dropped** (meaning: not actually a retrieval question — e.g. a coding task request that slipped in during automated mining). Skim these looking for anything that jumps out as wrong — you're not proofreading every word, just sanity-checking the calls.
+
+### 2. Candidate relevance judgments (further down) — spot check, not exhaustive
+
+For 20 sample queries, the judge graded every candidate note it found against a 0/1/2 scale:
+
+- **2** = directly answers the query / is the primary target
+- **1** = relevant supporting context, but not the actual answer
+- **0** = not relevant at all
+
+Each candidate shows the judge's label plus its one-sentence reasoning. **You do not need to review every candidate for every item** — there are 20 items with many candidates each. Instead:
+
+- Pick **5-8 items** spread across the categories (plaud-ai-session, entities, hot-topics, decisions) — don't try to do all 20.
+- Within those, prioritize the **label-2 candidates** (did the judge correctly find the actual answer?) and any label-1/0 calls that surprise you. Label-0 ("not relevant") calls matter least individually — skim past most of them.
+- Skip items marked `_(judging failed for this item...)_` — that's `decisions-001` and `hot-topics-005`, a known, already-logged failure with nothing for you to review there.
+
+**How to mark your review.** Change `[ ]` to `[x]` next to "agree" if a label/category is right, or fill in "correct to: ____" with what it should have been. Don't worry about being exhaustive or perfectly formatted — if it's easier, just tell me your reactions in chat instead of editing this file (e.g. "entities-003's label-2 candidate looks wrong because...").
+
+**What happens next.** Once you've spot-checked a reasonable sample, tell me — either by handing back this file with edits, or just describing your corrections in chat. I'll compute how often you agreed with the judge. If agreement is high (≥80%), the same judge scales up to grade the rest of the pool without further per-item review. If it's low, we fix the judge's prompt/instructions before scaling up. Either way, nothing proceeds automatically without this check.
+
+---
 
 ## Category/Subtype Triage Proposals
 
