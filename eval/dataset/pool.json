@@ -486,7 +486,7 @@
       {
         "doc_id": "AI Conversations/_summaries/session-2026-06-08-ed9b0b51.md",
         "title": "Session 2026-06-08 (ed9b0b51)",
-        "excerpt": "- **Bash**: find ~/dev -name \"*.env*\" -o -name \".env*\" 2>/dev/null | xargs grep -l \"GITLAB\\|gitlab\" 2>/dev/null\n- **Bash**: grep \"GITLAB\" /Users/valletta/dev/spectra/.env /Users/valletta/dev/developer-engagement/.env /Users/\n- **Bash**: curl -s -o /dev/null -w \"%{http_code}\" -H \"PRIVATE-TOKEN: glpat-E22hrzuY071FfJW--1D",
+        "excerpt": "- **Bash**: find ~/dev -name \"*.env*\" -o -name \".env*\" 2>/dev/null | xargs grep -l \"GITLAB\\|gitlab\" 2>/dev/null\n- **Bash**: grep \"GITLAB\" /Users/valletta/dev/spectra/.env /Users/valletta/dev/developer-engagement/.env /Users/\n- **Bash**: curl -s -o /dev/null -w \"%{http_code}\" -H \"PRIVATE-TOKEN=[REDACTED]",
         "sources": [
           "as-deployed"
         ]
@@ -872,7 +872,7 @@
       {
         "doc_id": "AI Conversations/_summaries/session-2026-06-11-ae3ca1d5.md",
         "title": "Session 2026-06-11 (ae3ca1d5)",
-        "excerpt": "## Session Start\nThe conversation began with the user wanting to replace the existing Anthropic Fable 5 Model credential in the AWS Bedrock vault with new details:\n- Model ID: anthropic.claude-fable-5\n- Region: us-west-2\n- Inference Profile ID: us.anthropic.claude-fable-5\n- API Key: ABSKYmVkcm9jay1hcGktdXNlci1BV1MxODEy",
+        "excerpt": "## Session Start\nThe conversation began with the user wanting to replace the existing Anthropic Fable 5 Model credential in the AWS Bedrock vault with new details:\n- Model ID: anthropic.claude-fable-5\n- Region: us-west-2\n- Inference Profile ID: us.anthropic.claude-fable-5\n- API Key=[REDACTED]",
         "sources": [
           "as-deployed"
         ]
@@ -4045,11 +4045,12 @@
         ]
       },
       {
-        "doc_id": "Curated/sources/p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance-13.md",
-        "title": "p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance",
-        "excerpt": "\n# p-«2026»-05-«19»-05-«19»-weekly-«meeting»-«architecture»-«council»-agenda-hack-week-planning-async-outbox…",
+        "doc_id": "Curated/sources/2026-05-19-e542e4ee.md",
+        "title": "2026-05-19-e542e4ee",
+        "excerpt": "…comprehensive «Architecture» «Council» agenda built from your notes.\n\n---\n\n## «Architecture» «Council» Agenda — «May» «19», «2026»\n\n---\n\n### 1. AI…",
         "sources": [
-          "grep-first"
+          "grep-first",
+          "keyword-sweep"
         ]
       },
       {
@@ -4179,14 +4180,6 @@
         "excerpt": "# p-2026-03-11-03-11-weekly-meeting-strategic-planning-ai-development-and-q2-roadmap\n\n**Date:** 2026-03-11\n**Source:** [[Curated/sources/p-2026-03-11-03-11-weekly-meeting-strategic-planning-ai-development-and-q2-roadmap-2]]\n\n## Meeting Info\n%% begin:meeting-info %%\n2026-03-11 — Q1 2026 QBR Day 1 / Weekly Meeting: Workf",
         "sources": [
           "as-deployed"
-        ]
-      },
-      {
-        "doc_id": "Curated/sources/2026-05-19-e542e4ee.md",
-        "title": "2026-05-19-e542e4ee",
-        "excerpt": "…comprehensive «Architecture» «Council» agenda built from your notes.\n\n---\n\n## «Architecture» «Council» Agenda — «May» «19», «2026»\n\n---\n\n### 1. AI…",
-        "sources": [
-          "keyword-sweep"
         ]
       },
       {
@@ -7649,20 +7642,20 @@
         ]
       },
       {
-        "doc_id": "Curated/sources/p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance-12.md",
-        "title": "p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance",
-        "excerpt": "\n# p-2026-05-«19»-05-«19»-weekly-meeting-«architecture»-«council»-agenda-hack-week-planning-async-outbox…",
-        "sources": [
-          "grep-first"
-        ]
-      },
-      {
         "doc_id": "Curated/sources/2026-05-19-e542e4ee.md",
         "title": "2026-05-19-e542e4ee",
         "excerpt": "…Here's a comprehensive «Architecture» «Council» agenda built from your notes.\n\n---\n\n## «Architecture» «Council» Agenda — «May» «19»…",
         "sources": [
           "grep-first",
           "keyword-sweep"
+        ]
+      },
+      {
+        "doc_id": "Curated/sources/p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance-12.md",
+        "title": "p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance",
+        "excerpt": "\n# p-2026-05-«19»-05-«19»-weekly-meeting-«architecture»-«council»-agenda-hack-week-planning-async-outbox…",
+        "sources": [
+          "grep-first"
         ]
       },
       {
@@ -12089,13 +12082,11 @@
         ]
       },
       {
-        "doc_id": "AI Conversations/claude/wf-business-context/2026-06-15-46d94be3.md",
-        "title": "AI Conversations/claude/wf-business-context/2026-06-15-46d94be3.md",
-        "excerpt": "…«The» tutorial would sit alongside them as documentation «of» «what» «the» wf-business-context «MCP» «is»…",
+        "doc_id": "Curated/wiki/topics/architectural-best-practices.md",
+        "title": "architectural best practices",
+        "excerpt": "…«The» «gateway» «is» built as a mesh «of» downstream MCPs. Cross-cutting concerns — auth persistence, confirmation…",
         "sources": [
-          "grep-first",
-          "as-deployed",
-          "keyword-sweep"
+          "grep-first"
         ]
       },
       {
@@ -12224,6 +12215,15 @@
         "excerpt": "# Session 2026-05-26\n\n**Working directory:** `/Users/valletta/dev/spectra`\n\n## Prompts\n%% begin:prompts %%\n### Prompt 1 (11:17:32 AM)\nIn the Workfront Hub instance, there is Workfront Planning data that has OKRs for the Workfront Organization. It seems like that would be an important  [Image #1] source of data for unde",
         "sources": [
           "as-deployed"
+        ]
+      },
+      {
+        "doc_id": "AI Conversations/claude/wf-business-context/2026-06-15-46d94be3.md",
+        "title": "AI Conversations/claude/wf-business-context/2026-06-15-46d94be3.md",
+        "excerpt": "…«The» tutorial would sit alongside them as documentation «of» «what» «the» wf-business-context «MCP» «is»…",
+        "sources": [
+          "as-deployed",
+          "keyword-sweep"
         ]
       },
       {
@@ -16973,7 +16973,7 @@
       {
         "doc_id": "AI Conversations/_summaries/session-2026-06-08-ed9b0b51.md",
         "title": "Session 2026-06-08 (ed9b0b51)",
-        "excerpt": "- **Bash**: find ~/dev -name \"*.env*\" -o -name \".env*\" 2>/dev/null | xargs grep -l \"GITLAB\\|gitlab\" 2>/dev/null\n- **Bash**: grep \"GITLAB\" /Users/valletta/dev/spectra/.env /Users/valletta/dev/developer-engagement/.env /Users/\n- **Bash**: curl -s -o /dev/null -w \"%{http_code}\" -H \"PRIVATE-TOKEN: glpat-E22hrzuY071FfJW--1D",
+        "excerpt": "- **Bash**: find ~/dev -name \"*.env*\" -o -name \".env*\" 2>/dev/null | xargs grep -l \"GITLAB\\|gitlab\" 2>/dev/null\n- **Bash**: grep \"GITLAB\" /Users/valletta/dev/spectra/.env /Users/valletta/dev/developer-engagement/.env /Users/\n- **Bash**: curl -s -o /dev/null -w \"%{http_code}\" -H \"PRIVATE-TOKEN=[REDACTED]",
         "sources": [
           "as-deployed"
         ]

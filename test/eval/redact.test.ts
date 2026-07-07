@@ -23,6 +23,20 @@ describe('redactSecrets', () => {
     expect(output).toContain('user-FAKEUSER-DEV-at-000000000000:[REDACTED]');
   });
 
+  it('redacts a hyphen-delimited HTTP-header-style key name (e.g. PRIVATE-TOKEN:)', () => {
+    const input = 'curl -H "PRIVATE-TOKEN: fake9AbCdEfGhIjKlMnOpQrS" https://example.com/api';
+    const output = redactSecrets(input);
+    expect(output).not.toContain('fake9AbCdEfGhIjKlMnOpQrS');
+    expect(output).toContain('PRIVATE-TOKEN=[REDACTED]');
+  });
+
+  it('redacts a space-delimited multi-word prose key name (e.g. API Key:)', () => {
+    const input = 'API Key: fakeXyZ123AbCdEfGhIjKlMnOpQrStUvWxYz9988';
+    const output = redactSecrets(input);
+    expect(output).not.toContain('fakeXyZ123AbCdEfGhIjKlMnOpQrStUvWxYz9988');
+    expect(output).toContain('API Key=[REDACTED]');
+  });
+
   it('does not mangle an ordinary URL (the "://" scheme separator is excluded)', () => {
     const input = 'See https://example.com/some-really-long-path-fragment-here for details.';
     expect(redactSecrets(input)).toBe(input);

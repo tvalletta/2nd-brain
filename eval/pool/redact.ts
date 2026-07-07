@@ -7,10 +7,14 @@
  * colon or equals sign.
  */
 export function redactSecrets(text: string): string {
-  // Pattern 1: ENV_VAR-style assignments where the variable name suggests a secret
+  // Pattern 1: assignments/headers where the key name suggests a secret.
   // e.g. CONFLUENCE_PERSONAL_TOKEN="abc123", API_KEY=xyz, BEDROCK_BEARER_TOKEN: "..."
+  // Also covers HYPHEN-delimited HTTP-header style key names (e.g. "PRIVATE-TOKEN:",
+  // "X-API-KEY:") and SPACE-delimited multi-word prose key names (e.g. "API Key:",
+  // "Auth Token="), not just underscore-glued identifiers, since a leaked secret's
+  // key name can be written in any of these styles.
   let redacted = text.replace(
-    /([A-Za-z_][A-Za-z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|BEARER)[A-Za-z0-9_]*)\s*[:=]\s*"?([A-Za-z0-9+/=_.\-:]{8,})"?/gi,
+    /((?:[A-Za-z_][A-Za-z0-9_]*|(?:[A-Za-z][A-Za-z0-9_]*[-_ ]){1,2})(?:TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|BEARER)[A-Za-z0-9_-]*)\s*[:=]\s*"?([A-Za-z0-9+/=_.\-:]{8,})"?/gi,
     '$1=[REDACTED]',
   );
   // Pattern 2: standalone long base64/hex-like tokens (20+ chars, no spaces) that
