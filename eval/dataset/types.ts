@@ -1,7 +1,7 @@
 export interface EvalItem {
   id: string;
   query: string;
-  category: 'plaud-ai-session' | 'entities' | 'hot-topics' | 'decisions';
+  category: 'plaud' | 'ai-session' | 'entities' | 'hot-topics' | 'decisions';
   subtype: 'lookup' | 'synthesis' | 'relationship' | 'absent';
   source: 'log' | 'session' | 'synthetic';
   source_ref: string;

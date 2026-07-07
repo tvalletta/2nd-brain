@@ -10,7 +10,7 @@
 
 ### 1. Category/Subtype Triage Proposals (right below) — quick pass, ~10-15 min
 
-For each of the 74 draft eval questions, the judge proposed a corrected `category` (plaud-ai-session / entities / hot-topics / decisions), `subtype` (lookup / synthesis / relationship / absent), and whether it should be **dropped** (meaning: not actually a retrieval question — e.g. a coding task request that slipped in during automated mining). Skim these looking for anything that jumps out as wrong — you're not proofreading every word, just sanity-checking the calls.
+For each of the 74 draft eval questions, the judge proposed a corrected `category` (plaud / ai-session / entities / hot-topics / decisions), `subtype` (lookup / synthesis / relationship / absent), and whether it should be **dropped** (meaning: not actually a retrieval question — e.g. a coding task request that slipped in during automated mining). Skim these looking for anything that jumps out as wrong — you're not proofreading every word, just sanity-checking the calls.
 
 ### 2. Candidate relevance judgments (further down) — spot check, not exhaustive
 
@@ -22,7 +22,7 @@ For 20 sample queries, the judge graded every candidate note it found against a 
 
 Each candidate shows the judge's label plus its one-sentence reasoning. **You do not need to review every candidate for every item** — there are 20 items with many candidates each. Instead:
 
-- Pick **5-8 items** spread across the categories (plaud-ai-session, entities, hot-topics, decisions) — don't try to do all 20.
+- Pick **5-8 items** spread across the categories (plaud, ai-session, entities, hot-topics, decisions) — don't try to do all 20.
 - Within those, prioritize the **label-2 candidates** (did the judge correctly find the actual answer?) and any label-1/0 calls that surprise you. Label-0 ("not relevant") calls matter least individually — skim past most of them.
 - Skip items marked `_(judging failed for this item...)_` — that's `decisions-001` and `hot-topics-005`, a known, already-logged failure with nothing for you to review there.
 
@@ -34,55 +34,55 @@ Each candidate shows the judge's label plus its one-sentence reasoning. **You do
 
 ## Category/Subtype Triage Proposals
 
-- **plaud-ai-session-001** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific meeting recording/transcript by date, participants, and topic keywords.
+- **plaud-ai-session-001** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a specific meeting recording/transcript by date, participants, and topic keywords.
   - Tom's call: [x] agree   [ ] correct to: ____
-- **plaud-ai-session-002** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific 1:1 meeting recording by participant name, date, and time.
+- **plaud-ai-session-002** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a specific 1:1 meeting recording by participant name, date, and time.
   - Tom's call: [x] agree   [ ] correct to: ____
-- **plaud-ai-session-003** -> category: plaud-ai-session, subtype: lookup, DROP — This is a file-system/git task request (clone, compare, delete files), not a retrieval question against a personal knowledge base.
+- **plaud-ai-session-003** -> category: ai-session, subtype: lookup, DROP — This is a file-system/git task request (clone, compare, delete files), not a retrieval question against a personal knowledge base.
   - Tom's call: [x] agree   [ ] correct to: ____
-- **plaud-ai-session-004** -> category: plaud-ai-session, subtype: lookup, DROP — This is a how-to/configuration question about using CMUX with Claude, not a retrieval query against stored notes or session history.
+- **plaud-ai-session-004** -> category: ai-session, subtype: lookup, DROP — This is a how-to/configuration question about using CMUX with Claude, not a retrieval query against stored notes or session history.
   - Tom's call: [x] agree   [ ] correct to: ____
-- **plaud-ai-session-005** -> category: plaud-ai-session, subtype: synthesis — While it includes a downstream action (drafting recognition posts), the core task is synthesizing across multiple recent Plaud transcripts in the vault to identify people — a legitimate multi-note retrieval/synthesis query; subtype should be synthesis, not lookup.
+- **plaud-ai-session-005** -> category: plaud, subtype: synthesis — While it includes a downstream action (drafting recognition posts), the core task is synthesizing across multiple recent Plaud transcripts in the vault to identify people — a legitimate multi-note retrieval/synthesis query; subtype should be synthesis, not lookup.
   - Tom's call: [x] agree   [ ] correct to: ____
-- **plaud-ai-session-006** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking action items from a specific Architecture Council meeting recording stored in the vault.
+- **plaud-ai-session-006** -> category: plaud, subtype: lookup — Genuine retrieval query seeking action items from a specific Architecture Council meeting recording stored in the vault.
   - Tom's call: [x] agree   [ ] correct to: ____
-- **plaud-ai-session-007** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking notes/transcript from a specific meeting with named participants on a known day.
+- **plaud-ai-session-007** -> category: plaud, subtype: lookup — Genuine retrieval query seeking notes/transcript from a specific meeting with named participants on a known day.
   - Tom's call: [x] agree   [ ] correct to: ____
-- **plaud-ai-session-008** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific prior AI coding session record (Workfront MCP setup in Gemini) stored in the vault.
+- **plaud-ai-session-008** -> category: ai-session, subtype: lookup — Genuine retrieval query seeking a specific prior AI coding session record (Workfront MCP setup in Gemini) stored in the vault.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-009** -> category: plaud-ai-session, subtype: synthesis — Genuine retrieval query seeking to extract and compile action items from an Architecture Council recording; synthesis subtype is correctly assigned.
+- **plaud-ai-session-009** -> category: plaud, subtype: synthesis — Genuine retrieval query seeking to extract and compile action items from an Architecture Council recording; synthesis subtype is correctly assigned.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-010** -> category: plaud-ai-session, subtype: lookup, DROP — This is a tool installation/configuration request, not a retrieval query against stored notes or session history.
+- **plaud-ai-session-010** -> category: ai-session, subtype: lookup, DROP — This is a tool installation/configuration request, not a retrieval query against stored notes or session history.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-011** -> category: plaud-ai-session, subtype: lookup, DROP — This is a troubleshooting/debugging request about a GitLab MCP connection issue, not a retrieval query against stored notes.
+- **plaud-ai-session-011** -> category: ai-session, subtype: lookup, DROP — This is a troubleshooting/debugging request about a GitLab MCP connection issue, not a retrieval query against stored notes.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-012** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a meeting recording or notes by participant names and meeting type keywords.
+- **plaud-ai-session-012** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a meeting recording or notes by participant names and meeting type keywords.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-013** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific meeting recording by topic, date, and keywords.
+- **plaud-ai-session-013** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a specific meeting recording by topic, date, and keywords.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-014** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a meeting recording or notes by named participant and topic keywords.
+- **plaud-ai-session-014** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a meeting recording or notes by named participant and topic keywords.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-015** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a meeting recording or notes by named participant and project/topic keywords.
+- **plaud-ai-session-015** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a meeting recording or notes by named participant and project/topic keywords.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-016** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific Architecture Council meeting recording by name and date.
+- **plaud-ai-session-016** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a specific Architecture Council meeting recording by name and date.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-017** -> category: plaud-ai-session, subtype: lookup — Valid (if very broad) retrieval query seeking Plaud transcript/recording files in the vault, though it may be too generic to be a useful eval item.
+- **plaud-ai-session-017** -> category: plaud, subtype: lookup — Valid (if very broad) retrieval query seeking Plaud transcript/recording files in the vault, though it may be too generic to be a useful eval item.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-018** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific stakeholder meeting recording by project name and date.
+- **plaud-ai-session-018** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a specific stakeholder meeting recording by project name and date.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-019** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking action items from Architecture Council meeting recordings stored in the vault.
+- **plaud-ai-session-019** -> category: plaud, subtype: lookup — Genuine retrieval query seeking action items from Architecture Council meeting recordings stored in the vault.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-020** -> category: plaud-ai-session, subtype: lookup — Genuine (if broad) retrieval query seeking a calibration/performance meeting recording or notes in the vault.
+- **plaud-ai-session-020** -> category: plaud, subtype: lookup — Genuine (if broad) retrieval query seeking a calibration/performance meeting recording or notes in the vault.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-021** -> category: plaud-ai-session, subtype: lookup — Valid retrieval query for a weekly team meeting recording, though highly generic and may not be discriminative enough for a quality eval item.
+- **plaud-ai-session-021** -> category: plaud, subtype: lookup — Valid retrieval query for a weekly team meeting recording, though highly generic and may not be discriminative enough for a quality eval item.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-022** -> category: plaud-ai-session, subtype: lookup — Valid retrieval query seeking architecture or all-hands meeting recordings in the vault, though very generic.
+- **plaud-ai-session-022** -> category: plaud, subtype: lookup — Valid retrieval query seeking architecture or all-hands meeting recordings in the vault, though very generic.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-023** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a meeting recording by date reference (June 3).
+- **plaud-ai-session-023** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a meeting recording by date reference (June 3).
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-024** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a Claude Code AI coding session log associated with the karpathy MCP setup.
+- **plaud-ai-session-024** -> category: ai-session, subtype: lookup — Genuine retrieval query seeking a Claude Code AI coding session log associated with the karpathy MCP setup.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **plaud-ai-session-025** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval query seeking a specific Architecture Council meeting recording by name and date, near-duplicate of plaud-ai-session-016 but still a valid retrieval item.
+- **plaud-ai-session-025** -> category: plaud, subtype: lookup — Genuine retrieval query seeking a specific Architecture Council meeting recording by name and date, near-duplicate of plaud-ai-session-016 but still a valid retrieval item.
   - Tom's call: [ ] agree   [ ] correct to: ____
 - **entities-001** -> category: entities, subtype: lookup — Legitimate recall test querying a named person and Kubernetes deployment context within a personal knowledge base.
   - Tom's call: [ ] agree   [ ] correct to: ____
@@ -174,11 +174,11 @@ Each candidate shows the judge's label plus its one-sentence reasoning. **You do
   - Tom's call: [ ] agree   [ ] correct to: ____
 - **decisions-017** -> category: decisions, subtype: lookup, DROP — This is a task request to search external systems (Atlassian MCP, Confluence) for a repo, not a personal vault retrieval question.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **decisions-018** -> category: plaud-ai-session, subtype: lookup — This is a genuine retrieval question asking the system to find details about a named project; category should be plaud-ai-session as it references an AI coding session tool (carpathi mcp), and subtype lookup is appropriate for a single-project fact retrieval.
+- **decisions-018** -> category: ai-session, subtype: lookup — This is a genuine retrieval question asking the system to find details about a named project; category should be plaud-ai-session as it references an AI coding session tool (carpathi mcp), and subtype lookup is appropriate for a single-project fact retrieval.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **decisions-019** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval question asking for a specific recorded mechanism/decision about vault ingestion; better categorized as plaud-ai-session since it concerns system architecture discussed in sessions.
+- **decisions-019** -> category: ai-session, subtype: lookup — Genuine retrieval question asking for a specific recorded mechanism/decision about vault ingestion; better categorized as plaud-ai-session since it concerns system architecture discussed in sessions.
   - Tom's call: [ ] agree   [ ] correct to: ____
-- **decisions-020** -> category: plaud-ai-session, subtype: lookup — Genuine retrieval question asking whether Claude Code sessions are being ingested into the vault, best categorized as plaud-ai-session.
+- **decisions-020** -> category: ai-session, subtype: lookup — Genuine retrieval question asking whether Claude Code sessions are being ingested into the vault, best categorized as plaud-ai-session.
   - Tom's call: [ ] agree   [ ] correct to: ____
 - **decisions-021** -> category: decisions, subtype: absent — Intentional absent-stub placeholder for robustness testing; the stub format is valid but the query text needs to be filled in before use.
   - Tom's call: [ ] agree   [ ] correct to: ____
@@ -517,7 +517,7 @@ _(judging failed for this item — see run logs; candidates existed but were not
 
 **Query:** using the carpathi mcp, find details about the AI Collaborators project. What does it actually do?
 **Intent:** (none)
-**Category/Subtype:** plaud-ai-session / lookup
+**Category/Subtype:** ai-session / lookup
 
 - **AI Conversations/claude/_discovery/2026-06-01-1f27263e.md** — label 2 — This is the primary conversation document from the exact session where the query was made, directly containing the interaction about finding AI Collaborators project details via the Carpathi MCP.
   - Tom's call: [ ] agree   [ ] correct to: ____
@@ -572,7 +572,7 @@ _(judging failed for this item — see run logs; candidates existed but were not
 
 **Query:** Take a look at my interactions in the last week that are captured in transcripts from Plaud and stored in my Obsidian Vault (access via carpathi MCP). Identify 5-10 people that deserve a pat on the back.  I need to send appreciation notes in AwardCo. Create a short recognition post that I can send along. Make sure that it uses my voice.
 **Intent:** (none)
-**Category/Subtype:** plaud-ai-session / synthesis
+**Category/Subtype:** plaud / synthesis
 
 - **AI Conversations/_summaries/session-2026-06-12-9470d5ab.md** — label 2 — This is a summary of the exact session matching the query about identifying people deserving appreciation notes in AwardCo from Plaud transcripts.
   - Tom's call: [ ] agree   [ ] correct to: ____
@@ -757,7 +757,7 @@ _(judging failed for this item — see run logs; candidates existed but were not
 
 **Query:** What is the mechanism that triggers the curator when a new file shows up in the vault?
 **Intent:** (none)
-**Category/Subtype:** plaud-ai-session / lookup
+**Category/Subtype:** ai-session / lookup
 
 - **AI Conversations/_summaries/session-2026-05-21-c2bae4b3.md** — label 2 — The excerpt contains the exact query text verbatim, indicating this session directly discusses the mechanism that triggers the curator when a new file appears in the vault.
   - Tom's call: [ ] agree   [ ] correct to: ____
@@ -812,7 +812,7 @@ _(judging failed for this item — see run logs; candidates existed but were not
 
 **Query:** Take a look at the Architecture Council recording in my files. Use the Carpathian MCP and give me a quick list of all the action items from the Architecture Council this morning.
 **Intent:** (none)
-**Category/Subtype:** plaud-ai-session / synthesis
+**Category/Subtype:** plaud / synthesis
 
 - **raw/2026-05-22/p-2026-05-19-05-19-weekly-meeting-ai-initiatives-redrock-monolith-analysis.md** — label 2 — This is a recording/transcript of the Architecture Council meeting on 05-19, which is the primary target file the query asks to analyze for action items.
   - Tom's call: [ ] agree   [ ] correct to: ____
@@ -1041,7 +1041,7 @@ _(judging failed for this item — see run logs; candidates existed but were not
 
 **Query:** What about my Claude Code sessions. Are those sessions being pulled into the vault?
 **Intent:** (none)
-**Category/Subtype:** plaud-ai-session / lookup
+**Category/Subtype:** ai-session / lookup
 
 - **AI Conversations/_summaries/session-2026-04-12-2b67dc80.md** — label 2 — Contains the exact query text verbatim, making it the primary source/target of this question.
   - Tom's call: [ ] agree   [ ] correct to: ____
@@ -1179,7 +1179,7 @@ _(judging failed for this item — see run logs; candidates existed but were not
 
 **Query:** 06-01 meeting MCP testing monthly delivery project priorities astrazeneca
 **Intent:** known zero-hit in production; expected to be findable (recall test)
-**Category/Subtype:** plaud-ai-session / lookup
+**Category/Subtype:** plaud / lookup
 
 - **AI Conversations/_summaries/session-2026-06-02-b1eae27a.md** — label 1 — References hot priorities from meetings including MCP harness rollout but is from 06-02 and doesn't specifically mention a 06-01 meeting, testing, monthly delivery, or AstraZeneca.
   - Tom's call: [ ] agree   [ ] correct to: ____
@@ -1380,7 +1380,7 @@ _(judging failed for this item — see run logs; candidates existed but were not
 
 **Query:** Brian 1:1 May 18 4pm
 **Intent:** known zero-hit in production; expected to be findable (recall test)
-**Category/Subtype:** plaud-ai-session / lookup
+**Category/Subtype:** plaud / lookup
 
 - **Adobe WF Notes/Meetings/Architecture/Architecture Meeting.md** — label 0 — Architecture meeting notes with no connection to Brian, a 1:1, May 18, or 4pm.
   - Tom's call: [ ] agree   [ ] correct to: ____

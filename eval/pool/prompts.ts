@@ -25,7 +25,7 @@ export function triagePrompt(items: TriageItemInput[]): string {
 
 For each item below, decide whether its category and subtype labels are correct, and whether it is genuinely a retrieval question (asking to find/recall something in a personal notes vault) rather than an unrelated task request that slipped in by mistake during automated mining.
 
-Categories: "plaud-ai-session" (meeting recordings, AI coding session history), "entities" (people/orgs/projects/relationships), "hot-topics" (what's currently active/important), "decisions" (specific decisions or meeting outcomes).
+Categories: "plaud" (meeting recordings/transcripts captured via Plaud), "ai-session" (Claude Code / Cursor AI coding session history), "entities" (people/orgs/projects/relationships), "hot-topics" (what's currently active/important), "decisions" (specific decisions or meeting outcomes).
 Subtypes: "lookup" (single-fact retrieval), "synthesis" (spans many notes), "relationship" (entity graph walk), "absent" (deliberately testing that nothing relevant exists).
 
 --- BEGIN ITEMS ---

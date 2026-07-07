@@ -7,7 +7,7 @@ import type { EvalItem } from './types.js';
 
 export interface TriageProposal {
   id: string;
-  proposed_category: 'plaud-ai-session' | 'entities' | 'hot-topics' | 'decisions';
+  proposed_category: 'plaud' | 'ai-session' | 'entities' | 'hot-topics' | 'decisions';
   proposed_subtype: 'lookup' | 'synthesis' | 'relationship' | 'absent';
   drop: boolean;
   reason: string;
@@ -15,7 +15,7 @@ export interface TriageProposal {
 
 const TriageProposalSchema = z.object({
   id: z.string(),
-  proposed_category: z.enum(['plaud-ai-session', 'entities', 'hot-topics', 'decisions']),
+  proposed_category: z.enum(['plaud', 'ai-session', 'entities', 'hot-topics', 'decisions']),
   proposed_subtype: z.enum(['lookup', 'synthesis', 'relationship', 'absent']),
   drop: z.boolean(),
   reason: z.string(),

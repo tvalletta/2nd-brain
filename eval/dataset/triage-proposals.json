@@ -1,175 +1,175 @@
 [
   {
     "id": "plaud-ai-session-001",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a specific meeting recording/transcript by date, participants, and topic keywords."
   },
   {
     "id": "plaud-ai-session-002",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a specific 1:1 meeting recording by participant name, date, and time."
   },
   {
     "id": "plaud-ai-session-003",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "ai-session",
     "proposed_subtype": "lookup",
     "drop": true,
     "reason": "This is a file-system/git task request (clone, compare, delete files), not a retrieval question against a personal knowledge base."
   },
   {
     "id": "plaud-ai-session-004",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "ai-session",
     "proposed_subtype": "lookup",
     "drop": true,
     "reason": "This is a how-to/configuration question about using CMUX with Claude, not a retrieval query against stored notes or session history."
   },
   {
     "id": "plaud-ai-session-005",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "synthesis",
     "drop": false,
-    "reason": "While it includes a downstream action (drafting recognition posts), the core task is synthesizing across multiple recent Plaud transcripts in the vault to identify people — a legitimate multi-note retrieval/synthesis query; subtype should be synthesis, not lookup."
+    "reason": "While it includes a downstream action (drafting recognition posts), the core task is synthesizing across multiple recent Plaud transcripts in the vault to identify people \u2014 a legitimate multi-note retrieval/synthesis query; subtype should be synthesis, not lookup."
   },
   {
     "id": "plaud-ai-session-006",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking action items from a specific Architecture Council meeting recording stored in the vault."
   },
   {
     "id": "plaud-ai-session-007",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking notes/transcript from a specific meeting with named participants on a known day."
   },
   {
     "id": "plaud-ai-session-008",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "ai-session",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a specific prior AI coding session record (Workfront MCP setup in Gemini) stored in the vault."
   },
   {
     "id": "plaud-ai-session-009",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "synthesis",
     "drop": false,
     "reason": "Genuine retrieval query seeking to extract and compile action items from an Architecture Council recording; synthesis subtype is correctly assigned."
   },
   {
     "id": "plaud-ai-session-010",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "ai-session",
     "proposed_subtype": "lookup",
     "drop": true,
     "reason": "This is a tool installation/configuration request, not a retrieval query against stored notes or session history."
   },
   {
     "id": "plaud-ai-session-011",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "ai-session",
     "proposed_subtype": "lookup",
     "drop": true,
     "reason": "This is a troubleshooting/debugging request about a GitLab MCP connection issue, not a retrieval query against stored notes."
   },
   {
     "id": "plaud-ai-session-012",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a meeting recording or notes by participant names and meeting type keywords."
   },
   {
     "id": "plaud-ai-session-013",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a specific meeting recording by topic, date, and keywords."
   },
   {
     "id": "plaud-ai-session-014",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a meeting recording or notes by named participant and topic keywords."
   },
   {
     "id": "plaud-ai-session-015",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a meeting recording or notes by named participant and project/topic keywords."
   },
   {
     "id": "plaud-ai-session-016",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a specific Architecture Council meeting recording by name and date."
   },
   {
     "id": "plaud-ai-session-017",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Valid (if very broad) retrieval query seeking Plaud transcript/recording files in the vault, though it may be too generic to be a useful eval item."
   },
   {
     "id": "plaud-ai-session-018",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a specific stakeholder meeting recording by project name and date."
   },
   {
     "id": "plaud-ai-session-019",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking action items from Architecture Council meeting recordings stored in the vault."
   },
   {
     "id": "plaud-ai-session-020",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine (if broad) retrieval query seeking a calibration/performance meeting recording or notes in the vault."
   },
   {
     "id": "plaud-ai-session-021",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Valid retrieval query for a weekly team meeting recording, though highly generic and may not be discriminative enough for a quality eval item."
   },
   {
     "id": "plaud-ai-session-022",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Valid retrieval query seeking architecture or all-hands meeting recordings in the vault, though very generic."
   },
   {
     "id": "plaud-ai-session-023",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a meeting recording by date reference (June 3)."
   },
   {
     "id": "plaud-ai-session-024",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "ai-session",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a Claude Code AI coding session log associated with the karpathy MCP setup."
   },
   {
     "id": "plaud-ai-session-025",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "plaud",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval query seeking a specific Architecture Council meeting recording by name and date, near-duplicate of plaud-ai-session-016 but still a valid retrieval item."
@@ -491,21 +491,21 @@
   },
   {
     "id": "decisions-018",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "ai-session",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "This is a genuine retrieval question asking the system to find details about a named project; category should be plaud-ai-session as it references an AI coding session tool (carpathi mcp), and subtype lookup is appropriate for a single-project fact retrieval."
   },
   {
     "id": "decisions-019",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "ai-session",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval question asking for a specific recorded mechanism/decision about vault ingestion; better categorized as plaud-ai-session since it concerns system architecture discussed in sessions."
   },
   {
     "id": "decisions-020",
-    "proposed_category": "plaud-ai-session",
+    "proposed_category": "ai-session",
     "proposed_subtype": "lookup",
     "drop": false,
     "reason": "Genuine retrieval question asking whether Claude Code sessions are being ingested into the vault, best categorized as plaud-ai-session."

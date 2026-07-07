@@ -2,7 +2,7 @@
   {
     "id": "plaud-ai-session-001",
     "query": "06-01 meeting MCP testing monthly delivery project priorities astrazeneca",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "zerohit:log",
@@ -14,7 +14,7 @@
   {
     "id": "plaud-ai-session-002",
     "query": "Brian 1:1 May 18 4pm",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "zerohit:log",
@@ -26,7 +26,7 @@
   {
     "id": "plaud-ai-session-003",
     "query": "I just cloned https://github.com/Beingpax/VoiceInk.git into this repo and I should have cloned it into its own folder. Now I want to delete all of the VoiceInk files in this directory so that it just has my project folders in it. Clone VoiceInk into its own folder and then compare the files so that you can cleanly delete all of the files in this directory that it brought down.",
-    "category": "plaud-ai-session",
+    "category": "ai-session",
     "subtype": "lookup",
     "source": "session",
     "source_ref": "session:557f2673",
@@ -38,7 +38,7 @@
   {
     "id": "plaud-ai-session-004",
     "query": "I am using CMUX for Claude now, and it seems pretty great. I wonder if Claude needs to know that I'm using CMUX so that it can control opening the browser in a side-by-side split window in the same session, or understand that I'm in a session, or things like that. What can I do to make sure that Claude knows that I'm using CMUX so that it can use it most effectively?",
-    "category": "plaud-ai-session",
+    "category": "ai-session",
     "subtype": "lookup",
     "source": "session",
     "source_ref": "session:836a3580",
@@ -50,7 +50,7 @@
   {
     "id": "plaud-ai-session-005",
     "query": "Take a look at my interactions in the last week that are captured in transcripts from Plaud and stored in my Obsidian Vault (access via carpathi MCP). Identify 5-10 people that deserve a pat on the back.  I need to send appreciation notes in AwardCo. Create a short recognition post that I can send along. Make sure that it uses my voice.",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "session",
     "source_ref": "session:9470d5ab",
@@ -62,7 +62,7 @@
   {
     "id": "plaud-ai-session-006",
     "query": "On Tuesday in Architecture Council, there were a bunch of action items that came out of there. I didn't write them down anywhere. Can you get me a list of those action items and which ones are assigned to me and which ones I just need to follow up on? Use the karpathy MCP.",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "session",
     "source_ref": "session:2e4df679",
@@ -74,7 +74,7 @@
   {
     "id": "plaud-ai-session-007",
     "query": "On Friday, Steve Wierig, Matt Newman, and I had a meeting about business context and enterprise context. I need the notes compiled and summarized into a relatively short overview of the key topics and decisions from that meeting. Use my Carpathi MCP to find that.",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "session",
     "source_ref": "session:b59f86c9",
@@ -86,7 +86,7 @@
   {
     "id": "plaud-ai-session-008",
     "query": "Using the Carpathi MCP, do you have access to my Claude conversations from yesterday? There was one where I had Claude code go through and set up the MCP, the Workfront MCP in Gemini. Can you find that conversation?",
-    "category": "plaud-ai-session",
+    "category": "ai-session",
     "subtype": "lookup",
     "source": "session",
     "source_ref": "session:2c792229",
@@ -98,7 +98,7 @@
   {
     "id": "plaud-ai-session-009",
     "query": "Take a look at the Architecture Council recording in my files. Use the Carpathian MCP and give me a quick list of all the action items from the Architecture Council this morning.",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "synthesis",
     "source": "session",
     "source_ref": "session:c5e2d27e",
@@ -110,7 +110,7 @@
   {
     "id": "plaud-ai-session-010",
     "query": "Can you find and install the MS Outlook MCP. I would like to have access to my calendar and meeting transcripts.",
-    "category": "plaud-ai-session",
+    "category": "ai-session",
     "subtype": "lookup",
     "source": "session",
     "source_ref": "session:d4f9e9bd",
@@ -122,7 +122,7 @@
   {
     "id": "plaud-ai-session-011",
     "query": "GitLab MCP is still not connecting like it should. I thought that you just fixed this in our last session.",
-    "category": "plaud-ai-session",
+    "category": "ai-session",
     "subtype": "lookup",
     "source": "session",
     "source_ref": "session:4d2a49d9",
@@ -134,7 +134,7 @@
   {
     "id": "plaud-ai-session-012",
     "query": "Brian Pino Jeff Brown all hands agenda engineering leads meeting",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-06-01T17:18:06.166Z",
@@ -146,7 +146,7 @@
   {
     "id": "plaud-ai-session-013",
     "query": "meeting ai leadership calibration MCP unity alignment May 18",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-05-18T22:56:21.587Z",
@@ -158,7 +158,7 @@
   {
     "id": "plaud-ai-session-014",
     "query": "Eric Kubicki spec driven development architecture council",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-05-20T13:13:16.151Z",
@@ -170,7 +170,7 @@
   {
     "id": "plaud-ai-session-015",
     "query": "meeting Brian DeLorean HAL dark factory architects",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-06-08T14:05:58.955Z",
@@ -182,7 +182,7 @@
   {
     "id": "plaud-ai-session-016",
     "query": "Architecture Council meeting May 19 2026",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-05-21T20:01:24.686Z",
@@ -194,7 +194,7 @@
   {
     "id": "plaud-ai-session-017",
     "query": "transcript recording Plaud conversation",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-05-18T21:54:07.740Z",
@@ -206,7 +206,7 @@
   {
     "id": "plaud-ai-session-018",
     "query": "DeLorean stakeholders meeting May 19",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-05-19T16:18:31.880Z",
@@ -218,7 +218,7 @@
   {
     "id": "plaud-ai-session-019",
     "query": "Architecture Council action items",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-05-21T20:01:32.460Z",
@@ -230,7 +230,7 @@
   {
     "id": "plaud-ai-session-020",
     "query": "calibration meeting performance",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-05-28T14:33:29.200Z",
@@ -242,7 +242,7 @@
   {
     "id": "plaud-ai-session-021",
     "query": "meeting weekly team discussion",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-05-18T21:54:06.853Z",
@@ -254,7 +254,7 @@
   {
     "id": "plaud-ai-session-022",
     "query": "architecture meeting all-hands",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-06-01T14:05:09.871Z",
@@ -266,7 +266,7 @@
   {
     "id": "plaud-ai-session-023",
     "query": "06-03 meeting tuesday june 3",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-06-04T13:50:46.302Z",
@@ -278,7 +278,7 @@
   {
     "id": "plaud-ai-session-024",
     "query": "Claude Code session karpathy",
-    "category": "plaud-ai-session",
+    "category": "ai-session",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-06-19T15:32:46.964Z",
@@ -290,7 +290,7 @@
   {
     "id": "plaud-ai-session-025",
     "query": "Architecture Council May 19",
-    "category": "plaud-ai-session",
+    "category": "plaud",
     "subtype": "lookup",
     "source": "log",
     "source_ref": "log:2026-06-02T13:40:09.559Z",
