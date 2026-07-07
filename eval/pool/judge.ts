@@ -8,7 +8,14 @@ export interface Judgment {
   doc_id: string;
   label: number;
   reason: string;
-  label_provenance: 'llm' | 'human' | 'llm+human';
+  /** 'llm' means dual-judge reconciled (see reconcileJudgments) — a
+   * deliberate semantic change from single-judge Phase 2, since single-judge
+   * grading is retired for the full-pool run. 'behavioral' means confirmed
+   * by real usage, never judged at all. */
+  label_provenance: 'llm' | 'behavioral' | 'human' | 'llm+human';
+  judge_a_label?: number;
+  judge_b_label?: number;
+  disagreement?: boolean;
 }
 
 const JudgeResultSchema = z.object({
@@ -46,4 +53,37 @@ export async function judgeItem(
       reason: r.reason,
       label_provenance: 'llm' as const,
     }));
+}
+
+/** Reconcile two independent judges' gradings of the same item's candidates.
+ * Candidates within 1 point of each other average (rounded); candidates 2+
+ * points apart use the lower (more conservative) label and are flagged
+ * `disagreement: true` for the diagnostic log — never blocking, just
+ * recorded. If judge B is missing a doc_id judge A returned (should not
+ * normally happen, but never trust LLM output blindly), judge A's own
+ * judgment passes through unchanged. */
+export function reconcileJudgments(judgeA: Judgment[], judgeB: Judgment[]): Judgment[] {
+  const byDocIdB = new Map(judgeB.map((j) => [j.doc_id, j]));
+  const reconciled: Judgment[] = [];
+  for (const a of judgeA) {
+    const b = byDocIdB.get(a.doc_id);
+    if (!b) {
+      reconciled.push(a);
+      continue;
+    }
+    const diff = Math.abs(a.label - b.label);
+    const disagreement = diff >= 2;
+    const label = disagreement ? Math.min(a.label, b.label) : Math.round((a.label + b.label) / 2);
+    reconciled.push({
+      item_id: a.item_id,
+      doc_id: a.doc_id,
+      label,
+      reason: a.reason,
+      label_provenance: 'llm',
+      judge_a_label: a.label,
+      judge_b_label: b.label,
+      disagreement,
+    });
+  }
+  return reconciled;
 }
