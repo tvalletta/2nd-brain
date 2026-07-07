@@ -874,17 +874,5 @@
     "is_regression": false,
     "query_truncated": false,
     "needs_review": true
-  },
-  {
-    "id": "decisions-021",
-    "query": "<ABSENT-STUB: author a query about a topic verified NOT in the vault>",
-    "category": "decisions",
-    "subtype": "absent",
-    "source": "synthetic",
-    "source_ref": "author",
-    "intent": "robustness: system should return nothing / low-confidence",
-    "is_regression": false,
-    "query_truncated": false,
-    "needs_review": true
   }
 ]
