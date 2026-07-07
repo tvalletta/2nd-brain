@@ -81,7 +81,9 @@ async function main() {
   }
 
   const items: EvalItem[] = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/queries.json'), 'utf8'));
-  const withoutStub = items.filter((it) => !it.query.startsWith('<ABSENT-STUB'));
+  const withoutPriorAbsent = items.filter(
+    (it) => !it.query.startsWith('<ABSENT-STUB') && it.source_ref !== 'author:absent-verified',
+  );
   const absentItems: EvalItem[] = confirmed.map((query, i) => ({
     id: `absent-${String(i + 1).padStart(3, '0')}`,
     query,
@@ -94,8 +96,13 @@ async function main() {
     query_truncated: false,
     needs_review: false,
   }));
-  writeFileSync(join(REPO_ROOT, 'eval/dataset/queries.json'), JSON.stringify([...withoutStub, ...absentItems], null, 2));
-  console.log(`Wrote ${absentItems.length} confirmed-absent items to eval/dataset/queries.json (removed placeholder stub).`);
+  writeFileSync(
+    join(REPO_ROOT, 'eval/dataset/queries.json'),
+    JSON.stringify([...withoutPriorAbsent, ...absentItems], null, 2),
+  );
+  console.log(
+    `Wrote ${absentItems.length} confirmed-absent items to eval/dataset/queries.json (removed placeholder stub and any prior absent batch).`,
+  );
 }
 
 if (process.argv[1]?.endsWith('author-absent.ts')) {
