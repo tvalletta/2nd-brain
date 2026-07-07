@@ -9,24 +9,12 @@ export interface LLMClient {
   extractStructured<T>(prompt: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): Promise<T>;
 }
 
-/** Scan `raw` from the first `{` or `[`, tracking string/escape state and
- * bracket depth, and return the substring up to the TRUE matching closing
- * bracket of the SAME type as the opener — not just the first/last
- * occurrence anywhere in the text. A naive greedy regex (`/\{[\s\S]*\}/`)
- * can overshoot past trailing prose that happens to contain a stray `}`,
- * and never matched array-shaped JSON at all. This also correctly skips
- * brace-like characters that appear inside string values. */
-function findBalancedJsonValue(raw: string): string | null {
-  let start = -1;
-  let opener = '';
-  for (let i = 0; i < raw.length; i++) {
-    if (raw[i] === '{' || raw[i] === '[') {
-      start = i;
-      opener = raw[i];
-      break;
-    }
-  }
-  if (start === -1) return null;
+/** Scan `raw` for a balanced value of the SAME bracket type as `raw[start]`
+ * (which must be `{` or `[`), respecting string/escape state so embedded
+ * brackets inside string values don't confuse depth counting. Returns the
+ * substring up to the true matching closer, or null if never balanced. */
+function scanBalanced(raw: string, start: number): string | null {
+  const opener = raw[start];
   const closer = opener === '{' ? '}' : ']';
   let depth = 0;
   let inString = false;
@@ -55,10 +43,36 @@ function findBalancedJsonValue(raw: string): string | null {
   return null;
 }
 
+/** Find the first balanced `{...}` or `[...]` value in `raw` that ALSO
+ * parses as valid JSON, trying candidate start positions (any `{` or `[`)
+ * in the order they appear — not just the first bracket character in the
+ * text. This correctly skips over non-JSON bracket-like constructs in
+ * surrounding prose (e.g. a markdown link `[text](url)` appearing before
+ * the real JSON payload) instead of committing to whichever bracket type
+ * happens to occur first, which could otherwise return the wrong value or
+ * throw before ever reaching the real payload. */
+function findBalancedJsonValue(raw: string): string | null {
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] !== '{' && raw[i] !== '[') continue;
+    const candidate = scanBalanced(raw, i);
+    if (!candidate) continue;
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      // Not valid JSON (e.g. a markdown link's [text] construct) — keep
+      // scanning from the next candidate bracket position.
+      continue;
+    }
+  }
+  return null;
+}
+
 /**
  * Extract JSON from an LLM response with hardened parsing.
  * Prefers the last ```json code block (the actual output, not examples).
- * Falls back to the outermost {...} if no code block found.
+ * Falls back to the first balanced {...} or [...] value in the raw text
+ * if no code block found.
  */
 export function extractJSON(raw: string): unknown {
   // Collect all ```json code block matches; prefer the last one

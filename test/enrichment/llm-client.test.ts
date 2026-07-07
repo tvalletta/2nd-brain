@@ -31,4 +31,9 @@ describe('extractJSON', () => {
     const raw = 'prose {"reason":"see the {config} block"} trailing prose with another }';
     expect(extractJSON(raw)).toEqual({ reason: 'see the {config} block' });
   });
+
+  it('skips a non-JSON bracket-like construct (e.g. a markdown link) in prose before the real JSON payload', () => {
+    const raw = 'See [details](https://example.com) below.\n{"a":1}';
+    expect(extractJSON(raw)).toEqual({ a: 1 });
+  });
 });
