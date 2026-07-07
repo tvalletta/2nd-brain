@@ -21,6 +21,7 @@
     "eval:author-absent": "tsx eval/dataset/author-absent.ts",
     "eval:pool": "tsx eval/pool/build-pool.ts",
     "eval:calibration": "tsx eval/pool/calibration-report.ts",
+    "eval:judge-full": "tsx eval/pool/judge-full.ts",
     "eval:typecheck": "tsc --noEmit -p tsconfig.eval.json"
   },
   "engines": {
