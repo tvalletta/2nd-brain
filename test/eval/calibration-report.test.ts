@@ -70,4 +70,12 @@ describe('renderCalibrationReport', () => {
     const report = renderCalibrationReport(items, new Map());
     expect(report).toContain('no pooled candidates');
   });
+
+  it('distinguishes judging-failed items from genuinely empty pools', () => {
+    const items = [makeItem('d1', 'decisions', 'lookup')];
+    const failedItemIds = new Set(['d1']);
+    const report = renderCalibrationReport(items, new Map(), undefined, failedItemIds);
+    expect(report).toContain('judging failed for this item');
+    expect(report).not.toContain('no pooled candidates');
+  });
 });

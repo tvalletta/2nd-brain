@@ -159,7 +159,7 @@ For each candidate, mark agree or write a correction.
 **Intent:** regression: previously crashed search_vault (localeCompare bug)
 **Category/Subtype:** decisions / lookup
 
-_(no pooled candidates)_
+_(judging failed for this item — see run logs; candidates existed but were not graded)_
 
 ## hot-topics-001
 
@@ -1143,7 +1143,7 @@ _(no pooled candidates)_
 **Intent:** exercises the hot-cache / digest layer (spec G3); grounded in real recent themes
 **Category/Subtype:** hot-topics / synthesis
 
-_(no pooled candidates)_
+_(judging failed for this item — see run logs; candidates existed but were not graded)_
 
 ## plaud-ai-session-001
 

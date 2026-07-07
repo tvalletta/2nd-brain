@@ -35,6 +35,7 @@ export function renderCalibrationReport(
   items: EvalItem[],
   judgmentsByItem: Map<string, Judgment[]>,
   triageByItemId?: Map<string, TriageProposal>,
+  failedItemIds?: Set<string>,
 ): string {
   const lines: string[] = ['# Judge Calibration Sample', '', "For each candidate, mark agree or write a correction.", ''];
 
@@ -53,7 +54,11 @@ export function renderCalibrationReport(
     lines.push(`## ${item.id}`, '', `**Query:** ${item.query}`, `**Intent:** ${item.intent || '(none)'}`, `**Category/Subtype:** ${item.category} / ${item.subtype}`, '');
     const judgments = judgmentsByItem.get(item.id) ?? [];
     if (judgments.length === 0) {
-      lines.push('_(no pooled candidates)_', '');
+      if (failedItemIds?.has(item.id)) {
+        lines.push('_(judging failed for this item — see run logs; candidates existed but were not graded)_', '');
+      } else {
+        lines.push('_(no pooled candidates)_', '');
+      }
       continue;
     }
     for (const j of judgments) {
@@ -70,8 +75,9 @@ export function writeCalibrationReport(
   items: EvalItem[],
   judgmentsByItem: Map<string, Judgment[]>,
   triageByItemId?: Map<string, TriageProposal>,
+  failedItemIds?: Set<string>,
 ): void {
-  writeFileSync(path, renderCalibrationReport(items, judgmentsByItem, triageByItemId));
+  writeFileSync(path, renderCalibrationReport(items, judgmentsByItem, triageByItemId, failedItemIds));
 }
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
@@ -115,7 +121,7 @@ async function main() {
   const llm = createLLMForTier(config, 'medium');
   const judgmentsByItem = new Map<string, Judgment[]>();
   const allJudgments: Judgment[] = [];
-  const failedItemIds: string[] = [];
+  const failedItemIds = new Set<string>();
   for (const item of sample) {
     const pool = poolByItemId.get(item.id)!;
     try {
@@ -128,17 +134,16 @@ async function main() {
       // parsing (e.g. a pooled candidate's excerpt contains a quote
       // character the model echoes back unescaped in `reason`). Don't let
       // one bad item crash the whole calibration run and re-bill every
-      // item judged before it — log clearly and continue. NOTE: this item
-      // will render as "(no pooled candidates)" below even though it had
-      // real candidates; see console output / task report for which items
-      // this affected.
+      // item judged before it — log clearly and continue. This item's id is
+      // tracked in `failedItemIds` so the report can render an honest
+      // "judging failed" message instead of "no pooled candidates".
       console.error(`Judge call FAILED for ${item.id} (pool had ${pool.candidates.length} candidates) — skipping: ${(err as Error).message}`);
       judgmentsByItem.set(item.id, []);
-      failedItemIds.push(item.id);
+      failedItemIds.add(item.id);
     }
   }
-  if (failedItemIds.length > 0) {
-    console.error(`${failedItemIds.length} item(s) failed judging and were skipped: ${failedItemIds.join(', ')}`);
+  if (failedItemIds.size > 0) {
+    console.error(`${failedItemIds.size} item(s) failed judging and were skipped: ${[...failedItemIds].join(', ')}`);
   }
 
   writeFileSync(join(REPO_ROOT, 'eval/dataset/judgments.json'), JSON.stringify(allJudgments, null, 2));
@@ -148,7 +153,7 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
   const date = new Date().toISOString().slice(0, 10);
   const outPath = join(outDir, `${date}-calibration-sample.md`);
-  writeCalibrationReport(outPath, sample, judgmentsByItem, triageByItemId);
+  writeCalibrationReport(outPath, sample, judgmentsByItem, triageByItemId, failedItemIds);
   console.log(`Wrote calibration report to eval/results/${date}-calibration-sample.md`);
 }
 
