@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { Variant } from '../run/types.js';
 import { toRunHits } from '../run/normalize.js';
+import { redactSecrets } from './redact.js';
 
 export interface PoolCandidate {
   doc_id: string;
@@ -70,7 +71,7 @@ export async function buildPoolForItem(
     try {
       const result = await store.search(item.query, { topK: poolK });
       const hits = toRunHits(result, poolK);
-      for (const h of hits) add(h.path, variant.name, h.excerpt);
+      for (const h of hits) add(h.path, variant.name, redactSecrets(h.excerpt));
     } finally {
       store.close();
     }
@@ -79,7 +80,7 @@ export async function buildPoolForItem(
   const sweepStore = variants[0].openStore();
   try {
     const ftsHits = sweepStore.fts.query(item.query, poolK);
-    for (const h of ftsHits) add(h.docId, 'keyword-sweep', h.snippet);
+    for (const h of ftsHits) add(h.docId, 'keyword-sweep', redactSecrets(h.snippet));
   } finally {
     sweepStore.close();
   }

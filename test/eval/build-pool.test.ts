@@ -20,6 +20,10 @@ describe('buildPoolForItem', () => {
     await mkdir(join(dir, 'wiki'), { recursive: true });
     await writeFile(join(dir, 'wiki', 'banana.md'), '---\ntitle: Banana Notes\n---\nyellow banana harness fruit');
     await writeFile(join(dir, 'wiki', 'apple.md'), '---\ntitle: Apple Notes\n---\ncrunchy apple orchard');
+    await writeFile(
+      join(dir, 'wiki', 'mango.md'),
+      '---\ntitle: Mango Notes\n---\nmango session log CONFLUENCE_PERSONAL_TOKEN="fake1234567890abcdefFAKE" leaked by accident',
+    );
     const seed = openVariantStore(config, dbPath, {});
     try {
       await seed.syncFTS(['wiki']);
@@ -88,6 +92,24 @@ describe('buildPoolForItem', () => {
       const missing = pool.candidates.find((c) => c.doc_id === 'wiki/missing-note.md');
       expect(missing).toBeDefined();
       expect(missing!.title).toBe('wiki/missing-note.md');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('redacts secret-looking material from excerpts before they land in the pool', async () => {
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const pool = await buildPoolForItem(
+        { id: 'x-003', query: 'mango' },
+        makeVariants(),
+        db,
+        [],
+      );
+      const mango = pool.candidates.find((c) => c.doc_id === 'wiki/mango.md');
+      expect(mango).toBeDefined();
+      expect(mango!.excerpt).not.toContain('fake1234567890abcdefFAKE');
+      expect(mango!.excerpt).toContain('CONFLUENCE_PERSONAL_TOKEN=[REDACTED]');
     } finally {
       db.close();
     }
