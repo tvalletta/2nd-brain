@@ -18,6 +18,7 @@
     "eval:mine": "tsx eval/mine/parse-usage-log.ts && tsx eval/mine/parse-sessions.ts && tsx eval/mine/build-dataset.ts",
     "eval:run": "tsx eval/run/run-harness.ts",
     "eval:triage": "tsx eval/dataset/triage.ts",
+    "eval:author-absent": "tsx eval/dataset/author-absent.ts",
     "eval:typecheck": "tsc --noEmit -p tsconfig.eval.json"
   },
   "engines": {
