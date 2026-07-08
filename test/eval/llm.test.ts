@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
 import { resolveTierModel, createLLMForTier } from '../../eval/pool/llm.js';
 
@@ -38,5 +38,45 @@ describe('createLLMForTier', () => {
       llm: { provider: 'litellm', models: { medium: 'medium-model' } },
     });
     expect(() => createLLMForTier(config, 'medium')).toThrow('LiteLLM provider requires llm.baseUrl and llm.apiKey in config');
+  });
+
+  describe('maxTokensOverride (I13)', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('sends config.llm.maxTokens when no override is given', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ content: [{ text: 'ok' }] }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const config = KarpathyConfigSchema.parse({
+        vaultPath: '/tmp/v',
+        llm: { provider: 'bedrock', region: 'us-west-2', maxTokens: 4096, bearerToken: 'fake-token', models: { medium: 'model-id' } },
+      });
+      await createLLMForTier(config, 'medium').complete('prompt');
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.max_tokens).toBe(4096);
+    });
+
+    it('sends the override value instead of config.llm.maxTokens when given', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ content: [{ text: 'ok' }] }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const config = KarpathyConfigSchema.parse({
+        vaultPath: '/tmp/v',
+        llm: { provider: 'bedrock', region: 'us-west-2', maxTokens: 4096, bearerToken: 'fake-token', models: { heavy: 'model-id' } },
+      });
+      await createLLMForTier(config, 'heavy', 8192).complete('prompt');
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.max_tokens).toBe(8192);
+    });
   });
 });

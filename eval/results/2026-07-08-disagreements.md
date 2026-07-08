@@ -1,6 +1,6 @@
 # Judge Disagreement Log
 
-2 candidate(s) where the two judges disagreed by 2+ points (out of 2075 total judgments). This is a diagnostic artifact, not a review requirement — nothing is blocked on it.
+2 candidate(s) where the two judges disagreed by 2+ points (out of 2278 total judgments). This is a diagnostic artifact, not a review requirement — nothing is blocked on it.
 
 ## plaud-ai-session-001
 

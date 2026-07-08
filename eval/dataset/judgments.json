@@ -20511,5 +20511,2014 @@
     "judge_a_label": 0,
     "judge_b_label": 0,
     "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/05-29-meeting-game-development-progress-multiplayer-optimization-and-spec-knowledge-base-workflows-2.md",
+    "label": 0,
+    "reason": "This is about game development and multiplayer optimization, not about Eric Kubicki, spec-driven development, or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/05-29-meeting-game-development-progress-multiplayer-optimization-and-spec-knowledge-base-workflows.md",
+    "label": 0,
+    "reason": "This is about game development and multiplayer optimization, not about Eric Kubicki, spec-driven development, or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Plaud/2026-05/05-29-meeting-game-development-progress-multiplayer-optimization-and-spec-knowledge-base-workflows.md",
+    "label": 1,
+    "reason": "Mentions Irek Kubicki discussing spec coverage, which is tangentially relevant but focuses on game development rather than Eric Kubicki or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "raw/2026-06-01/05-29-meeting-game-development-progress-multiplayer-optimization-and-spec-knowledge-base-workflows.md",
+    "label": 1,
+    "reason": "Mentions Irek Kubicki discussing spec coverage, providing some relevance but the primary topic is game development rather than spec-driven development architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development-5.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development-6.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development-7.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development-8.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development-9.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/05-06-meeting-team-operations-ai-strategy-and-spec-driven-development-2.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/05-06-meeting-team-operations-ai-strategy-and-spec-driven-development.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development-3.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "raw/2026-05-22/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development-4.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance-10.md",
+    "label": 2,
+    "reason": "Directly covers Architecture Council with spec standards, matching key query terms architecture council and spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance-11.md",
+    "label": 2,
+    "reason": "Directly covers Architecture Council with spec standards, matching key query terms architecture council and spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-05-06-p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development.md",
+    "label": 2,
+    "reason": "This wiki meeting note directly covers spec-driven development within the Workfront Architecture Team context, matching all major query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance-12.md",
+    "label": 2,
+    "reason": "Directly covers Architecture Council with spec standards, matching key query terms architecture council and spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development-2.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development within the Workfront Architecture Team, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance-13.md",
+    "label": 2,
+    "reason": "Directly covers Architecture Council with spec standards, matching key query terms architecture council and spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-19-e542e4ee.md",
+    "label": 2,
+    "reason": "Directly discusses putting together an Architecture Council agenda, highly relevant to the query combining spec-driven development and architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-08-c5705176.md",
+    "label": 0,
+    "reason": "Focuses on performance calibration and leadership impact ratings, not directly related to Eric Kubicki, spec-driven development, or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-03-534242c7.md",
+    "label": 1,
+    "reason": "Discusses creating Confluence wiki pages for Workfront architecture engineering, providing tangential context but not directly about Eric Kubicki or spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/topics/architectural-best-practices.md",
+    "label": 0,
+    "reason": "Covers architectural best practices for a different codebase audit and does not mention Eric Kubicki or spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "AI Conversations/claude/_discovery/2026-06-01-b36bef6a.md",
+    "label": 2,
+    "reason": "Directly mentions Irek Kubicki and his work on spec and knowledge base topics, closely matching the query about Kubicki and spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-03-09-03-09-architecture-meeting.md",
+    "label": 1,
+    "reason": "Mentions Architecture Council meeting decisions and is relevant supporting context, but does not specifically address Eric Kubicki or spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-03-09-p-2026-03-09-03-09-architecture-meeting.md",
+    "label": 1,
+    "reason": "Discusses Architecture Council meeting logistics and decisions but does not specifically mention Eric Kubicki or spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "AI Conversations/claude/_discovery/2026-06-01-49c044fd.md",
+    "label": 2,
+    "reason": "Directly discusses spec strategy crystallizing and the architecture council's role in codifying spec standards, matching the query's core topics.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-03-10-03-10-architecture-council.md",
+    "label": 1,
+    "reason": "An Architecture Council meeting note providing relevant context, but no specific mention of Eric Kubicki or spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-03-17-p-2026-03-17-03-17-review-meeting-cross-module-architecture-feature-lead-proposal-and-governance-updates.md",
+    "label": 0,
+    "reason": "Covers cross-module architecture governance and feature lead roles but does not reference Eric Kubicki or spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-03-10-p-2026-03-10-03-10-architecture-council.md",
+    "label": 1,
+    "reason": "An Architecture Council meeting note providing relevant context, but no specific mention of Eric Kubicki or spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-03-05-03-05-weekly-meeting-eric-s-relocation-and-document-support-strategy.md",
+    "label": 1,
+    "reason": "Mentions Eric's relocation and is tangentially relevant due to Eric's name, but the topic is relocation and document strategy rather than spec-driven development or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-04-13-p-2026-04-13-04-13-weekly-meeting-ai-code-trust-specs-driven-development-and-workfront-strategy-three-year-plan.md",
+    "label": 2,
+    "reason": "Directly covers specs-driven development and mentions Eric leading AI code trust standards, closely matching all query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "AI Conversations/claude/2nd-brain/2026-05-19-c5e2d27e.md",
+    "label": 1,
+    "reason": "Discusses governance and deployment policies in the context of an Architecture Council meeting, providing relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-04-16-p-2026-04-16-04-16-weekly-meeting-ai-development-dark-factory-and-tooling.md",
+    "label": 2,
+    "reason": "Mentions Eric owning AI coding standards for Gen Studio architecture, relevant context for Eric's architecture role but not specifically about spec-driven development or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-03-05-03-05-weekly-meeting-adobe-restructuring-travel-planning-and-record-level-permissions-debate.md",
+    "label": 0,
+    "reason": "Covers Adobe restructuring and Eric's relocation but is not related to spec-driven development or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-03-11-03-11-sebouh-kafalian-horizontal-coordinator-1x1.md",
+    "label": 0,
+    "reason": "About Sebouh's horizontal coordinator role setup, not related to Eric Kubicki, spec-driven development, or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/_index.md",
+    "label": 0,
+    "reason": "A general wiki index page with no specific content about Eric Kubicki, spec-driven development, or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/wiki/meetings/2026-04-16-p-2026-04-16-04-16-weekly-meeting-strategic-pivot-to-ai-and-team-alignment.md",
+    "label": 1,
+    "reason": "Covers company AI strategy pivot and team alignment, not specifically about Eric Kubicki, spec-driven development, or architecture council.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Plaud/2026-05/05-06-meeting-team-operations-ai-strategy-and-spec-driven-development.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Plaud/old/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "raw/2026-05-18/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "raw/2026-05-20/05-06-meeting-team-operations-ai-strategy-and-spec-driven-development.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "raw/2026-05-20/p-2026-05-06-05-06-meeting-team-operations-ai-strategy-and-spec-driven-development.md",
+    "label": 2,
+    "reason": "Directly covers spec-driven development and the architecture team adoption gap, matching the core query terms.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-014",
+    "doc_id": "Curated/sources/05-19-weekly-meeting-architecture-council-agenda-hack-week-planning-async-outbox-ai-enhanced-workflows-spec-standards-and-deployment-governance.md",
+    "label": 2,
+    "reason": "Directly covers Architecture Council agenda and spec standards, matching the key query terms architecture council and spec-driven development.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-04-17-p-2026-04-17-04-17-meeting-project-delorean-and-ai-adoption-strategy.md",
+    "label": 2,
+    "reason": "Confirmed relevant by real behavioral signal (opened after a matching real search).",
+    "label_provenance": "behavioral"
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean.md",
+    "label": 2,
+    "reason": "Confirmed relevant by real behavioral signal (opened after a matching real search).",
+    "label_provenance": "behavioral"
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-14-05-14-weekly-meeting-photoshop-firefly-strategy-acrobat-express-positioning-semrush-llm-optimizer-launch-and-mcp-readiness.md",
+    "label": 2,
+    "reason": "Confirmed relevant by real behavioral signal (opened after a matching real search).",
+    "label_provenance": "behavioral"
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-04-13-04-13-meeting-vibe-sprint-project-and-ai-adoption-strategy-2.md",
+    "label": 2,
+    "reason": "Confirmed relevant by real behavioral signal (opened after a matching real search).",
+    "label_provenance": "behavioral"
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-18-2026-05-18-14-08-27-3.md",
+    "label": 2,
+    "reason": "Confirmed relevant by real behavioral signal (opened after a matching real search).",
+    "label_provenance": "behavioral"
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-04-16-04-16-weekly-meeting-ai-app-factory-guild-kickoff-dark-factory-v1-roadmap-agent-harness-identity-strategy-2.md",
+    "label": 2,
+    "reason": "Confirmed relevant by real behavioral signal (opened after a matching real search).",
+    "label_provenance": "behavioral"
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-07-05-07-strategy-meeting-enterprise-context-agentic-orchestration-and-adoption-plan-2.md",
+    "label": 2,
+    "reason": "Confirmed relevant by real behavioral signal (opened after a matching real search).",
+    "label_provenance": "behavioral"
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing-10.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing-2.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing-3.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing-4.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing-5.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing-6.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing-7.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing-8.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing-9.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Plaud/2026-06/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "raw/2026-06-22/06-19-meeting-tax-strategy-project-delorean-devex-ownership-and-knowledge-indexing.md",
+    "label": 0,
+    "reason": "This is a June 19 meeting about tax strategy and DeLorean, not the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-02-fcc61278.md",
+    "label": 1,
+    "reason": "References a May 19th meeting but focuses on Architecture Council, not specifically the DeLorean stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Adobe WF Notes/Meetings/Architecture/Architecture Council.md",
+    "label": 1,
+    "reason": "Contains references to #project-delorean-stakeholders tag, indicating relevant supporting context for DeLorean stakeholder meetings.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-12.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-13.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-14.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-15.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-16.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "raw/2026-05-19/2026-05-19-c2be3248.md",
+    "label": 2,
+    "reason": "Excerpt explicitly states it was about stakeholders for Project DeLorean on May 19th, directly matching the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-19-c2be3248.md",
+    "label": 2,
+    "reason": "Excerpt explicitly states it was about stakeholders for Project DeLorean on May 19th, directly matching the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-08-c5705176.md",
+    "label": 0,
+    "reason": "Discusses May 2026 calibration and personnel ratings, not the DeLorean stakeholders meeting on May 19.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "AI Conversations/claude/dev/2026-05-19-c2be3248.md",
+    "label": 2,
+    "reason": "Excerpt explicitly states it was about stakeholders for Project DeLorean on May 19th, directly matching the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/_index.md",
+    "label": 1,
+    "reason": "Wiki index references a Project DeLorean meeting from April 17, providing supporting context but not the primary May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "AI Conversations/_legacy/2026-04-13/Justin Edelson.md",
+    "label": 0,
+    "reason": "Meeting notes from April 2026 with no apparent connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "AI Conversations/_legacy/2026-04-13/Mark Frisbey.md",
+    "label": 0,
+    "reason": "Meeting notes from April 2026 with no apparent connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-05-05-p-2026-05-05-05-05-team-meeting-status-update-agenda-deferral-next-steps.md",
+    "label": 0,
+    "reason": "A May 5 team meeting about status updates with no connection to DeLorean stakeholders.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-04-16-p-2026-04-16-04-16-weekly-meeting-strategic-pivot-to-ai-and-team-alignment.md",
+    "label": 0,
+    "reason": "An April 16 weekly meeting about AI strategy with no connection to the DeLorean stakeholders meeting on May 19.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-05-13-p-2026-05-13-05-13-weekly-meeting-new-meeting-cadence-and-formats.md",
+    "label": 0,
+    "reason": "A May 13 meeting about meeting cadence with no connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-05-07-p-2026-05-07-05-07-weekly-meeting-campaign-planning-okrs-and-agency-adoption.md",
+    "label": 0,
+    "reason": "A May 7 meeting about campaign planning with no connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-05-14-05-14-weekly-meeting-sandbox-expansions-azure-deployment-inquiry-rcas-ga-readiness-and-trial-outcomes.md",
+    "label": 0,
+    "reason": "A May 14 meeting about sandbox expansions with no connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-05-13-p-2026-05-13-05-13-weekly-meeting-mcp-gateway-update-and-end-of-may-release-plan.md",
+    "label": 0,
+    "reason": "A May 13 meeting about MCP gateway with no connection to DeLorean stakeholders on May 19.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-03-06-p-2026-03-06-03-06-weekly-meeting-ai-agent-readiness-and-go-to-market-strategy.md",
+    "label": 0,
+    "reason": "A March 6 meeting about AI agent readiness with no connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-03-13-03-13-weekly-meeting-halo-project-organizational-silos-and-ai-strategy.md",
+    "label": 0,
+    "reason": "A March 13 meeting about the Halo project with no connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-03-13-03-13-weekly-meeting-mcp-strategy-agent-quality-and-platform-context-updates.md",
+    "label": 0,
+    "reason": "A March 13 meeting about MCP strategy with no connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-03-05-03-05-weekly-meeting-adobe-restructuring-travel-planning-and-record-level-permissions-debate.md",
+    "label": 0,
+    "reason": "A March 5 meeting about Adobe restructuring with no connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-03-27-p-2026-03-27-03-27-weekly-meeting-agent-development-asset-finder-and-creative-brief.md",
+    "label": 0,
+    "reason": "A March 27 meeting about agent development with no connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/wiki/meetings/2026-03-26-p-2026-03-26-03-26-weekly-meeting-adobe-summit-readiness-ai-workflow-insights-april-ga-platform-health-and-workfront-planning.md",
+    "label": 0,
+    "reason": "A March 26 meeting about Adobe Summit readiness with no connection to DeLorean or the May 19 stakeholders meeting.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/2026-05-19-c2be3248-2.md",
+    "label": 2,
+    "reason": "Excerpt explicitly states it was about stakeholders for Project DeLorean on May 19th, directly matching the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/2026-05-19-c2be3248.md",
+    "label": 2,
+    "reason": "Excerpt explicitly states it was about stakeholders for Project DeLorean on May 19th, directly matching the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-2.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-10.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-11.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-3.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-4.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-5.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-6.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "plaud-ai-session-018",
+    "doc_id": "Curated/sources/p-2026-05-19-05-19-meeting-mcp-release-regional-routing-and-project-delorean-7.md",
+    "label": 2,
+    "reason": "Directly matches the query: a May 19 meeting explicitly involving Project DeLorean.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Plaud/2026-06/06-10-business-meeting-q2-2026-performance-review-sales-and-ai-strategy.md",
+    "label": 0,
+    "reason": "About Q2 business performance review and sales strategy, not the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "raw/2026-06-10/06-10-business-meeting-q2-2026-performance-review-sales-and-ai-strategy.md",
+    "label": 0,
+    "reason": "Duplicate of the Q2 business meeting note; no curriculum content.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/06-10-business-meeting-q2-2026-performance-review-sales-and-ai-strategy-2.md",
+    "label": 0,
+    "reason": "Another duplicate of the Q2 business meeting; unrelated to the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/06-10-business-meeting-q2-2026-performance-review-sales-and-ai-strategy.md",
+    "label": 0,
+    "reason": "Same Q2 business meeting source; does not address the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Plaud/2026-06/06-01-weekly-meeting-ai-training-plan-dark-factory-strategy.md",
+    "label": 1,
+    "reason": "Mentions work being done with spec stuff and AI training plan, providing supporting context for curriculum activities.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "raw/2026-06-02/06-01-weekly-meeting-ai-training-plan-dark-factory-strategy.md",
+    "label": 1,
+    "reason": "Duplicate raw version of the AI training plan meeting; relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/06-01-weekly-meeting-ai-training-plan-dark-factory-strategy.md",
+    "label": 1,
+    "reason": "Curated version of the AI training plan meeting; supporting context for curriculum work.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Plaud/2026-06/06-02-architecture-council-meeting-project-processes-ai-tools-and-skill-development.md",
+    "label": 2,
+    "reason": "Directly mentions that a curriculum has been developed to help engineers and engineering managers get up to speed with AI.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "raw/2026-06-02/06-02-architecture-council-meeting-project-processes-ai-tools-and-skill-development.md",
+    "label": 2,
+    "reason": "Raw duplicate of the architecture council meeting directly referencing the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/06-02-architecture-council-meeting-project-processes-ai-tools-and-skill-development.md",
+    "label": 2,
+    "reason": "Curated version of the architecture council meeting directly referencing the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-10.md",
+    "label": 2,
+    "reason": "Directly states \"I have been putting together a curriculum for engineering and architecture,\" the primary answer to the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-11.md",
+    "label": 2,
+    "reason": "Duplicate chunk of the same AI engineering curriculum meeting, directly addressing the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Plaud/2026-05/05-26-weekly-meeting-ai-collaborators-rollout-mcp-harness-priorities-eu-uk-privacy-compliant-metrics-and-performance-security-remediation.md",
+    "label": 1,
+    "reason": "Mentions syncing with engineering managers on AI matters; related supporting context but not focused on curriculum content.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "raw/2026-05-28/05-26-weekly-meeting-ai-collaborators-rollout-mcp-harness-priorities-eu-uk-privacy-compliant-metrics-and-performance-security-remediation.md",
+    "label": 1,
+    "reason": "Raw version of the AI collaborators rollout meeting; supporting context for AI engineering activities.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/05-26-weekly-meeting-ai-collaborators-rollout-mcp-harness-priorities-eu-uk-privacy-compliant-metrics-and-performance-security-remediation.md",
+    "label": 1,
+    "reason": "Curated version of the same meeting; supporting context for AI engineering work.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-12.md",
+    "label": 2,
+    "reason": "Another chunk of the primary curriculum meeting directly stating the curriculum is being put together for engineering.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-13.md",
+    "label": 2,
+    "reason": "Another chunk of the primary curriculum meeting directly addressing what is being done with the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration.md",
+    "label": 2,
+    "reason": "Core meeting note directly stating the curriculum for engineering and architecture is being developed.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-9.md",
+    "label": 2,
+    "reason": "Duplicate chunk of the primary AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-4.md",
+    "label": 2,
+    "reason": "Duplicate chunk of the primary AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-03-534242c7.md",
+    "label": 2,
+    "reason": "Directly references the Workfront AI Engineering Enablement Series curriculum and actions taken to publish it on Confluence.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-18-eb234ddd.md",
+    "label": 2,
+    "reason": "Session summary discussing curriculum content review and resource selection for the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-01-854191a8.md",
+    "label": 2,
+    "reason": "Working session in the workfront-ai-engineering directory directly related to developing the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-03-861932b9.md",
+    "label": 2,
+    "reason": "Session working on the Workfront AI Engineering curriculum, publishing pages to Confluence.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-08-bf8a1672.md",
+    "label": 1,
+    "reason": "Working in the workfront-ai-engineering directory on a maturity matrix; related but tangential to the curriculum itself.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-26-4b40db4c.md",
+    "label": 1,
+    "reason": "Session in the workfront-ai-engineering directory reviewing exercise results; supporting context for curriculum work.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-22-bdba2332.md",
+    "label": 2,
+    "reason": "Session directly reviewing an elective course for the AI engineering curriculum, examining content and resources.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-15-8c860e5f.md",
+    "label": 2,
+    "reason": "Session explicitly looking at the AI Engineering Enablement Plan file, directly addressing what is being done with the curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-27-e3370547.md",
+    "label": 2,
+    "reason": "Session applying Slack feedback to update specific courses in the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/wiki/topics/ai-initiatives.md",
+    "label": 1,
+    "reason": "Provides organizational context for AI initiatives but does not specifically describe the curriculum work.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/claude/my-voice/2026-06-01-727bb8f7.md",
+    "label": 2,
+    "reason": "Contains a proposal document titled \"AI Engineering Curriculum\" directly describing the problem and approach being taken.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/wiki/meetings/2026-05-18-p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration.md",
+    "label": 2,
+    "reason": "Curated wiki summary of the key meeting where Tom's AI Engineering curriculum (11 courses) was reviewed and agreed to pilot.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_legacy/2026-04-13/p-2026-04-10-04-10-weekly-meeting-developer-tooling-project-unity-and-agent-development.md",
+    "label": 1,
+    "reason": "Early mention of a program being developed to help engineers learn AI tools; background context for the curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/claude/workfront-ai-engineering/2026-05-27-e3370547.md",
+    "label": 2,
+    "reason": "Detailed log of curriculum course updates applied based on feedback, directly showing work done on the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/wiki/meetings/2026-05-05-p-2026-05-05-05-05-meeting-customer-feedback-engineering-roles-and-ai-strategy.md",
+    "label": 1,
+    "reason": "Discusses AI strategy and engineering roles but is not focused on the curriculum itself.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/wiki/meetings/2026-04-07-p-2026-04-07-04-07-meeting-promotion-packet-timelines-criteria-and-ai-expectations.md",
+    "label": 0,
+    "reason": "Focused on promotion packet timelines and criteria; not related to the AI engineering curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/wiki/meetings/2026-03-23-p-2026-03-23-03-23-weekly-meeting-ai-in-software-development-upcoming-summits-and-h2-planning.md",
+    "label": 1,
+    "reason": "Discusses AI development practices and requirements-heavy spec work; early background context for curriculum direction.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/wiki/meetings/2026-03-16-p-2026-03-16-03-16-weekly-meeting-project-management-ai-development-organizational-structure.md",
+    "label": 1,
+    "reason": "Discusses mandating prompts as primary engineering artifacts; organizational context for AI curriculum motivations.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "AI Conversations/_legacy/2026-04-13/p-2026-04-10-04-10-ai-tool-onboarding-and-troubleshooting-session.md",
+    "label": 1,
+    "reason": "One-on-one AI tool onboarding session; related supporting context for AI enablement work.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/wiki/meetings/2026-05-12-p-2026-05-12-05-12-team-meeting-dark-software-factory-roadmap-spec-driven-development-and-verification-strategy.md",
+    "label": 1,
+    "reason": "Discusses the dark software factory model and spec-driven development, which are likely covered in the curriculum.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-2.md",
+    "label": 2,
+    "reason": "Duplicate chunk of the primary AI engineering curriculum meeting note directly answering the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-3.md",
+    "label": 2,
+    "reason": "Duplicate chunk of the primary AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-5.md",
+    "label": 2,
+    "reason": "Duplicate chunk of the primary AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-6.md",
+    "label": 2,
+    "reason": "Duplicate chunk of the primary AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-7.md",
+    "label": 2,
+    "reason": "Duplicate chunk of the primary AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration-8.md",
+    "label": 2,
+    "reason": "Duplicate chunk of the primary AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Curated/sources/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration.md",
+    "label": 2,
+    "reason": "Primary source chunk of the AI engineering curriculum meeting note directly answering the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Plaud/2026-05/05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration.md",
+    "label": 2,
+    "reason": "The core Plaud note from the meeting titled AI Engineering Curriculum and Team Collaboration, directly answering the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Plaud/old/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration.md",
+    "label": 2,
+    "reason": "Older copy of the AI engineering curriculum meeting note; directly answers the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "Plaud/p-2026-05-18-2026-05-18-08-02-18.md",
+    "label": 2,
+    "reason": "Another version of the AI engineering curriculum meeting note directly stating the curriculum is being built.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "raw/2026-05-18/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration.md",
+    "label": 2,
+    "reason": "Raw version of the primary AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "raw/2026-05-20/05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration.md",
+    "label": 2,
+    "reason": "Another raw copy of the AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "hot-topics-005",
+    "doc_id": "raw/2026-05-20/p-2026-05-18-05-18-weekly-meeting-ai-engineering-curriculum-and-team-collaboration.md",
+    "label": 2,
+    "reason": "Another raw copy of the AI engineering curriculum meeting note.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "raw/2026-07-06/2026-06-26-e26ca779.md",
+    "label": 1,
+    "reason": "Mentions the Adobe Confluence wiki and Workfront MCP gateway, providing relevant supporting context about the query's subject matter.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/claude/enterprise-context/2026-06-26-e26ca779.md",
+    "label": 1,
+    "reason": "Same content as above — references Adobe Confluence wiki and Workfront MCP gateway as supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/2026-06-26-e26ca779.md",
+    "label": 1,
+    "reason": "Duplicate of the e26ca779 content referencing Adobe Confluence wiki and Workfront MCP, relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/2026-06-26-e26ca779-2.md",
+    "label": 1,
+    "reason": "Another copy of e26ca779 content referencing Adobe Confluence wiki and Workfront MCP, relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Plaud/2026-06/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance.md",
+    "label": 1,
+    "reason": "Directly mentions using the Adobe wiki/Confluence MCP and Atlassian MCP together, closely matching the query's context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "raw/2026-06-22/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance.md",
+    "label": 1,
+    "reason": "Same meeting content referencing the Adobe wiki, Confluence MCP, and Atlassian MCP together as supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-10.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-11.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-2.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-3.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-4.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-5.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-6.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-7.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-8.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance-9.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-18-meeting-cloud-hosted-agent-execution-remote-sandbox-backend-agent-api-and-governance.md",
+    "label": 1,
+    "reason": "Chunk of the 06-18 meeting content referencing Adobe wiki/Confluence MCP and Atlassian MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Plaud/2026-06/06-05-strategic-alignment-on-the-delorean-project-and-personal-workflow-automation.md",
+    "label": 0,
+    "reason": "Only tangentially mentions MCP in the context of personal productivity automation; does not address the Atlassian MCP, Adobe Wiki, or GitLab repo for the Workfront MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "raw/2026-06-10/06-05-strategic-alignment-on-the-delorean-project-and-personal-workflow-automation.md",
+    "label": 0,
+    "reason": "Same tangential MCP mention as above; not relevant to the specific query about finding the Workfront MCP GitLab repo via Atlassian MCP/Adobe Wiki.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-05-strategic-alignment-on-the-delorean-project-and-personal-workflow-automation.md",
+    "label": 0,
+    "reason": "Same tangential content; does not address the query about finding the Workfront MCP GitLab repo via Atlassian MCP/Adobe Wiki.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-03-46140ed9.md",
+    "label": 2,
+    "reason": "Excerpt contains the exact query text — \"Using the Atlassian MCP and the Adobe Wiki and Confluence, find the GitLab repo for the\" — making it the primary target session record.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-17-9fa24b64.md",
+    "label": 1,
+    "reason": "Discusses GitLab MCP servers and how they relate to the Atlassian MCP, providing relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-08-bbea3ba4.md",
+    "label": 1,
+    "reason": "Directly references finding Workfront MCP configuration and searching the Adobe Wiki for related details, closely supporting the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-22-a2beed44.md",
+    "label": 1,
+    "reason": "Mentions linking a Workfront project to a GitLab repo, which is relevant supporting context for the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-03-534242c7.md",
+    "label": 1,
+    "reason": "References using the mcp-atlassian MCP to find the Confluence space for Workfront, closely related supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-16-7915b2df.md",
+    "label": 1,
+    "reason": "Discusses a working MCP in a target enterprise-context GitLab repo, relevant supporting context about the Workfront MCP and GitLab.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-28-95848572.md",
+    "label": 1,
+    "reason": "Discusses the GitLab MCP and GitHub MCP as Adobe internal codebases, providing relevant background context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-08-b21aed2f.md",
+    "label": 0,
+    "reason": "Focuses on the GitHub MCP server configuration rather than the Atlassian MCP, Adobe Wiki, or Workfront MCP GitLab repo.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-05-680c55e7.md",
+    "label": 1,
+    "reason": "References the Workfront MCP and a sibling project (WF Business Context MCP), providing relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-23-4d2a49d9.md",
+    "label": 1,
+    "reason": "Discusses configuring the GitLab MCP server in the context of a Workfront-related project, relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-02-534242c7.md",
+    "label": 1,
+    "reason": "References using the Confluence MCP in the context of Workfront architecture, providing relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-15-d82ba152.md",
+    "label": 0,
+    "reason": "Focuses on Adobe MCP deployment requirements documentation rather than finding the Workfront MCP GitLab repo via Atlassian MCP/Adobe Wiki.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-01-61078aad.md",
+    "label": 1,
+    "reason": "Directly discusses connecting the Atlassian MCP to the Adobe Wiki/Confluence, closely supporting the query context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-01-2f83d4b0.md",
+    "label": 1,
+    "reason": "Uses the Adobe wiki in Confluence through the Atlassian MCP, directly relevant supporting context for the query.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-01-9922879a.md",
+    "label": 2,
+    "reason": "Uses the Atlassian MCP to find how to connect to the Workfront MCP gateway, directly matching the query's intent.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-29-680c55e7.md",
+    "label": 0,
+    "reason": "Discusses UI workstreams involving GitHub/GitLab repo links in a Workfront context but does not address finding the Workfront MCP GitLab repo via Atlassian MCP/Adobe Wiki.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-20-5d1bb712.md",
+    "label": 0,
+    "reason": "Focuses on GitLab and GitHub authentication setup rather than finding the Workfront MCP GitLab repo via the Atlassian MCP or Adobe Wiki.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-05-21-2c113d4a.md",
+    "label": 0,
+    "reason": "Discusses engineering pillars and observability topics with no direct relevance to the Atlassian MCP, Adobe Wiki, or Workfront MCP GitLab repo.",
+    "label_provenance": "llm",
+    "judge_a_label": 0,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-01-67d00e99.md",
+    "label": 1,
+    "reason": "References the Atlassian MCP being disconnected and needing reconnection to run a search, providing relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 1,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/_summaries/session-2026-06-17-7915b2df.md",
+    "label": 1,
+    "reason": "Discusses a GitLab credential issue for a dynamics-mcp-server project at gitlab.workfront.tech, providing relevant supporting context about the Workfront MCP GitLab environment.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "raw/2026-06-03/2026-06-03-46140ed9.md",
+    "label": 2,
+    "reason": "Contains the exact query text about using the Atlassian MCP and Adobe Wiki/Confluence to find the GitLab repo for the Workfront MCP, making it a primary source document.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "AI Conversations/claude/_discovery/2026-06-03-46140ed9.md",
+    "label": 2,
+    "reason": "Contains the exact query text about using the Atlassian MCP and Adobe Wiki/Confluence to find the GitLab repo for the Workfront MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/2026-06-03-46140ed9-2.md",
+    "label": 2,
+    "reason": "Contains the exact query text about using the Atlassian MCP and Adobe Wiki/Confluence to find the GitLab repo for the Workfront MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/2026-06-03-46140ed9-3.md",
+    "label": 2,
+    "reason": "Contains the exact query text about using the Atlassian MCP and Adobe Wiki/Confluence to find the GitLab repo for the Workfront MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/2026-06-03-46140ed9.md",
+    "label": 2,
+    "reason": "Contains the exact query text about using the Atlassian MCP and Adobe Wiki/Confluence to find the GitLab repo for the Workfront MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/2026-06-03-46140ed9-4.md",
+    "label": 2,
+    "reason": "Contains the exact query text about using the Atlassian MCP and Adobe Wiki/Confluence to find the GitLab repo for the Workfront MCP.",
+    "label_provenance": "llm",
+    "judge_a_label": 2,
+    "judge_b_label": 2,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Plaud/2026-06/06-04-weekly-meeting-ai-tooling-workflow-automation-and-staffing-updates.md",
+    "label": 1,
+    "reason": "Mentions MCP login issues and Workfront context improvements in an Adobe platform context, tangentially relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "raw/2026-06-04/06-04-weekly-meeting-ai-tooling-workflow-automation-and-staffing-updates.md",
+    "label": 1,
+    "reason": "Same meeting content about MCP login and Workfront context, tangentially relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
+  },
+  {
+    "item_id": "decisions-017",
+    "doc_id": "Curated/sources/06-04-weekly-meeting-ai-tooling-workflow-automation-and-staffing-updates.md",
+    "label": 1,
+    "reason": "Same meeting chunk about MCP login and Workfront context, tangentially relevant supporting context.",
+    "label_provenance": "llm",
+    "judge_a_label": 1,
+    "judge_b_label": 0,
+    "disagreement": false
   }
 ]

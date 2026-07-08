@@ -29,6 +29,14 @@ export async function judgeItemFull(
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
 
+/** I13: config.llm.maxTokens (4096) is tuned for single-note extraction, not
+ * grading a whole candidate pool in one call. Pools of ~90-100 output tokens
+ * per candidate (observed) hit that ceiling above ~40 candidates, truncating
+ * the JSON array mid-stream; extractJSON then finds the first complete inner
+ * *object* and hands it to a schema expecting an array. The largest pool
+ * observed so far is 61 candidates; 8192 covers that with headroom. */
+const JUDGE_MAX_TOKENS = 8192;
+
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
   const pools: ItemPool[] = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/pool.json'), 'utf8'));
@@ -59,8 +67,8 @@ async function main() {
   const { loadConfig } = await import('../../src/config/loader.js');
   const { createLLMForTier } = await import('./llm.js');
   const config = await loadConfig(REPO_ROOT);
-  const judgeA = createLLMForTier(config, 'medium');
-  const judgeB = createLLMForTier(config, 'heavy');
+  const judgeA = createLLMForTier(config, 'medium', JUDGE_MAX_TOKENS);
+  const judgeB = createLLMForTier(config, 'heavy', JUDGE_MAX_TOKENS);
 
   const allJudgments: Judgment[] = [];
   const failedItemIds = new Set<string>();
