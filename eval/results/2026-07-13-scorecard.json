@@ -1,18 +1,9 @@
 {
   "run": {
     "date": "2026-07-13",
-    "generated_at": "2026-07-13T22:33:34.901Z",
+    "generated_at": "2026-07-13T22:41:59.134Z",
     "db_doc_count": 23376,
-    "any_degraded_runs": {
-      "before": {
-        "docCount": 23376,
-        "newestIndexedAt": "2026-07-06T21:43:26.913Z"
-      },
-      "after": {
-        "docCount": 23376,
-        "newestIndexedAt": "2026-07-06T21:48:38.140Z"
-      }
-    }
+    "any_degraded_runs": true
   },
   "by_category_variant": [
     {

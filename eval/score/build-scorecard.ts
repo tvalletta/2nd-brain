@@ -52,7 +52,10 @@ export interface Scorecard {
 export interface ScorecardInput {
   runsFile: {
     dbSnapshot: { docCount: number; newestIndexedAt: string };
-    indexChangedDuringRun: boolean;
+    indexChangedDuringRun?: {
+      before: { docCount: number; newestIndexedAt: string };
+      after: { docCount: number; newestIndexedAt: string };
+    };
     results: RunResult[];
   };
   judgments: Judgment[];
@@ -202,7 +205,7 @@ export function buildScorecard(input: ScorecardInput): Scorecard {
       date,
       generated_at: new Date().toISOString(),
       db_doc_count: runsFile.dbSnapshot.docCount,
-      any_degraded_runs: runsFile.indexChangedDuringRun,
+      any_degraded_runs: !!runsFile.indexChangedDuringRun,
     },
     by_category_variant: byCategoryVariant,
     routing: routingAnalysis.routing,
@@ -217,7 +220,10 @@ interface RunsFile {
   k: number;
   itemCount: number;
   results: RunResult[];
-  indexChangedDuringRun: boolean;
+  indexChangedDuringRun?: {
+    before: { docCount: number; newestIndexedAt: string };
+    after: { docCount: number; newestIndexedAt: string };
+  };
 }
 
 async function main() {

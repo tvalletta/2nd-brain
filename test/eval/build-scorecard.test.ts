@@ -58,7 +58,7 @@ describe('buildScorecard', () => {
 
   it('groups by (category, variant) and computes all 8 metric cells', () => {
     const scorecard = buildScorecard({
-      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, indexChangedDuringRun: false, results },
+      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, results },
       judgments,
       items,
       routingAnalysis,
@@ -75,7 +75,7 @@ describe('buildScorecard', () => {
 
   it('computes recall@10 against E (label>=1) correctly for the full-corpus scope', () => {
     const scorecard = buildScorecard({
-      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, indexChangedDuringRun: false, results },
+      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, results },
       judgments,
       items,
       routingAnalysis,
@@ -91,7 +91,7 @@ describe('buildScorecard', () => {
 
   it('computes recall@10 against E_primary (label==2 only) as a stricter subset', () => {
     const scorecard = buildScorecard({
-      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, indexChangedDuringRun: false, results },
+      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, results },
       judgments,
       items,
       routingAnalysis,
@@ -108,7 +108,7 @@ describe('buildScorecard', () => {
 
   it('restricts to the 4 scope-matched prefixes for the scope-matched cell (Plaud/ is out of scope)', () => {
     const scorecard = buildScorecard({
-      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, indexChangedDuringRun: false, results },
+      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, results },
       judgments,
       items,
       routingAnalysis,
@@ -127,7 +127,7 @@ describe('buildScorecard', () => {
       runResult('decisions-002', 'as-deployed', [{ path: 'Plaud/c.md', rank: 0, final: 0.8, excerpt: '' }]),
     ];
     const scorecard = buildScorecard({
-      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, indexChangedDuringRun: false, results: erroredResults },
+      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, results: erroredResults },
       judgments,
       items,
       routingAnalysis,
@@ -142,7 +142,7 @@ describe('buildScorecard', () => {
 
   it('embeds routing and coverage verbatim without recomputing them', () => {
     const scorecard = buildScorecard({
-      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, indexChangedDuringRun: false, results },
+      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, results },
       judgments,
       items,
       routingAnalysis,
@@ -152,14 +152,30 @@ describe('buildScorecard', () => {
     expect(scorecard.coverage).toEqual(coverageFunnel);
   });
 
-  it('passes indexChangedDuringRun through as any_degraded_runs', () => {
-    const scorecard = buildScorecard({
-      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, indexChangedDuringRun: true, results },
+  it('sets any_degraded_runs to true when indexChangedDuringRun is present, false when absent', () => {
+    const degraded = buildScorecard({
+      runsFile: {
+        dbSnapshot: { docCount: 100, newestIndexedAt: 'x' },
+        indexChangedDuringRun: {
+          before: { docCount: 100, newestIndexedAt: '2026-01-01T00:00:00Z' },
+          after: { docCount: 100, newestIndexedAt: '2026-01-01T01:00:00Z' },
+        },
+        results,
+      },
       judgments,
       items,
       routingAnalysis,
       coverageFunnel,
     });
-    expect(scorecard.run.any_degraded_runs).toBe(true);
+    expect(degraded.run.any_degraded_runs).toBe(true);
+
+    const notDegraded = buildScorecard({
+      runsFile: { dbSnapshot: { docCount: 100, newestIndexedAt: 'x' }, results },
+      judgments,
+      items,
+      routingAnalysis,
+      coverageFunnel,
+    });
+    expect(notDegraded.run.any_degraded_runs).toBe(false);
   });
 });
