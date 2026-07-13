@@ -526,3 +526,54 @@ fired, so the defect list is directly actionable ("hot-topics: 4× `not_indexed`
   taxonomy (§10), routing metric (§7.4), subtype scoring (§7/§9.3),
   robustness/false-success (§7.5), implicit-failure mining (§9.2), standing
   regression suite (§16 Phase 4). ✔
+
+## 19. Phase 3 addendum (2026-07-13) — scoring architecture & concrete resolutions
+
+Phase 2 shipped 2026-07-08 with a materially different ground-truth mechanism
+than §8.3 describes: the human calibration gate was retired and replaced by
+dual-judge (medium+heavy tier) reconciliation + a behavioral-usage shortcut —
+see `2026-07-07-eval-judging-v2-design.md`. Every judgment in
+`judgments.json`, regardless of `label_provenance` (`llm` | `behavioral`),
+is treated as trusted ground truth for scoring; provenance is a diagnostic
+field, not a scoring filter. `judgments.json` has full 73/73 item coverage
+(2,278 judgments) as of the I13 fix (2026-07-08, ROADMAP issues log).
+
+Confirmed compatible without re-running anything: `eval/results/2026-07-06-runs.json`
+(146 `RunResult`s, variants `grep-first`/`as-deployed` per `eval/run/variants.ts`
+— this plan uses that variant naming, not the `search`/`search_vault` tool
+naming in §7's original prose) already has ranked hit lists
+(`RunHit[]: {path, rank, final}`) for the exact same 73 item ids now in
+`queries.json`. No staleness gap.
+
+**Confirmed scope for this phase** (resolves the open questions from §7.6,
+§8.2, §14 — all three answered "yes, include now"): report recall/precision/
+MRR at k=10 and k=5, for both `E` (label≥1) and `E_primary` (label==2),
+for both full-corpus and scope-matched restriction, each with a bootstrap
+95% CI (1000 resamples, seeded for determinism).
+
+**The 4 scope-matched folders** (§7.6's "folders `search_vault` can see"),
+resolved concretely from `search-vault.ts`'s default folder list
+(`[layout.wiki, layout.aiSummaries, layout.sources, layout.review]`) against
+the live global config: `Curated/wiki`, `AI Conversations/_summaries`,
+`Curated/sources`, `Curated/review`. Scope-matched restriction filters both
+`R_k` and `E` to paths under these 4 prefixes before computing metrics.
+
+**Component breakdown** (new `eval/score/` directory, mirrors the existing
+`eval/run/` and `eval/pool/` module boundaries):
+- `metrics.ts` — pure functions `recallAtK`, `precisionAtK`, `reciprocalRank`,
+  each `(returned: RunHit[], relevantDocIds: Set<string>, k: number)`. No I/O.
+- `bootstrap.ts` — `bootstrapCI(values, resamples=1000, seed)`, seeded PRNG
+  for deterministic, testable output.
+- `scope.ts` — the 4-prefix constant above + `restrictToScope(hits,
+  relevantIds)`.
+- `build-scorecard.ts` — orchestrator (`pnpm eval:score`): reads
+  `runs.json` + `judgments.json` + `queries.json` (for category/subtype),
+  plus the already-computed `routing-analysis.json` + `coverage-funnel.json`
+  (assembled verbatim, not recomputed), and writes
+  `eval/results/<date>-scorecard.json` per §11.4.
+
+**Edge cases** — no new decisions, just confirming §15's rules apply as
+written: empty `E` excluded from recall (not a divide-by-zero silent zero);
+`RunResult.error` scored as a total miss, not skipped; ties trusted via the
+harness's already-stable `rank` ordering; a degraded run (`indexChangedDuringRun`
+from §12) excluded from headline numbers, flagged in output.
