@@ -36,7 +36,7 @@ Spec: `docs/superpowers/specs/2026-07-06-carpathi-retrieval-evaluation-design.md
 | 0 — Mining & diagnostics | ✅ **DONE** (2026-07-06, commit e772d4f) | `eval/` pipeline, 74-item draft set, findings report |
 | 1 — Harness (**variant runner**) | ✅ **DONE** (2026-07-06) | `eval/run/` = pluggable variant runner (grep-first / as-deployed, full-cov hybrid deferred to Track B §4.2); serves Track A *and* the Track B bake-off. Captures hits/latency/tokens per item×variant; wired via `eval:run` |
 | 2 — Pool + judge + calibrate | ✅ **DONE** (2026-07-08, full 73/73 coverage after I13 fix) | Triage proposals (`eval/dataset/triage-proposals.json`); pooled ground truth (`eval/dataset/pool.json`); dual-judge + behavioral-shortcut grading (`eval/pool/judge.ts`, `judge-full.ts`, `behavioral-shortcut.ts`) run for real against the live production index: **2,278 judgments across all 73 items** — `label_provenance`: 2,193 `llm` (dual-judge reconciled) / 85 `behavioral` (shortcut fired); 2 disagreements (0.1%). I13 (4 items initially skipped on output-token truncation) root-caused and fixed 2026-07-08; backfilled to full coverage. Supersedes the retired 20-item human-calibration sample; the human calibration gate itself is retired per `2026-07-07-eval-judging-v2-design.md` §3. `eval/results/2026-07-07-calibration-sample.md` remains only as a historical record of Tom's initial (abandoned) review attempt. |
-| 3 — Score + report | ⬜ pending | Baseline scorecard (before/after ruler ready) — Phase 2 is now unblocked (full-pool `judgments.json` complete); Phase 3 can proceed |
+| 3 — Score + report | ✅ **DONE** (2026-07-13) | `eval/score/{metrics,bootstrap,scope,build-scorecard}.ts` + `pnpm eval:score` → `eval/results/2026-07-13-scorecard.json`: recall/precision/MRR (k=10/k=5, E/E_primary, full-corpus/scope-matched, bootstrap 95% CI) for all 5 categories × 2 variants, plus routing + coverage embedded verbatim. First real accuracy numbers for the whole project — see "You are here" below. Note: `any_degraded_runs: true` on this scorecard (the underlying 2026-07-06 harness run had live index drift mid-run, spec §12) — real caveat on these headline numbers, not yet re-run clean. |
 | 4 — Regression suite | ⬜ pending | Frozen set + pass bar; guards Track B changes |
 
 **Draft set needed a triage/refinement pass** (categories were heuristic; see
@@ -145,16 +145,50 @@ proving it works end to end). Disagreements: 2 out of 2,278 (0.1%) —
 written to `eval/results/2026-07-08-disagreements.md`, a small fraction
 well under the 20% flag-worthy threshold. I9 (author-absent, 0/10
 candidates — `queries.json` has zero `absent`-subtype items) remains open
-and is out of scope for this plan. **Next, still unbuilt:** (1) Phase 3
-scoring/scorecard, now unblocked with full 73/73 ground-truth coverage
-(`eval/results/*-runs.json` + `judgments.json` → recall/precision/MRR per
-spec §7); (2) I9 (absent-query scoring); (3) document the passive-telemetry
-refresh cadence per the design's §6 (re-run `eval:mine`'s behavioral-signal
-extraction before any future full-pool judging run, to pick up new usage
-since the last run); (4) consider adding incremental checkpointing to
-`judge-full.ts` and a retry-once-on-5xx wrapper for transient Bedrock
-errors before any larger future run. See task-7-brief.md "Notes for the
-next plan" for the fuller breakdown.
+and is out of scope for this plan.
+
+**Phase 3 (scoring/scorecard) shipped 2026-07-13**, merged to
+`fix/carpathi-mcp-reliability` (commit `27db644`), via subagent-driven-
+development in an isolated worktree (`.worktrees/feat-eval-phase3-scorecard`,
+cleaned up after merge). Design addendum: spec §19 (2026-07-13). Plan:
+`docs/superpowers/plans/2026-07-13-eval-phase3-scorecard.md`. New
+`eval/score/{metrics,bootstrap,scope,build-scorecard}.ts` + `pnpm eval:score`
+computed recall/precision/MRR (k=10/k=5, both `E` label≥1 and `E_primary`
+label==2, both full-corpus and scope-matched, each with bootstrap 95% CI)
+by joining the existing `2026-07-06-runs.json` (146 RunResults, no re-run
+needed — item ids matched the finalized 73-item `queries.json` exactly) with
+the now-complete `judgments.json`, plus routing/coverage embedded verbatim.
+One real Important finding fixed before merge: `any_degraded_runs` was
+passing the raw `{before,after}` snapshot object (or silently vanishing via
+`undefined`) instead of a real boolean — root cause was the plan's own type
+not matching `eval/run/types.ts`'s actual optional-object field; fixed to
+`!!runsFile.indexChangedDuringRun` and verified against the real artifact.
+
+**First real accuracy numbers for the whole project** (recall@10, full-corpus,
+E label≥1) — `as-deployed` (hybrid) beats `grep-first` in every category
+except a near-tie on hot-topics, most dramatically on entities (0.09 →
+0.63) and decisions (0.27 → 0.45), but at large latency cost (7x-500x
+depending on category, e.g. entities 0.4ms → 160ms, hot-topics 662ms →
+822ms). Real caveat: this scorecard's `any_degraded_runs` is `true` (the
+underlying 2026-07-06 harness run had live index drift mid-run — docCount
+stable but `newestIndexedAt` shifted, per spec §12) — these are the first
+real numbers, useful for shaping the bake-off, but should be treated as
+preliminary until re-run against a clean (non-degraded) harness pass.
+
+**Next, still unbuilt:** (1) re-run `eval:run` for a clean (non-degraded)
+scorecard before treating these numbers as final for the bake-off; (2) I9
+(absent-query scoring); (3) document the passive-telemetry refresh cadence
+per the design's §6 (re-run `eval:mine`'s behavioral-signal extraction
+before any future full-pool judging run, to pick up new usage since the
+last run); (4) consider adding incremental checkpointing to `judge-full.ts`
+and a retry-once-on-5xx wrapper for transient Bedrock errors before any
+larger future run; (5) Arm-B embedding backfill (Track B's full-coverage-
+hybrid arm needs embeddings for the ~15k currently-unembedded notes) before
+the actual Track A/B bake-off can run with `as-deployed` standing in as the
+free reference in the meantime; (6) a human-readable `.md` companion to the
+`.json` scorecard (spec §16 Phase 3 row calls for both; only `.json` was
+built). See task-7-brief.md "Notes for the next plan" for the fuller
+Phase 2 breakdown.
 
 ## Update protocol
 - End of each session: update the phase status table, the issues log, and "You
