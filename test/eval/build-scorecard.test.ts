@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { buildScorecard } from '../../eval/score/build-scorecard.js';
+import { describe, it, expect, afterEach } from 'vitest';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { buildScorecard, findLatestRunsFile } from '../../eval/score/build-scorecard.js';
 import type { RunResult } from '../../eval/run/types.js';
 import type { Judgment } from '../../eval/pool/judge.js';
 import type { EvalItem } from '../../eval/dataset/types.js';
@@ -177,5 +180,27 @@ describe('buildScorecard', () => {
       coverageFunnel,
     });
     expect(notDegraded.run.any_degraded_runs).toBe(false);
+  });
+});
+
+describe('findLatestRunsFile', () => {
+  let dir: string;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('picks the most recently dated <date>-runs.json file, ignoring other files', () => {
+    dir = mkdtempSync(join(tmpdir(), 'runs-test-'));
+    writeFileSync(join(dir, '2026-07-06-runs.json'), '{}');
+    writeFileSync(join(dir, '2026-07-13-runs.json'), '{}');
+    writeFileSync(join(dir, 'routing-analysis.json'), '{}');
+    expect(findLatestRunsFile(dir)).toBe(join(dir, '2026-07-13-runs.json'));
+  });
+
+  it('throws a clear error when no runs.json file exists', () => {
+    dir = mkdtempSync(join(tmpdir(), 'runs-test-'));
+    writeFileSync(join(dir, 'coverage-funnel.json'), '{}');
+    expect(() => findLatestRunsFile(dir)).toThrow(/No <date>-runs\.json file found/);
   });
 });

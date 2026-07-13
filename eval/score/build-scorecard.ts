@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { RunHit, RunResult } from '../run/types.js';
 import type { Judgment } from '../pool/judge.js';
@@ -235,8 +235,21 @@ interface RunsFile {
   };
 }
 
+/** `pnpm eval:run` writes a new dated `<date>-runs.json` each time it's
+ * re-run (e.g. to get a clean, non-degraded baseline) — always score
+ * against the most recent one rather than a hardcoded filename. */
+export function findLatestRunsFile(resultsDir: string): string {
+  const candidates = readdirSync(resultsDir).filter((f) => /^\d{4}-\d{2}-\d{2}-runs\.json$/.test(f));
+  if (candidates.length === 0) throw new Error(`No <date>-runs.json file found in ${resultsDir}`);
+  candidates.sort();
+  return join(resultsDir, candidates[candidates.length - 1]);
+}
+
 async function main() {
-  const runsFile: RunsFile = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/results/2026-07-06-runs.json'), 'utf8'));
+  const resultsDir = join(REPO_ROOT, 'eval', 'results');
+  const runsFilePath = findLatestRunsFile(resultsDir);
+  console.log(`Scoring against ${runsFilePath.replace(REPO_ROOT + '/', '')}`);
+  const runsFile: RunsFile = JSON.parse(readFileSync(runsFilePath, 'utf8'));
   const judgments: Judgment[] = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/judgments.json'), 'utf8'));
   const items: EvalItem[] = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/queries.json'), 'utf8'));
   const routingAnalysis = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/results/routing-analysis.json'), 'utf8'));
