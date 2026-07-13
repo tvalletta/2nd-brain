@@ -16,6 +16,15 @@ const SCOPES = ['full-corpus', 'scope-matched'] as const;
 type Relevance = (typeof RELEVANCE_LEVELS)[number];
 type Scope = (typeof SCOPES)[number];
 
+/** `n` is the item count behind `recall_at_k`/`mrr` specifically (items with
+ * a non-empty relevant set). `precision_at_k` and `median_first_rank` are
+ * each averaged over their own defined subset — an item can have a
+ * non-empty relevant set (recall counted) while its returned hits are all
+ * excluded from precision (e.g. all fell outside scope-matched restriction)
+ * — so their true denominators can be smaller than `n`. Trust `mean`/`ci`
+ * only when the relevant subset is non-empty; `mean()` returns 0 (not null)
+ * for an empty array, so a `n: 0` cell's `recall_at_k.mean`/`mrr.mean` read
+ * as 0 rather than "undefined". */
 export interface MetricCell {
   k: number;
   relevance: Relevance;
