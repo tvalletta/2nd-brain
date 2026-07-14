@@ -248,3 +248,56 @@ its own plan.
 - Harness generalized to a **variant runner** = Track A Phase 1, serving both
   tracks. ✔
 - Stage 2 architecture-dependent scope deferred until the verdict. ✔
+
+## 10. Arm B backfill addendum (2026-07-14) — scope + concrete architecture
+
+**Real backfill scope, resolved with Tom (2026-07-14):** the live index has
+15,705 unembedded docs as of 2026-07-13, close to §4.2's ~15k estimate —
+but ~3,590 of them are under `raw/<date>/` folders, which are pre-ingestion
+staging content, not curated/retrievable target material (curated content
+already has a canonical home under `Curated/sources/` or `Plaud/`). Backfill
+scope is the folders §4.2 actually named: `Plaud/`, `Curated/sources/`,
+`AI Conversations/` — **~12,115 docs**, `raw/` explicitly excluded.
+
+**Real throughput, measured against the live Ollama instance (nomic-embed-text,
+already running) before committing to an implementation approach:** a single
+cold-start embedding call took ~667ms (one-time model load), but warm,
+realistic ~4000-char chunks at concurrency 6 sustained ~21 calls/sec. At that
+rate the full ~12,115-doc backfill (with most notes producing 1 chunk, some
+producing more) is a **~15-20 minute operation**, not the multi-hour one the
+raw estimate implied — so this does not need persistent cross-session
+checkpointing, just crash-safety (idempotent target re-selection) and
+progress logging.
+
+**Concrete architecture:** new `eval/state/backfill-arm-b.ts`, standalone
+(not wired into the job queue, mirroring `eval/pool/`'s and `eval/score/`'s
+orchestrator pattern):
+1. Copy the live `.karpathy/state/embeddings.sqlite` to
+   `eval/state/bakeoff-fullcov.sqlite` (fresh each run — reflects current
+   production state, never mutates it).
+2. Open a `HybridStore` against the copy via the existing
+   `openVariantStore(config, dbPath, opts)` (`eval/run/open-store.ts` —
+   already supports an arbitrary db path; no changes needed there, this is
+   the first non-Track-A-harness caller).
+3. Select targets: doc_ids in the copy's `fts_meta` under `Plaud/`,
+   `Curated/sources/`, `AI Conversations/` with zero rows in `embeddings`.
+4. Backfill: mirror `src/jobs/handlers/embedding-index.ts`'s exact chunking
+   (`chunkText(body, 1200, 4000)`) and `store.upsertDoc(path, title, body,
+   chunks)` call, run with a bounded concurrency pool (default 6, matching
+   the measured real throughput).
+5. Progress: log every 500 docs (count, elapsed, rate). A per-doc failure is
+   caught, logged, and skipped — never aborts the run (same discipline as
+   `judge-full.ts`'s per-item try/catch) — failed doc_ids go in the report.
+6. Report: `eval/results/<date>-arm-b-backfill.json`, field names matching
+   §6.2's `backfill_ledger` shape exactly so the eventual bake-off assembly
+   step can consume it without reshaping:
+   ```jsonc
+   { "notes_embedded": 12000, "notes_failed": 3, "wall_clock_min": 12.4,
+     "token_cost_estimate": 8200000,
+     "db_size_before_bytes": 41000000, "db_size_after_bytes": 1100000000,
+     "db_size_delta_gb": 1.02, "failed_doc_ids": ["Plaud/2026-03/x.md"] }
+   ```
+   `token_cost_estimate` uses chars/4, matching `eval/score/tokens.ts`'s
+   `measurePayload` convention. This feeds Arm B's simplicity sub-score
+   (§4.6/§6.1) — RAG must "pay" for the machinery it needs, and this report
+   is that receipt.
