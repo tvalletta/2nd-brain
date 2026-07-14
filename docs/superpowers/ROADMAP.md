@@ -52,13 +52,57 @@ gate below.
 
 ## Track B — Architecture remediation
 
-Status: 🟡 **spec written** (2026-07-06) — `docs/superpowers/specs/2026-07-06-architecture-bakeoff-remediation-design.md`.
+Status: 🟡 **Arm B backfill done (2026-07-14); bake-off run itself not yet built.**
+`docs/superpowers/specs/2026-07-06-architecture-bakeoff-remediation-design.md`
+(§10 addendum, 2026-07-14, has the concrete backfill architecture + a known
+metadata-parity limitation, documented below).
 Structure: **Stage 1 bake-off** (measure grep-first vs full-coverage hybrid on a
 weighted scorecard — accuracy 0.50 / latency 0.20 / tokens 0.15 / simplicity 0.15,
 simplicity breaks a ≤0.03 tie) → **Stage 2 holistic remediation** toward the
 winner (architecture-dependent scope deferred until the verdict). The bake-off
 runs on Track A Phase 1's variant runner, so the two tracks share the harness.
-Next: writing-plans for Stage 1 (first step = build the variant runner).
+
+**Arm B embedding backfill shipped 2026-07-14**, merged to
+`fix/carpathi-mcp-reliability` (commit `c796dcd`), via subagent-driven-development.
+`eval/state/backfill-arm-b.ts` (`pnpm eval:arm-b-backfill`) copies the live index
+to a disposable `eval/state/bakeoff-fullcov.sqlite` and backfills embeddings for
+`Plaud/`, `Curated/sources/`, `AI Conversations/` (confirmed scope with Tom —
+`raw/`'s ~3,590 pre-ingestion-staging docs excluded). Real result:
+**19,638 of 19,641 in-scope docs embedded** (3 permanent failures, all
+pre-ingestion `AI Conversations/_legacy` content), 37.2 min wall-clock, 1.3GB
+DB size delta — recorded in `eval/results/2026-07-14-arm-b-backfill.json`
+matching spec §6.2's `backfill_ledger` shape exactly. Production's live index
+independently re-verified unchanged (7,851 distinct embedded docs) throughout.
+
+**Real incident during this task, worth remembering:** the real ~20-37 min
+Ollama-backed backfill run died mid-flight twice during execution — once when
+a dispatched subagent's process got silently backgrounded and killed when its
+turn ended (see I13/Task-7's earlier precedent this session), and the recovery
+attempt surfaced a second, compounding bug (the script unconditionally
+re-copied the live DB on every run, which would have destroyed partial resume
+progress). Both are fixed: a persisted `eval/state/bakeoff-fullcov.progress.json`
+ledger makes cost/baseline-size correctly cumulative across invocations, a
+stale-file guard throws if the DB copy exists without a matching ledger, and
+the ledger is now written immediately on a fresh copy (not just at run end) so
+a genuine mid-run crash can actually resume — this last fix was itself a
+final-whole-branch-review catch (the first version only wrote the ledger at
+the end, which meant crash-resume didn't really work despite being the whole
+point of the mechanism).
+
+**Known limitation, not fixed (§10 addendum):** backfilled docs carry thinner
+metadata (`{type, title}`) than natively-embedded docs (`{type, title,
+project_slug, tags, updated_at}`) — confirmed the actual Track A/B harness
+never filters by `project_slug`, so this doesn't affect the imminent bake-off,
+but any future consumer of `bakeoff-fullcov.sqlite` must not rely on
+project-scoped filtering or the `updated_at` recency fallback against it.
+
+**Next, still unbuilt:** the actual bake-off run itself (spec §4.3-§4.7) — add
+a third `Variant` (`full-cov-hybrid`, pointed at `bakeoff-fullcov.sqlite`) to
+the variant runner, run `eval:run` with all 3 arms, then build the weighted-
+scorecard assembly (§4.5/§6.2) that combines Track A's real accuracy numbers
+(already in hand from Phase 3), the new latency/token numbers for the
+full-cov-hybrid arm, and the simplicity rubric (§4.6, now has real backfill-cost
+inputs to compute Arm B's penalty) into a verdict.
 
 Design must address the whole retrieval architecture, informed by the issues log
 below and the Track A baseline. Candidate scope (to be refined in brainstorm):
@@ -195,14 +239,11 @@ passive-telemetry refresh cadence per the design's §6 (re-run `eval:mine`'s
 behavioral-signal extraction before any future full-pool judging run, to
 pick up new usage since the last run); (3) consider adding incremental
 checkpointing to `judge-full.ts` and a retry-once-on-5xx wrapper for
-transient Bedrock errors before any larger future run; (4) Arm-B embedding
-backfill (Track B's full-coverage-hybrid arm needs embeddings for the ~15k
-currently-unembedded notes) before the actual Track A/B bake-off can run
-with `as-deployed` standing in as the free reference in the meantime; (5) a
-human-readable `.md` companion to the `.json` scorecard (spec §16 Phase 3
-row calls for both; only `.json` was
-built). See task-7-brief.md "Notes for the next plan" for the fuller
-Phase 2 breakdown.
+transient Bedrock errors before any larger future run; (4) a human-readable
+`.md` companion to the `.json` scorecard (spec §16 Phase 3 row calls for
+both; only `.json` was built). See task-7-brief.md "Notes for the next
+plan" for the fuller Phase 2 breakdown. Arm-B embedding backfill (was item
+(4) here) shipped 2026-07-14 — see Track B's section above.
 
 ## Update protocol
 - End of each session: update the phase status table, the issues log, and "You
