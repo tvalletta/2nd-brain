@@ -134,6 +134,11 @@ async function main() {
     console.log(`Copying ${liveDbPath} -> ${copyDbPath}`);
     copyFileSync(liveDbPath, copyDbPath);
     progress = { dbSizeBeforeBytes: statSync(copyDbPath).size, wallClockMsAccumulated: 0, tokenCostEstimateAccumulated: 0 };
+    // Write the ledger immediately, not just at the end — if this run
+    // crashes mid-backfill, the DB copy and its ledger must exist together
+    // from the start so a retry can legitimately resume instead of hitting
+    // the stale-file guard and being forced to discard partial progress.
+    writeFileSync(progressPath, JSON.stringify(progress, null, 2));
   }
 
   const readonlyDb = new Database(copyDbPath, { readonly: true });
