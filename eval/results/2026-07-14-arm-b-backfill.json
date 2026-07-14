@@ -1,14 +1,14 @@
 {
-  "notes_embedded": 3192,
+  "notes_embedded": 19638,
   "notes_failed": 3,
-  "wall_clock_min": 25.4,
-  "token_cost_estimate": 82426770,
-  "db_size_before_bytes": 1289834496,
-  "db_size_after_bytes": 2408374272,
-  "db_size_delta_gb": 1.04,
+  "wall_clock_min": 37.21,
+  "token_cost_estimate": 100973791,
+  "db_size_before_bytes": 1022251008,
+  "db_size_after_bytes": 2415120384,
+  "db_size_delta_gb": 1.3,
   "failed_doc_ids": [
-    "AI Conversations/_summaries/session-2026-06-10-92b16b0f.md",
     "AI Conversations/_legacy/2026-04-12/AI 2027.md",
-    "AI Conversations/_legacy/2026-04-13/AI 2027.md"
+    "AI Conversations/_legacy/2026-04-13/AI 2027.md",
+    "AI Conversations/_summaries/session-2026-06-10-92b16b0f.md"
   ]
 }

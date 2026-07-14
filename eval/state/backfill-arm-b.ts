@@ -33,6 +33,19 @@ export function selectBackfillTargets(db: Database.Database): string[] {
   return rows.map((r) => r.doc_id);
 }
 
+/** Total docs under the 3 scope prefixes, regardless of embedded status —
+ * used with `selectBackfillTargets`'s remaining-count to compute an
+ * always-correct "notes_embedded" total (totalInScope - stillRemaining),
+ * independent of how many invocations it took to get there. */
+export function countInScopeDocs(db: Database.Database): number {
+  const like = (prefix: string) => prefix.replace(/[%_]/g, '\\$&') + '%';
+  const clauses = BACKFILL_PREFIXES.map(() => "doc_id LIKE ? ESCAPE '\\'").join(' OR ');
+  const row = db.prepare(`SELECT COUNT(*) c FROM fts_meta WHERE (${clauses})`).get(...BACKFILL_PREFIXES.map(like)) as {
+    c: number;
+  };
+  return row.c;
+}
+
 export interface BackfillReport {
   notes_embedded: number;
   notes_failed: number;
@@ -87,21 +100,41 @@ async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T
   await Promise.all(lanes);
 }
 
+interface BackfillProgress {
+  dbSizeBeforeBytes: number;
+  wallClockMsAccumulated: number;
+  tokenCostEstimateAccumulated: number;
+}
+
 async function main() {
   const { loadConfig } = await import('../../src/config/loader.js');
   const config = await loadConfig(REPO_ROOT);
 
   const liveDbPath = join(REPO_ROOT, config.stateDir, 'embeddings.sqlite');
   const copyDbPath = join(REPO_ROOT, 'eval', 'state', 'bakeoff-fullcov.sqlite');
+  const progressPath = join(REPO_ROOT, 'eval', 'state', 'bakeoff-fullcov.progress.json');
   mkdirSync(join(REPO_ROOT, 'eval', 'state'), { recursive: true });
 
-  if (existsSync(copyDbPath)) {
+  const dbAlreadyExists = existsSync(copyDbPath);
+  const progressAlreadyExists = existsSync(progressPath);
+
+  if (dbAlreadyExists && !progressAlreadyExists) {
+    throw new Error(
+      `${copyDbPath} already exists but its progress ledger ${progressPath} is missing — ` +
+        `this looks like a stale/foreign file, not a resumable backfill run. Delete ${copyDbPath} ` +
+        `(and any -shm/-wal sidecar files) to start fresh, or restore the matching progress ledger.`,
+    );
+  }
+
+  let progress: BackfillProgress;
+  if (dbAlreadyExists) {
     console.log(`Resuming from existing copy at ${copyDbPath} (not overwriting with a fresh copy from ${liveDbPath})`);
+    progress = JSON.parse(readFileSync(progressPath, 'utf8'));
   } else {
     console.log(`Copying ${liveDbPath} -> ${copyDbPath}`);
     copyFileSync(liveDbPath, copyDbPath);
+    progress = { dbSizeBeforeBytes: statSync(copyDbPath).size, wallClockMsAccumulated: 0, tokenCostEstimateAccumulated: 0 };
   }
-  const dbSizeBeforeBytes = statSync(copyDbPath).size;
 
   const readonlyDb = new Database(copyDbPath, { readonly: true });
   const targets = selectBackfillTargets(readonlyDb);
@@ -109,8 +142,7 @@ async function main() {
   console.log(`${targets.length} docs to backfill (scope: ${BACKFILL_PREFIXES.join(', ')})`);
 
   const store = openVariantStore(config, copyDbPath, {});
-  const failedDocIds: string[] = [];
-  let tokenCostEstimate = 0;
+  let tokenCostEstimateThisRun = 0;
   let processed = 0;
   const startMs = Date.now();
 
@@ -122,7 +154,7 @@ async function main() {
       const chunks = chunkText(body, 1200, 4000);
       const title = typeof fm.title === 'string' && fm.title.length > 0 ? fm.title : path;
 
-      tokenCostEstimate += Math.ceil(body.length / 4);
+      tokenCostEstimateThisRun += Math.ceil(body.length / 4);
 
       await store.upsertDoc(
         path,
@@ -141,7 +173,6 @@ async function main() {
       );
     } catch (err) {
       console.error(`Failed to backfill ${path}: ${err instanceof Error ? err.message : String(err)}`);
-      failedDocIds.push(path);
     } finally {
       processed += 1;
       if (processed % 500 === 0) {
@@ -152,15 +183,32 @@ async function main() {
   });
 
   store.close();
-  const wallClockMs = Date.now() - startMs;
+  const wallClockMsThisRun = Date.now() - startMs;
   const dbSizeAfterBytes = statSync(copyDbPath).size;
 
+  // Persist accumulated cost so a resumed run's report reflects the TRUE
+  // total cost across every invocation, not just this one's own slice.
+  progress.wallClockMsAccumulated += wallClockMsThisRun;
+  progress.tokenCostEstimateAccumulated += tokenCostEstimateThisRun;
+  writeFileSync(progressPath, JSON.stringify(progress, null, 2));
+
+  // notes_embedded/failed_doc_ids are recomputed from a fresh DB query, not
+  // this invocation's own in-memory tally — an absolute snapshot of what's
+  // really embedded/still-failing right now, correct regardless of how many
+  // invocations it took (a doc that failed earlier and succeeded on retry
+  // must not double-count; a doc that keeps failing must show up as failed
+  // even if a different invocation was the one that last attempted it).
+  const finalDb = new Database(copyDbPath, { readonly: true });
+  const totalInScope = countInScopeDocs(finalDb);
+  const stillRemaining = selectBackfillTargets(finalDb);
+  finalDb.close();
+
   const report = buildBackfillReport({
-    notesEmbedded: targets.length - failedDocIds.length,
-    failedDocIds,
-    wallClockMs,
-    tokenCostEstimate,
-    dbSizeBeforeBytes,
+    notesEmbedded: totalInScope - stillRemaining.length,
+    failedDocIds: stillRemaining,
+    wallClockMs: progress.wallClockMsAccumulated,
+    tokenCostEstimate: progress.tokenCostEstimateAccumulated,
+    dbSizeBeforeBytes: progress.dbSizeBeforeBytes,
     dbSizeAfterBytes,
   });
 
