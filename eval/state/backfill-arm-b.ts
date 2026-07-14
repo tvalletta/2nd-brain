@@ -1,4 +1,9 @@
 import Database from 'better-sqlite3';
+import { copyFileSync, statSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { openVariantStore } from '../run/open-store.js';
+import { chunkText } from '../../src/embeddings/store.js';
+import { parseNote } from '../../src/vault/frontmatter.js';
 
 /** Confirmed with Tom (spec §10, 2026-07-14): raw/ is pre-ingestion staging,
  * not curated/retrievable target content — excluded from Arm B's backfill
@@ -61,4 +66,114 @@ export function buildBackfillReport(input: {
     db_size_delta_gb: +((input.dbSizeAfterBytes - input.dbSizeBeforeBytes) / GIB).toFixed(2),
     failed_doc_ids: input.failedDocIds,
   };
+}
+
+const REPO_ROOT = join(import.meta.dirname, '..', '..');
+const CONCURRENCY = 6;
+
+/** Runs `worker` over `items` with at most `limit` in flight at once. A
+ * single item's rejection is caught by the caller's own try/catch inside
+ * `worker` — this helper only bounds concurrency, it does not swallow
+ * errors itself. */
+async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  async function runNext(): Promise<void> {
+    const i = next++;
+    if (i >= items.length) return;
+    await worker(items[i]);
+    return runNext();
+  }
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, () => runNext());
+  await Promise.all(lanes);
+}
+
+async function main() {
+  const { loadConfig } = await import('../../src/config/loader.js');
+  const config = await loadConfig(REPO_ROOT);
+
+  const liveDbPath = join(REPO_ROOT, config.stateDir, 'embeddings.sqlite');
+  const copyDbPath = join(REPO_ROOT, 'eval', 'state', 'bakeoff-fullcov.sqlite');
+  mkdirSync(join(REPO_ROOT, 'eval', 'state'), { recursive: true });
+
+  if (existsSync(copyDbPath)) {
+    console.log(`Resuming from existing copy at ${copyDbPath} (not overwriting with a fresh copy from ${liveDbPath})`);
+  } else {
+    console.log(`Copying ${liveDbPath} -> ${copyDbPath}`);
+    copyFileSync(liveDbPath, copyDbPath);
+  }
+  const dbSizeBeforeBytes = statSync(copyDbPath).size;
+
+  const readonlyDb = new Database(copyDbPath, { readonly: true });
+  const targets = selectBackfillTargets(readonlyDb);
+  readonlyDb.close();
+  console.log(`${targets.length} docs to backfill (scope: ${BACKFILL_PREFIXES.join(', ')})`);
+
+  const store = openVariantStore(config, copyDbPath, {});
+  const failedDocIds: string[] = [];
+  let tokenCostEstimate = 0;
+  let processed = 0;
+  const startMs = Date.now();
+
+  await runWithConcurrency(targets, CONCURRENCY, async (path) => {
+    try {
+      const raw = readFileSync(join(config.vaultPath, path), 'utf8');
+      const { data, body } = parseNote(raw);
+      const fm = data as Record<string, unknown>;
+      const chunks = chunkText(body, 1200, 4000);
+      const title = typeof fm.title === 'string' && fm.title.length > 0 ? fm.title : path;
+
+      tokenCostEstimate += Math.ceil(body.length / 4);
+
+      await store.upsertDoc(
+        path,
+        title,
+        body,
+        chunks.map((c) => ({
+          doc_id: path,
+          chunk_index: c.index,
+          chunk_hash: c.hash,
+          text: c.text,
+          metadata: {
+            type: typeof fm.type === 'string' ? fm.type : 'unknown',
+            title,
+          },
+        })),
+      );
+    } catch (err) {
+      console.error(`Failed to backfill ${path}: ${err instanceof Error ? err.message : String(err)}`);
+      failedDocIds.push(path);
+    } finally {
+      processed += 1;
+      if (processed % 500 === 0) {
+        const elapsedSec = (Date.now() - startMs) / 1000;
+        console.log(`${processed}/${targets.length} processed, ${elapsedSec.toFixed(0)}s elapsed, ${(processed / elapsedSec).toFixed(1)}/s`);
+      }
+    }
+  });
+
+  store.close();
+  const wallClockMs = Date.now() - startMs;
+  const dbSizeAfterBytes = statSync(copyDbPath).size;
+
+  const report = buildBackfillReport({
+    notesEmbedded: targets.length - failedDocIds.length,
+    failedDocIds,
+    wallClockMs,
+    tokenCostEstimate,
+    dbSizeBeforeBytes,
+    dbSizeAfterBytes,
+  });
+
+  const date = new Date().toISOString().slice(0, 10);
+  const outPath = join(REPO_ROOT, 'eval', 'results', `${date}-arm-b-backfill.json`);
+  writeFileSync(outPath, JSON.stringify(report, null, 2));
+  console.log(`Wrote eval/results/${date}-arm-b-backfill.json`);
+  console.log(JSON.stringify(report, null, 2));
+}
+
+if (process.argv[1]?.endsWith('backfill-arm-b.ts')) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
 }
