@@ -321,3 +321,58 @@ consumer of `eval/state/bakeoff-fullcov.sqlite`:** do not rely on
 project-slug filtering or the `updated_at` recency fallback against this
 disposable index without first enriching the backfilled docs' metadata to
 match `embedding-index.ts`.
+
+## 11. Bake-off run addendum (2026-07-15) — concrete architecture + resolved decisions
+
+With Arm B's backfill done (§10) and Track A's Phase 3 scorecard already
+producing real recall/precision/MRR numbers for `grep-first`/`as-deployed`,
+the actual bake-off run is now just: add the third arm, re-run the existing
+harness + scorer (both already generalize to N variants with zero code
+changes), and build one new assembly step for the weighted composite + verdict.
+
+**Resolved with Tom (2026-07-15):**
+- **Code/config surface penalty:** `low = 0`, `high = 1` — matches the
+  smallest existing scale in the rubric (failure modes, 0/1) rather than the
+  largest (deps/jobs, 0/2), since "surface" is the least quantified of the 5
+  factors and shouldn't dominate the composite.
+- **Storage penalty value:** use the real measured `db_size_delta_gb: 1.3`
+  from `eval/results/2026-07-14-arm-b-backfill.json`, not the spec's
+  illustrative `~1.0` — this is exactly what §4.2's "record concrete facts,
+  not guesses" was for.
+- **Latency/token normalization scope:** `as-deployed` is excluded from the
+  `min()` in both sub-scores — normalization is only between the two real
+  contenders (`grep-first`, `full-cov-hybrid`). Rationale: §4.1 already
+  labels `as-deployed` "reference, not a contender"; it reflects an
+  incidental 34%-embedded configuration nobody is choosing between, not a
+  deliberate design point, so it shouldn't be able to silently deflate (or
+  inflate) either contender's sub-score. This mirrors §4.4's own precedent
+  for accuracy reporting (`search_vault`'s scope-matched numbers are
+  "retained for reference" once dropped as a contender, not fed into the
+  decision math). `as-deployed`'s own numbers are still fully reported in
+  the bake-off output for context — just not part of the `min()` denominator.
+- **Accuracy formula's relevance/scope inputs:** uses the `E` (label≥1) /
+  full-corpus scorecard cell, matching the original §4.4 formula's plain
+  `recall@10` (not the `E_primary` or scope-matched variants Phase 3 added
+  as secondary reported stats).
+
+**Concrete architecture:**
+1. `eval/run/variants.ts`: add a third `Variant` to `buildVariants()` —
+   `full-cov-hybrid`, `openStore: () => openVariantStore(config,
+   join(projectRoot, 'eval/state/bakeoff-fullcov.sqlite'), {})` (real hybrid
+   mode, not keyword-only), `profile` using the real captured facts:
+   `runtimeDeps: ['ollama']`, `storageGbBeyondFts: 1.3`, `maintenanceJobs:
+   ['embedding-index', 'embedding-sync']`, `silentDegradationModes:
+   ['provider-down->keyword-only']`, `codeSurface: 'high'`.
+2. Re-run `pnpm eval:run` (produces a new `<date>-runs.json`, 3 variants ×
+   73 items = 219 results — no code changes to the harness itself) and
+   `pnpm eval:score` (`build-scorecard.ts` already groups dynamically by
+   whatever variant names appear in `runs.json`, so `full-cov-hybrid` cells
+   appear automatically).
+3. New `eval/score/build-bakeoff.ts` (`pnpm eval:bakeoff`): reads the fresh
+   scorecard + the Arm-B backfill report + the two contenders'
+   `VariantProfile` facts, computes each contender's composite (§4.5) and
+   the simplicity rubric (§4.6, now fully numeric per the resolutions
+   above), applies the ≤0.03-margin tiebreak, and writes
+   `eval/results/<date>-bakeoff.{json,md}` per §6.2's schema — the `.md`
+   companion is built this time (§4.7 requires both; Phase 3's scorecard
+   only needed `.json` since it wasn't the decision-facing artifact).
