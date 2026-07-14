@@ -301,3 +301,23 @@ orchestrator pattern):
    `measurePayload` convention. This feeds Arm B's simplicity sub-score
    (§4.6/§6.1) — RAG must "pay" for the machinery it needs, and this report
    is that receipt.
+
+**Known limitation (found in final review, 2026-07-14): backfilled docs
+carry thinner chunk metadata than natively-indexed docs.** The reference
+indexer (`embedding-index.ts`) writes `{ type, title, project_slug, tags,
+updated_at }` per chunk; the backfill script writes only `{ type, title }`
+— so `eval/state/bakeoff-fullcov.sqlite` is metadata-heterogeneous: the
+~7,851 docs already embedded in production carry full metadata, the
+~19,638 backfilled docs carry two fields. `hybrid-store.ts` reads
+`metadata.project_slug` for its project-scoped filter and
+`metadata.updated_at` for its recency fallback — a project-scoped query
+against Arm B would silently exclude every backfilled doc. **Not fixed**:
+re-embedding ~19,638 docs solely to enrich metadata would cost another
+~37 minutes for a currently-inert risk — confirmed by direct check that
+neither `eval/run/*.ts` nor `eval/score/*.ts` (the actual bake-off harness)
+ever constructs a `projectSlug`-filtered query, so this gap does not affect
+the imminent Track A/B bake-off's real numbers. **Constraint for any future
+consumer of `eval/state/bakeoff-fullcov.sqlite`:** do not rely on
+project-slug filtering or the `updated_at` recency fallback against this
+disposable index without first enriching the backfilled docs' metadata to
+match `embedding-index.ts`.
