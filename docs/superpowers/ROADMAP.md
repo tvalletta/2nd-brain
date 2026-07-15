@@ -52,10 +52,11 @@ gate below.
 
 ## Track B — Architecture remediation
 
-Status: 🟡 **Arm B backfill done (2026-07-14); bake-off run itself not yet built.**
-`docs/superpowers/specs/2026-07-06-architecture-bakeoff-remediation-design.md`
-(§10 addendum, 2026-07-14, has the concrete backfill architecture + a known
-metadata-parity limitation, documented below).
+Status: ✅ **Stage 1 verdict in: grep-first wins (2026-07-15).** See "Stage 1
+verdict" below for the real numbers. Stage 2 (remediation) is next, still
+unbuilt. `docs/superpowers/specs/2026-07-06-architecture-bakeoff-remediation-design.md`
+(§10 addendum, Arm B backfill architecture; §11 addendum, bake-off run
+architecture + resolved decisions).
 Structure: **Stage 1 bake-off** (measure grep-first vs full-coverage hybrid on a
 weighted scorecard — accuracy 0.50 / latency 0.20 / tokens 0.15 / simplicity 0.15,
 simplicity breaks a ≤0.03 tie) → **Stage 2 holistic remediation** toward the
@@ -96,13 +97,73 @@ never filters by `project_slug`, so this doesn't affect the imminent bake-off,
 but any future consumer of `bakeoff-fullcov.sqlite` must not rely on
 project-scoped filtering or the `updated_at` recency fallback against it.
 
-**Next, still unbuilt:** the actual bake-off run itself (spec §4.3-§4.7) — add
-a third `Variant` (`full-cov-hybrid`, pointed at `bakeoff-fullcov.sqlite`) to
-the variant runner, run `eval:run` with all 3 arms, then build the weighted-
-scorecard assembly (§4.5/§6.2) that combines Track A's real accuracy numbers
-(already in hand from Phase 3), the new latency/token numbers for the
-full-cov-hybrid arm, and the simplicity rubric (§4.6, now has real backfill-cost
-inputs to compute Arm B's penalty) into a verdict.
+## Stage 1 verdict: 🏆 **grep-first wins** (2026-07-15)
+
+**The bake-off ran for real, merged to `fix/carpathi-mcp-reliability`
+(commit `47357cb`), via subagent-driven-development.** Added the third
+`full-cov-hybrid` variant to the runner (`eval/run/variants.ts`), re-ran
+`eval:run` (73 items × 3 arms — took ~20 min in practice, not the
+originally-estimated "well under a minute," because `full-cov-hybrid`'s
+brute-force cosine search over ~20k embedded docs is genuinely expensive at
+query time, multiplied by the harness's 3× latency-measurement repeats —
+confirmed via CPU/memory monitoring, not hung), `eval:score`, and the new
+`eval:bakeoff` (`eval/score/build-bakeoff.ts`) that assembles the weighted
+composite + verdict per §4.5-§4.7.
+
+**Real result — decisive, not close:**
+
+| Arm | Accuracy sub | Latency sub | Tokens sub | Simplicity sub | **Composite** |
+|-----|---|---|---|---|---|
+| **grep-first** | 0.424 | 1.000 | 1.000 | 1.000 | **0.712** |
+| full-cov-hybrid | 0.330 | 0.008 | 0.361 | 0.000 | 0.221 |
+
+**Margin 0.491 — grep-first wins outright (not a tiebreak), and wins every
+individual category** (ai-session 0.803 vs 0.332, decisions 0.732 vs 0.301,
+entities 0.649 vs 0.102, hot-topics 0.700 vs 0.249, plaud 0.730 vs 0.232) —
+`mixed: false`. Full report: `eval/results/2026-07-15-bakeoff.{json,md}`.
+
+The composite is dominated by non-accuracy factors: `full-cov-hybrid`'s
+pooled median latency is **3.8 seconds** vs grep-first's **31ms** (122x),
+and its simplicity penalty (7.27, driven by the real Ollama dependency, the
+1.27GB backfill, 2 background maintenance jobs, and the provider-down
+degradation mode) is the max possible against grep-first's zero. Even
+`full-cov-hybrid`'s raw accuracy (recall/precision/MRR pooled 0.6/0.25/0.15
+weighted) is LOWER than grep-first's, not higher as the original "RAG should
+help" intuition assumed — full coverage embedding did not overcome hybrid
+search's real-world cost and complexity in this eval set.
+
+Note: this run's harness pass was flagged `any_degraded_runs: true` (benign
+— a background job re-indexed existing docs' timestamps mid-run, `docCount`
+held steady) — now surfaced directly in the bake-off output itself (a
+final-review catch) rather than silently dropped, since a decision artifact
+of this weight should show its own provenance caveats.
+
+**Real incidents during this task** (both fixed before merge): (1) a
+per-category composite formula bug found in task review — reusing the
+arm-level pooled `bestLatency`/`bestTokens` as the denominator for every
+individual category's own median produced a nonsensical `11.32` for
+grep-first's `entities` category (0.68ms category median vs 31.19ms arm-
+pooled median) — fixed to normalize each category against a per-category
+best instead; the top-level verdict was mathematically unaffected throughout
+(independently re-verified twice). (2) The disposable Arm B index
+(`eval/state/bakeoff-fullcov.sqlite`, 2.4GB, real Ollama compute) was
+discovered **missing entirely** at the start of this task — it had lived
+inside `.worktrees/feat-arm-b-backfill/` with no symlink back to the main
+checkout, and `git worktree remove --force` after that task's merge deleted
+it along with the branch's temp files (gitignored files aren't tracked/moved
+by git). Regenerated directly in the main checkout this time (not a
+worktree) so this can't recur the same way — real numbers moved slightly
+(19,650 embedded / 10 failed, vs the original 19,638/3) but the verdict is
+unaffected by the difference.
+
+**Next: Stage 2 (holistic remediation, spec §5) is now unblocked** — since
+grep-first won, §5.2 (architecture-dependent work) becomes **deletion work**:
+remove the embedding pipeline, Ollama dependency, and enrichment backlog for
+retrieval (the winning architecture doesn't need them). §5.1 (architecture-
+independent fixes — I2 routing, I3 entity recall, I4/I5 bugs, ingestion
+completeness) proceeds regardless of the winner and was always going to be
+needed. Also still open: I9 (absent-query scoring, never resolved), Track A
+P4 (regression suite, now has a real baseline to freeze).
 
 Design must address the whole retrieval architecture, informed by the issues log
 below and the Track A baseline. Candidate scope (to be refined in brainstorm):
