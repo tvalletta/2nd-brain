@@ -6,6 +6,7 @@ import type { EvalItem } from '../dataset/types.js';
 import { recallAtK, precisionAtK, reciprocalRank, firstRelevantRank } from './metrics.js';
 import { restrictToScope } from './scope.js';
 import { bootstrapCI } from './bootstrap.js';
+import { mean, median, percentile } from './stats.js';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
 
@@ -13,8 +14,8 @@ const K_VALUES = [10, 5] as const;
 const RELEVANCE_LEVELS = ['e', 'e_primary'] as const;
 const SCOPES = ['full-corpus', 'scope-matched'] as const;
 
-type Relevance = (typeof RELEVANCE_LEVELS)[number];
-type Scope = (typeof SCOPES)[number];
+export type Relevance = (typeof RELEVANCE_LEVELS)[number];
+export type Scope = (typeof SCOPES)[number];
 
 /** `n` is the item count behind `recall_at_k`/`mrr` specifically (items with
  * a non-empty relevant set). `precision_at_k` and `median_first_rank` are
@@ -73,26 +74,7 @@ export interface ScorecardInput {
   coverageFunnel: unknown;
 }
 
-function mean(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((a, b) => a + b, 0) / values.length;
-}
-
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-}
-
-function percentile(values: number[], p: number): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.floor(p * sorted.length));
-  return sorted[idx];
-}
-
-interface RelevanceEntry {
+export interface RelevanceEntry {
   e: Set<string>;
   e_primary: Set<string>;
 }
@@ -102,7 +84,7 @@ interface RelevanceEntry {
  * judging-v2 dual-judge/behavioral-shortcut design already established
  * that provenance is a diagnostic field, not a scoring filter (spec
  * addendum §19). */
-function buildRelevanceIndex(judgments: Judgment[]): Map<string, RelevanceEntry> {
+export function buildRelevanceIndex(judgments: Judgment[]): Map<string, RelevanceEntry> {
   const index = new Map<string, RelevanceEntry>();
   for (const j of judgments) {
     if (!index.has(j.item_id)) index.set(j.item_id, { e: new Set(), e_primary: new Set() });
@@ -118,7 +100,7 @@ function relevantSetFor(relevance: Relevance, entry: RelevanceEntry | undefined)
   return relevance === 'e' ? entry.e : entry.e_primary;
 }
 
-function computeCell(
+export function computeCell(
   k: number,
   relevance: Relevance,
   scope: Scope,
