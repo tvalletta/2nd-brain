@@ -34,19 +34,19 @@
       "composite": 0.7120949810126144,
       "by_category": {
         "plaud": {
-          "composite": 0.6599767648399639
+          "composite": 0.7301709260664107
         },
         "ai-session": {
-          "composite": 0.7268395990877391
+          "composite": 0.8034808337749515
         },
         "entities": {
-          "composite": 11.322155238883296
+          "composite": 0.6493671679197995
         },
         "hot-topics": {
-          "composite": 0.44912480136745647
+          "composite": 0.7001355876919207
         },
         "decisions": {
-          "composite": 0.6883841279392734
+          "composite": 0.7317584449513053
         }
       }
     },
@@ -74,19 +74,19 @@
       "composite": 0.2209263970948569,
       "by_category": {
         "plaud": {
-          "composite": 0.19159842710832167
+          "composite": 0.23166603337497343
         },
         "ai-session": {
-          "composite": 0.31269709639548887
+          "composite": 0.3324226954280202
         },
         "entities": {
-          "composite": 0.14637543180507165
+          "composite": 0.10157038504100943
         },
         "hot-topics": {
-          "composite": 0.18410094622343076
+          "composite": 0.24913142302198293
         },
         "decisions": {
-          "composite": 0.30449501600814277
+          "composite": 0.30121040899341167
         }
       }
     }

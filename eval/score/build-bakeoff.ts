@@ -114,6 +114,23 @@ export function buildBakeoff(input: BakeoffInput): Bakeoff {
 
   const categoriesForVariant = (name: Contender) => scorecard.by_category_variant.filter((g) => g.variant === name);
 
+  // Per-category "best" (min of the two contenders' OWN category-level
+  // medians) — mirrors the arm-level bestLatency/bestTokens pattern, but
+  // scoped to each category, since a category's own scale (e.g. entities'
+  // near-instant keyword lookups) can differ by orders of magnitude from
+  // an arm's overall pooled scale. Using the arm-level pooled best here
+  // instead produced nonsensical >1 by_category composites (found in
+  // review — e.g. grep-first/entities computed as 11.32).
+  const categoryBest = new Map<string, { latency: number; tokens: number }>();
+  for (const group of scorecard.by_category_variant) {
+    if (!(CONTENDERS as readonly string[]).includes(group.variant)) continue;
+    const existing = categoryBest.get(group.category);
+    categoryBest.set(group.category, {
+      latency: existing ? Math.min(existing.latency, group.latency_ms_median) : group.latency_ms_median,
+      tokens: existing ? Math.min(existing.tokens, group.response_tokens_median) : group.response_tokens_median,
+    });
+  }
+
   const arms: ArmComposite[] = CONTENDERS.map((name) => {
     const stats = armStats.get(name)!;
     const accSub = accuracySub(stats.cell);
@@ -127,9 +144,10 @@ export function buildBakeoff(input: BakeoffInput): Bakeoff {
     for (const group of categoriesForVariant(name)) {
       const groupCell = group.cells.find((c) => c.k === 10 && c.relevance === 'e' && c.scope === 'full-corpus');
       if (!groupCell) continue;
+      const catBest = categoryBest.get(group.category)!;
       const groupAccSub = accuracySub(groupCell);
-      const groupLatSub = group.latency_ms_median > 0 ? bestLatency / group.latency_ms_median : 1;
-      const groupTokSub = group.response_tokens_median > 0 ? bestTokens / group.response_tokens_median : 1;
+      const groupLatSub = group.latency_ms_median > 0 ? catBest.latency / group.latency_ms_median : 1;
+      const groupTokSub = group.response_tokens_median > 0 ? catBest.tokens / group.response_tokens_median : 1;
       byCategory[group.category] = {
         composite: 0.5 * groupAccSub + 0.2 * groupLatSub + 0.15 * groupTokSub + 0.15 * simSub,
       };

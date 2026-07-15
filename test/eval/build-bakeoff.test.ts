@@ -172,6 +172,45 @@ describe('buildBakeoff', () => {
     expect(bakeoff.verdict.mixed).toBe(true);
   });
 
+  it('normalizes by_category composites against a per-category best, not the arm-level pooled best, keeping them in a sane range', () => {
+    // grep-first's entities-like category here has a much lower latency/token
+    // median than its own arm-level pooled figures (mirroring the real bug:
+    // entities latency_ms_median 0.68 vs arm-pooled bestLatency 31.19).
+    const fastCategoryScorecard: Scorecard = {
+      ...scorecard,
+      by_category_variant: [
+        ...scorecard.by_category_variant,
+        {
+          category: 'entities',
+          variant: 'grep-first',
+          n_items: 2,
+          cells: [{ k: 10, relevance: 'e', scope: 'full-corpus', n: 2, recall_at_k: { mean: 1, ci: [1, 1] }, precision_at_k: { mean: 1, ci: [1, 1] }, mrr: { mean: 1, ci: [1, 1] }, median_first_rank: 1 }],
+          latency_ms_median: 0.5,
+          latency_ms_p95: 0.6,
+          response_tokens_median: 20,
+        },
+        {
+          category: 'entities',
+          variant: 'full-cov-hybrid',
+          n_items: 2,
+          cells: [{ k: 10, relevance: 'e', scope: 'full-corpus', n: 2, recall_at_k: { mean: 1, ci: [1, 1] }, precision_at_k: { mean: 1, ci: [1, 1] }, mrr: { mean: 1, ci: [1, 1] }, median_first_rank: 1 }],
+          latency_ms_median: 50,
+          latency_ms_p95: 55,
+          response_tokens_median: 500,
+        },
+      ],
+    };
+    const bakeoff = buildBakeoff({ runsResults, scorecard: fastCategoryScorecard, judgments, backfillReport });
+    const grepFirst = bakeoff.arms.find((a) => a.name === 'grep-first')!;
+    const fullCov = bakeoff.arms.find((a) => a.name === 'full-cov-hybrid')!;
+    // grep-first's entities latency/tokens are the per-category best (lower
+    // than full-cov-hybrid's), so its own sub-scores for that category are
+    // exactly 1.0, not inflated far past it by the arm-level pooled figures.
+    expect(grepFirst.by_category.entities.composite).toBeLessThanOrEqual(1.0);
+    expect(fullCov.by_category.entities.composite).toBeLessThanOrEqual(1.0);
+    expect(grepFirst.by_category.entities.composite).toBeGreaterThan(0);
+  });
+
   it('passes the backfill ledger through with the exact field names from spec §6.2', () => {
     const bakeoff = buildBakeoff({ runsResults, scorecard, judgments, backfillReport });
     expect(bakeoff.backfill_ledger).toEqual({ notes_embedded: 19638, wall_clock_min: 37.21, db_size_delta_gb: 1.3 });
