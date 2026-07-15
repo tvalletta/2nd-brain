@@ -1,0 +1,100 @@
+{
+  "run": {
+    "date": "2026-07-15",
+    "eval_set_version": "2026-07-15",
+    "k": 10
+  },
+  "backfill_ledger": {
+    "notes_embedded": 19650,
+    "wall_clock_min": 15.66,
+    "db_size_delta_gb": 1.27
+  },
+  "arms": [
+    {
+      "name": "grep-first",
+      "accuracy": {
+        "recall_at_10": 0.21340476594929286,
+        "precision_at_10": 0.7663594470046082,
+        "mrr": 0.6970482713633399,
+        "sub": 0.42418996202522874
+      },
+      "latency": {
+        "median_ms": 31.19199999999546,
+        "p95_ms": 3422.589875000005,
+        "sub": 1
+      },
+      "tokens": {
+        "median": 382,
+        "sub": 1
+      },
+      "simplicity": {
+        "penalty": 0,
+        "sub": 1
+      },
+      "composite": 0.7120949810126144,
+      "by_category": {
+        "plaud": {
+          "composite": 0.6599767648399639
+        },
+        "ai-session": {
+          "composite": 0.7268395990877391
+        },
+        "entities": {
+          "composite": 11.322155238883296
+        },
+        "hot-topics": {
+          "composite": 0.44912480136745647
+        },
+        "decisions": {
+          "composite": 0.6883841279392734
+        }
+      }
+    },
+    {
+      "name": "full-cov-hybrid",
+      "accuracy": {
+        "recall_at_10": 0.20305238838292025,
+        "precision_at_10": 0.37123287671232863,
+        "mrr": 0.7707925636007827,
+        "sub": 0.3302585367479517
+      },
+      "latency": {
+        "median_ms": 3807.7600000000093,
+        "p95_ms": 7395.247791000002,
+        "sub": 0.008191692753743771
+      },
+      "tokens": {
+        "median": 1058,
+        "sub": 0.3610586011342155
+      },
+      "simplicity": {
+        "penalty": 7.3,
+        "sub": 0
+      },
+      "composite": 0.2209263970948569,
+      "by_category": {
+        "plaud": {
+          "composite": 0.19159842710832167
+        },
+        "ai-session": {
+          "composite": 0.31269709639548887
+        },
+        "entities": {
+          "composite": 0.14637543180507165
+        },
+        "hot-topics": {
+          "composite": 0.18410094622343076
+        },
+        "decisions": {
+          "composite": 0.30449501600814277
+        }
+      }
+    }
+  ],
+  "verdict": {
+    "winner": "grep-first",
+    "margin": 0.491,
+    "rationale": "grep-first wins by a 0.491 composite margin over full-cov-hybrid.",
+    "mixed": false
+  }
+}

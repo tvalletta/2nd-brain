@@ -1,0 +1,255 @@
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import type { RunResult } from '../run/types.js';
+import type { Judgment } from '../pool/judge.js';
+import { VARIANT_PROFILES } from '../run/variants.js';
+import { computeCell, buildRelevanceIndex, type MetricCell, type Scorecard } from './build-scorecard.js';
+import { median, percentile } from './stats.js';
+
+const REPO_ROOT = join(import.meta.dirname, '..', '..');
+
+const CONTENDERS = ['grep-first', 'full-cov-hybrid'] as const;
+type Contender = (typeof CONTENDERS)[number];
+
+const DEPS_WEIGHT = 2;
+const JOBS_WEIGHT = 2;
+const FAILURE_MODES_WEIGHT = 1;
+const SURFACE_WEIGHT: Record<'low' | 'medium' | 'high', number> = { low: 0, medium: 0.5, high: 1 };
+
+export interface ArmComposite {
+  name: Contender;
+  accuracy: { recall_at_10: number; precision_at_10: number; mrr: number; sub: number };
+  latency: { median_ms: number; p95_ms: number; sub: number };
+  tokens: { median: number; sub: number };
+  simplicity: { penalty: number; sub: number };
+  composite: number;
+  by_category: Record<string, { composite: number }>;
+}
+
+export interface BakeoffVerdict {
+  winner: Contender;
+  margin: number;
+  rationale: string;
+  mixed: boolean;
+}
+
+export interface Bakeoff {
+  run: { date: string; eval_set_version: string; k: number };
+  backfill_ledger: { notes_embedded: number; wall_clock_min: number; db_size_delta_gb: number };
+  arms: ArmComposite[];
+  verdict: BakeoffVerdict;
+}
+
+export interface BakeoffInput {
+  runsResults: RunResult[];
+  scorecard: Scorecard;
+  judgments: Judgment[];
+  backfillReport: { notes_embedded: number; wall_clock_min: number; db_size_delta_gb: number };
+}
+
+/** Total simplicity penalty for one arm (spec §4.6). deps/jobs/failure-mode
+ * penalties are fixed per-factor weights triggered by "does this arm have
+ * any of these at all" (not a literal count — the spec table assigns a
+ * flat 2/2/1 weight per factor, not one point per array entry). Storage
+ * uses the real measured GB value directly, since it's a continuous fact,
+ * not a category. Code surface uses the resolved low=0/high=1 (medium=0.5
+ * for type completeness, unused by either current arm). */
+function computeSimplicityPenalty(name: Contender): number {
+  const profile = VARIANT_PROFILES[name];
+  const depsPenalty = profile.runtimeDeps.length > 0 ? DEPS_WEIGHT : 0;
+  const jobsPenalty = profile.maintenanceJobs.length > 0 ? JOBS_WEIGHT : 0;
+  const failureModesPenalty = profile.silentDegradationModes.length > 0 ? FAILURE_MODES_WEIGHT : 0;
+  const surfacePenalty = SURFACE_WEIGHT[profile.codeSurface];
+  return depsPenalty + profile.storageGbBeyondFts + jobsPenalty + failureModesPenalty + surfacePenalty;
+}
+
+/** Item-weighted accuracy across ALL of a variant's results, pooled
+ * (ignoring category grouping) — avoids re-averaging the scorecard's
+ * already-aggregated per-category means, which have different per-metric
+ * item counts that don't combine by simple averaging. Matches spec §4.4's
+ * original formula inputs: E (label>=1), full-corpus, k=10. */
+function pooledAccuracyCell(
+  variantResults: RunResult[],
+  relevanceIndex: ReturnType<typeof buildRelevanceIndex>,
+): MetricCell {
+  return computeCell(10, 'e', 'full-corpus', variantResults, relevanceIndex);
+}
+
+function accuracySub(cell: MetricCell): number {
+  return 0.6 * cell.recall_at_k.mean + 0.25 * cell.precision_at_k.mean + 0.15 * cell.mrr.mean;
+}
+
+/** Pure bake-off assembly — no file I/O, directly unit-testable with small
+ * fixtures. `main()` below does the real file I/O and calls this. */
+export function buildBakeoff(input: BakeoffInput): Bakeoff {
+  const { runsResults, scorecard, judgments, backfillReport } = input;
+  const relevanceIndex = buildRelevanceIndex(judgments);
+
+  const armStats = new Map<
+    Contender,
+    { cell: MetricCell; latencyMedian: number; latencyP95: number; tokensMedian: number }
+  >();
+  for (const name of CONTENDERS) {
+    // Excludes as-deployed by construction (CONTENDERS has only 2 entries) —
+    // the reference arm's results are simply never pooled or normalized
+    // against here (spec §11 addendum: as-deployed must not deflate/inflate
+    // either contender's sub-score).
+    const variantResults = runsResults.filter((r) => r.variant === name);
+    const cell = pooledAccuracyCell(variantResults, relevanceIndex);
+    const latencies = variantResults.map((r) => r.latencyMs);
+    const tokens = variantResults.map((r) => r.responseTokensEst);
+    armStats.set(name, {
+      cell,
+      latencyMedian: median(latencies),
+      latencyP95: percentile(latencies, 0.95),
+      tokensMedian: median(tokens),
+    });
+  }
+
+  const bestLatency = Math.min(...CONTENDERS.map((n) => armStats.get(n)!.latencyMedian));
+  const bestTokens = Math.min(...CONTENDERS.map((n) => armStats.get(n)!.tokensMedian));
+
+  const penalties = new Map(CONTENDERS.map((n) => [n, computeSimplicityPenalty(n)]));
+  const maxPenalty = Math.max(...CONTENDERS.map((n) => penalties.get(n)!));
+
+  const categoriesForVariant = (name: Contender) => scorecard.by_category_variant.filter((g) => g.variant === name);
+
+  const arms: ArmComposite[] = CONTENDERS.map((name) => {
+    const stats = armStats.get(name)!;
+    const accSub = accuracySub(stats.cell);
+    const latSub = stats.latencyMedian > 0 ? bestLatency / stats.latencyMedian : 1;
+    const tokSub = stats.tokensMedian > 0 ? bestTokens / stats.tokensMedian : 1;
+    const penalty = penalties.get(name)!;
+    const simSub = maxPenalty > 0 ? 1 - penalty / maxPenalty : 1;
+    const composite = 0.5 * accSub + 0.2 * latSub + 0.15 * tokSub + 0.15 * simSub;
+
+    const byCategory: Record<string, { composite: number }> = {};
+    for (const group of categoriesForVariant(name)) {
+      const groupCell = group.cells.find((c) => c.k === 10 && c.relevance === 'e' && c.scope === 'full-corpus');
+      if (!groupCell) continue;
+      const groupAccSub = accuracySub(groupCell);
+      const groupLatSub = group.latency_ms_median > 0 ? bestLatency / group.latency_ms_median : 1;
+      const groupTokSub = group.response_tokens_median > 0 ? bestTokens / group.response_tokens_median : 1;
+      byCategory[group.category] = {
+        composite: 0.5 * groupAccSub + 0.2 * groupLatSub + 0.15 * groupTokSub + 0.15 * simSub,
+      };
+    }
+
+    return {
+      name,
+      accuracy: {
+        recall_at_10: stats.cell.recall_at_k.mean,
+        precision_at_10: stats.cell.precision_at_k.mean,
+        mrr: stats.cell.mrr.mean,
+        sub: accSub,
+      },
+      latency: { median_ms: stats.latencyMedian, p95_ms: stats.latencyP95, sub: latSub },
+      tokens: { median: stats.tokensMedian, sub: tokSub },
+      simplicity: { penalty, sub: simSub },
+      composite,
+      by_category: byCategory,
+    };
+  });
+
+  const [a, b] = arms;
+  const margin = Math.abs(a.composite - b.composite);
+  // Ties within 0.03 go to grep-first (simplicity tiebreak, spec §4.5's stated lean).
+  const winner: Contender = margin <= 0.03 ? 'grep-first' : a.composite > b.composite ? a.name : b.name;
+  const winnerArm = arms.find((arm) => arm.name === winner)!;
+  const loserArm = arms.find((arm) => arm.name !== winner)!;
+  const mixed = Object.keys(winnerArm.by_category).some((cat) => {
+    const winnerCatComposite = winnerArm.by_category[cat]?.composite;
+    const loserCatComposite = loserArm.by_category[cat]?.composite;
+    return winnerCatComposite !== undefined && loserCatComposite !== undefined && loserCatComposite > winnerCatComposite;
+  });
+  const rationale =
+    margin <= 0.03
+      ? `Composite scores are within the 0.03 tie threshold (margin ${margin.toFixed(3)}) — simplicity breaks the tie in favor of grep-first per spec §4.5.`
+      : `${winner} wins by a ${margin.toFixed(3)} composite margin over ${loserArm.name}.`;
+
+  return {
+    run: { date: new Date().toISOString().slice(0, 10), eval_set_version: scorecard.run.date, k: 10 },
+    backfill_ledger: {
+      notes_embedded: backfillReport.notes_embedded,
+      wall_clock_min: backfillReport.wall_clock_min,
+      db_size_delta_gb: backfillReport.db_size_delta_gb,
+    },
+    arms,
+    verdict: { winner, margin: +margin.toFixed(3), rationale, mixed },
+  };
+}
+
+/** Human-readable companion to the JSON (spec §4.7 requires both). */
+export function renderBakeoffMarkdown(bakeoff: Bakeoff): string {
+  const lines: string[] = [];
+  lines.push(`# Bake-off Report — ${bakeoff.run.date}`, '');
+  lines.push(`## Verdict`, '');
+  lines.push(`**Winner: ${bakeoff.verdict.winner}** (margin: ${bakeoff.verdict.margin}, mixed: ${bakeoff.verdict.mixed ? 'yes' : 'no'})`, '');
+  lines.push(bakeoff.verdict.rationale, '');
+  lines.push(`## Backfill cost (Arm B, full-cov-hybrid)`, '');
+  lines.push(`- Notes embedded: ${bakeoff.backfill_ledger.notes_embedded}`);
+  lines.push(`- Wall clock: ${bakeoff.backfill_ledger.wall_clock_min} min`);
+  lines.push(`- DB size delta: ${bakeoff.backfill_ledger.db_size_delta_gb} GB`, '');
+  lines.push(`## Composite scores`, '');
+  lines.push(`| Arm | Accuracy | Latency | Tokens | Simplicity | Composite |`);
+  lines.push(`|-----|----------|---------|--------|------------|-----------|`);
+  for (const arm of bakeoff.arms) {
+    lines.push(
+      `| ${arm.name} | ${arm.accuracy.sub.toFixed(3)} | ${arm.latency.sub.toFixed(3)} | ${arm.tokens.sub.toFixed(3)} | ${arm.simplicity.sub.toFixed(3)} | ${arm.composite.toFixed(3)} |`,
+    );
+  }
+  lines.push('');
+  lines.push(`## By category`, '');
+  const categories = [...new Set(bakeoff.arms.flatMap((arm) => Object.keys(arm.by_category)))].sort();
+  if (categories.length > 0) {
+    lines.push(`| Category | ${bakeoff.arms.map((a) => a.name).join(' | ')} |`);
+    lines.push(`|----------|${bakeoff.arms.map(() => '---').join('|')}|`);
+    for (const cat of categories) {
+      const cells = bakeoff.arms.map((arm) => arm.by_category[cat]?.composite?.toFixed(3) ?? 'n/a');
+      lines.push(`| ${cat} | ${cells.join(' | ')} |`);
+    }
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function findLatestDatedFile(dir: string, suffixPattern: RegExp): string {
+  const candidates = readdirSync(dir).filter((f) => suffixPattern.test(f));
+  if (candidates.length === 0) throw new Error(`No file matching ${suffixPattern} found in ${dir}`);
+  candidates.sort();
+  return join(dir, candidates[candidates.length - 1]);
+}
+
+async function main() {
+  const resultsDir = join(REPO_ROOT, 'eval', 'results');
+  const runsPath = findLatestDatedFile(resultsDir, /^\d{4}-\d{2}-\d{2}-runs\.json$/);
+  const scorecardPath = findLatestDatedFile(resultsDir, /^\d{4}-\d{2}-\d{2}-scorecard\.json$/);
+  const backfillPath = findLatestDatedFile(resultsDir, /^\d{4}-\d{2}-\d{2}-arm-b-backfill\.json$/);
+  console.log(`Using runs: ${runsPath.replace(REPO_ROOT + '/', '')}`);
+  console.log(`Using scorecard: ${scorecardPath.replace(REPO_ROOT + '/', '')}`);
+  console.log(`Using backfill report: ${backfillPath.replace(REPO_ROOT + '/', '')}`);
+
+  const runsFile = JSON.parse(readFileSync(runsPath, 'utf8')) as { results: RunResult[] };
+  const scorecard = JSON.parse(readFileSync(scorecardPath, 'utf8')) as Scorecard;
+  const backfillReport = JSON.parse(readFileSync(backfillPath, 'utf8')) as {
+    notes_embedded: number;
+    wall_clock_min: number;
+    db_size_delta_gb: number;
+  };
+  const judgments: Judgment[] = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/judgments.json'), 'utf8'));
+
+  const bakeoff = buildBakeoff({ runsResults: runsFile.results, scorecard, judgments, backfillReport });
+
+  const date = bakeoff.run.date;
+  writeFileSync(join(resultsDir, `${date}-bakeoff.json`), JSON.stringify(bakeoff, null, 2));
+  writeFileSync(join(resultsDir, `${date}-bakeoff.md`), renderBakeoffMarkdown(bakeoff));
+  console.log(`Wrote eval/results/${date}-bakeoff.json and .md`);
+  console.log(`Verdict: ${bakeoff.verdict.winner} (margin ${bakeoff.verdict.margin}, mixed: ${bakeoff.verdict.mixed})`);
+}
+
+if (process.argv[1]?.endsWith('build-bakeoff.ts')) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
