@@ -17,7 +17,7 @@ describe('buildVariants', () => {
     expect(byName['as-deployed'].profile.runtimeDeps).toContain('ollama');
     expect(byName['full-cov-hybrid'].keywordOnly).toBe(false);
     expect(byName['full-cov-hybrid'].profile.runtimeDeps).toContain('ollama');
-    expect(byName['full-cov-hybrid'].profile.storageGbBeyondFts).toBe(1.3);
+    expect(byName['full-cov-hybrid'].profile.storageGbBeyondFts).toBe(1.27);
     expect(byName['full-cov-hybrid'].profile.maintenanceJobs).toEqual(['embedding-index', 'embedding-sync']);
     expect(byName['grep-first'].topK).toBe(10);
     expect(typeof byName['grep-first'].openStore).toBe('function');

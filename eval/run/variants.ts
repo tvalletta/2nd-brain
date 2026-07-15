@@ -8,10 +8,11 @@ import type { Variant, VariantProfile } from './types.js';
  * `Variant`s) and `eval/score/build-bakeoff.ts` (which scores the bake-off
  * composite from these same facts) — a single source of truth so the
  * harness and the scoring never drift apart. `full-cov-hybrid`'s
- * `storageGbBeyondFts: 1.3` is the REAL measured value from
- * `eval/results/2026-07-14-arm-b-backfill.json`'s `db_size_delta_gb`
- * (spec §11 addendum — use real facts, not the design doc's `~1.0`
- * placeholder). */
+ * `storageGbBeyondFts: 1.27` is the REAL measured value from
+ * `eval/results/2026-07-15-arm-b-backfill.json`'s `db_size_delta_gb`
+ * (the 2026-07-14 copy was lost to a worktree-cleanup incident and
+ * regenerated 2026-07-15) (spec §11 addendum — use real facts, not the
+ * design doc's `~1.0` placeholder). */
 export const VARIANT_PROFILES: Record<'grep-first' | 'as-deployed' | 'full-cov-hybrid', VariantProfile> = {
   'grep-first': {
     runtimeDeps: [],
@@ -29,7 +30,7 @@ export const VARIANT_PROFILES: Record<'grep-first' | 'as-deployed' | 'full-cov-h
   },
   'full-cov-hybrid': {
     runtimeDeps: ['ollama'],
-    storageGbBeyondFts: 1.3,
+    storageGbBeyondFts: 1.27,
     maintenanceJobs: ['embedding-index', 'embedding-sync'],
     silentDegradationModes: ['provider-down->keyword-only'],
     codeSurface: 'high',

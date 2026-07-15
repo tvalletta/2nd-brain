@@ -34,7 +34,7 @@ export interface BakeoffVerdict {
 }
 
 export interface Bakeoff {
-  run: { date: string; eval_set_version: string; k: number };
+  run: { date: string; eval_set_version: string; k: number; any_degraded_runs: boolean };
   backfill_ledger: { notes_embedded: number; wall_clock_min: number; db_size_delta_gb: number };
   arms: ArmComposite[];
   verdict: BakeoffVerdict;
@@ -186,7 +186,12 @@ export function buildBakeoff(input: BakeoffInput): Bakeoff {
       : `${winner} wins by a ${margin.toFixed(3)} composite margin over ${loserArm.name}.`;
 
   return {
-    run: { date: new Date().toISOString().slice(0, 10), eval_set_version: scorecard.run.date, k: 10 },
+    run: {
+      date: new Date().toISOString().slice(0, 10),
+      eval_set_version: scorecard.run.date,
+      k: 10,
+      any_degraded_runs: scorecard.run.any_degraded_runs,
+    },
     backfill_ledger: {
       notes_embedded: backfillReport.notes_embedded,
       wall_clock_min: backfillReport.wall_clock_min,
@@ -204,6 +209,9 @@ export function renderBakeoffMarkdown(bakeoff: Bakeoff): string {
   lines.push(`## Verdict`, '');
   lines.push(`**Winner: ${bakeoff.verdict.winner}** (margin: ${bakeoff.verdict.margin}, mixed: ${bakeoff.verdict.mixed ? 'yes' : 'no'})`, '');
   lines.push(bakeoff.verdict.rationale, '');
+  if (bakeoff.run.any_degraded_runs) {
+    lines.push(`⚠️ **This run's underlying harness pass was flagged degraded** (the live index changed mid-run) — see the scorecard for details.`, '');
+  }
   lines.push(`## Backfill cost (Arm B, full-cov-hybrid)`, '');
   lines.push(`- Notes embedded: ${bakeoff.backfill_ledger.notes_embedded}`);
   lines.push(`- Wall clock: ${bakeoff.backfill_ledger.wall_clock_min} min`);

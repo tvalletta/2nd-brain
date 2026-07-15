@@ -215,6 +215,15 @@ describe('buildBakeoff', () => {
     const bakeoff = buildBakeoff({ runsResults, scorecard, judgments, backfillReport });
     expect(bakeoff.backfill_ledger).toEqual({ notes_embedded: 19638, wall_clock_min: 37.21, db_size_delta_gb: 1.3 });
   });
+
+  it('propagates any_degraded_runs from the scorecard into the bake-off run object', () => {
+    const clean = buildBakeoff({ runsResults, scorecard, judgments, backfillReport });
+    expect(clean.run.any_degraded_runs).toBe(false);
+
+    const degradedScorecard: Scorecard = { ...scorecard, run: { ...scorecard.run, any_degraded_runs: true } };
+    const degraded = buildBakeoff({ runsResults, scorecard: degradedScorecard, judgments, backfillReport });
+    expect(degraded.run.any_degraded_runs).toBe(true);
+  });
 });
 
 describe('renderBakeoffMarkdown', () => {
