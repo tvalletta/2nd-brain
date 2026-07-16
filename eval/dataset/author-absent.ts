@@ -6,33 +6,35 @@ import type { EvalItem } from './types.js';
 
 /**
  * Starting threshold for "no meaningful match" — a top-hit `final` score
- * below this counts as absent. NOT independently calibrated; the real run
- * (Step 5 below) prints every candidate's top score across all variants so
- * this can be sanity-checked/adjusted against real observed scores before
- * trusting the confirmed-absent set.
+ * below this counts as absent. Scored against grep-first alone (see
+ * isConfirmedAbsent below for why). The real run (main() below) prints every
+ * candidate's grep-first top score so this can be sanity-checked/adjusted
+ * against real observed scores before trusting the confirmed-absent set.
  */
 const DEFAULT_SCORE_THRESHOLD = 0.02;
 
-/** Check whether a query is confirmed absent across ALL given variants:
- * either zero hits, or the top hit's final score is below the threshold. */
+/** Check whether a query is confirmed absent against grep-first ALONE —
+ * not all variants. The hybrid variants' scores are known-unreliable for
+ * this purpose (issue I9: a scoring-floor artifact clusters `final` in a
+ * narrow ~0.11-0.16 band regardless of actual relevance, confirmed still
+ * reproducing on both as-deployed and full-cov-hybrid as of 2026-07-15).
+ * grep-first is also now the actual production-bound architecture per the
+ * Stage 1 bake-off verdict, so confirming absence against it specifically
+ * confirms exactly what matters going forward. */
 export async function isConfirmedAbsent(
-  variants: Variant[],
+  grepFirstVariant: Variant,
   query: string,
   scoreThreshold = DEFAULT_SCORE_THRESHOLD,
 ): Promise<boolean> {
-  for (const variant of variants) {
-    const store = variant.openStore();
-    try {
-      const result = await store.search(query, { topK: 1 });
-      const hits = toRunHits(result, 1);
-      if (hits.length > 0 && hits[0].final >= scoreThreshold) {
-        return false;
-      }
-    } finally {
-      store.close();
-    }
+  const store = grepFirstVariant.openStore();
+  try {
+    const result = await store.search(query, { topK: 1 });
+    const hits = toRunHits(result, 1);
+    if (hits.length > 0 && hits[0].final >= scoreThreshold) return false;
+    return true;
+  } finally {
+    store.close();
   }
-  return true;
 }
 
 const CANDIDATE_ABSENT_QUERIES = [
@@ -55,24 +57,22 @@ async function main() {
   const { buildVariants } = await import('../run/variants.js');
   const config = await loadConfig(REPO_ROOT);
   const variants = buildVariants(config, REPO_ROOT, 1);
+  const grepFirst = variants.find((v) => v.name === 'grep-first');
+  if (!grepFirst) throw new Error('grep-first variant not found — check buildVariants()');
 
   const confirmed: string[] = [];
   for (const query of CANDIDATE_ABSENT_QUERIES) {
-    const scores: Record<string, number> = {};
-    let absent = true;
-    for (const variant of variants) {
-      const store = variant.openStore();
-      try {
-        const result = await store.search(query, { topK: 1 });
-        const hits = toRunHits(result, 1);
-        const top = hits[0]?.final ?? 0;
-        scores[variant.name] = top;
-        if (top >= DEFAULT_SCORE_THRESHOLD) absent = false;
-      } finally {
-        store.close();
-      }
+    const store = grepFirst.openStore();
+    let score = 0;
+    try {
+      const result = await store.search(query, { topK: 1 });
+      const hits = toRunHits(result, 1);
+      score = hits[0]?.final ?? 0;
+    } finally {
+      store.close();
     }
-    console.log(`${absent ? 'ABSENT' : 'FOUND '} "${query}" scores=${JSON.stringify(scores)}`);
+    const absent = score < DEFAULT_SCORE_THRESHOLD;
+    console.log(`${absent ? 'ABSENT' : 'FOUND '} "${query}" grep-first score=${score}`);
     if (absent) confirmed.push(query);
   }
   console.log(`\n${confirmed.length}/${CANDIDATE_ABSENT_QUERIES.length} candidates confirmed absent.`);
