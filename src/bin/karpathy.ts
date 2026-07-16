@@ -22,6 +22,7 @@ import { ensureDir } from '../shared/fs-utils.js';
 import { DEFAULT_VAULT_DIRS, GLOBAL_CONFIG_PATH } from '../config/defaults.js';
 import { loadConfig, loadConfigOrNull } from '../config/loader.js';
 import { createFsAdapter } from '../vault/fs-adapter.js';
+import { layoutFromConfig } from '../vault/paths.js';
 import { createJobQueue } from '../jobs/queue.js';
 import { createFileLock } from '../jobs/lock.js';
 import { createJobRunner } from '../jobs/runner.js';
@@ -1652,6 +1653,31 @@ async function maintenanceCommand(args: string[]): Promise<void> {
   }
 }
 
+async function entityAliasesCommand(): Promise<void> {
+  const { listEntitiesNeedingAliases, writeAliases } = await import('../maintenance/list-entity-aliases.js');
+  const readline = await import('node:readline/promises');
+
+  const config = await loadConfig();
+  const layout = layoutFromConfig(config);
+  const vault = createFsAdapter(config.vaultPath);
+
+  const entries = await listEntitiesNeedingAliases(vault, `${layout.wiki}/entities`);
+  process.stdout.write(`${entries.length} entities found. Press Enter to skip any entity, or type comma-separated aliases.\n\n`);
+
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  for (const entry of entries) {
+    const existing = entry.currentAliases.length > 0 ? ` (current: ${entry.currentAliases.join(', ')})` : '';
+    const answer = await rl.question(`${entry.canonicalName}${existing}: `);
+    const trimmed = answer.trim();
+    if (trimmed.length === 0) continue;
+    const newAliases = [...new Set([...entry.currentAliases, ...trimmed.split(',').map((a) => a.trim()).filter(Boolean)])];
+    await writeAliases(vault, entry.path, newAliases);
+    process.stdout.write(`  -> saved: ${newAliases.join(', ')}\n`);
+  }
+  rl.close();
+  process.stdout.write('Done.\n');
+}
+
 async function specVersionsCommand(args: string[]): Promise<void> {
   const subcommand = args[0];
 
@@ -1767,6 +1793,9 @@ async function main(): Promise<void> {
     case 'touch':
       await touchCommand(args.slice(1));
       break;
+    case 'entity-aliases':
+      await entityAliasesCommand();
+      break;
     case 'intel':
       await intelCommand(args.slice(1));
       break;
@@ -1812,6 +1841,7 @@ async function main(): Promise<void> {
           '  spec-versions archive [description]  Archive current spec',
           '  curator             Interactive entity reconciliation queue walkthrough',
           '  touch <note-path>   Re-run entity extraction on a wiki note you edited',
+          '  entity-aliases      Interactive walkthrough to fill in aliases for every entity note',
           '  intel <subcommand>  Intelligence pipeline (run "intel help" for subcommands)',
           '',
         ].join('\n'),
