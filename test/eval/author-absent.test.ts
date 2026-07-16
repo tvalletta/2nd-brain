@@ -52,9 +52,11 @@ describe('isConfirmedAbsent', () => {
 });
 
 /** Build a Variant whose store always returns exactly one hit with the given
- * `final` score, regardless of query — for testing the threshold-gating logic
- * in isolation from real FTS/embedding behavior. */
-function fakeVariantWithScore(score: number): Variant {
+ * `final` score and FTS matchMode, regardless of query — for testing the
+ * gating logic in isolation from real FTS/embedding behavior. Defaults to
+ * matchMode 'or' since that's the recall-relaxation-fallback case the score
+ * threshold is meant to gate (see isConfirmedAbsent's doc comment). */
+function fakeVariantWithScore(score: number, matchMode: 'and' | 'or' = 'or'): Variant {
   const fakeStore: Pick<HybridStore, 'search' | 'close'> = {
     search: async () => ({
       hits: [
@@ -69,6 +71,7 @@ function fakeVariantWithScore(score: number): Variant {
         },
       ],
       searchMode: 'keyword-only',
+      ftsMatchMode: matchMode,
     }),
     close: () => {},
   };
@@ -100,5 +103,26 @@ describe('isConfirmedAbsent (grep-first-only gating)', () => {
     // test file won't typecheck. (No runtime assertion needed beyond the
     // two above; this comment documents the intent for a human reader.)
     expect(true).toBe(true);
+  });
+
+  // Regression coverage for the 2026-07-16 recalibration finding: once
+  // grep-recall-improvements' OR-fallback landed, a top-1 `final` score
+  // alone can no longer discriminate present from absent — a genuine
+  // single-doc match and a spurious OR-fallback match can land at the same
+  // ~0.089 recency-dominated ceiling (see DEFAULT_SCORE_THRESHOLD's doc
+  // comment for the full real-data finding). `ftsMatchMode` is the
+  // structural signal that actually discriminates: 'and' means every query
+  // token co-occurs in one document (real relevance evidence), so it must
+  // never be confirmed absent regardless of score.
+  it('does not confirm absent on a low-scoring AND match — full term co-occurrence outranks score', async () => {
+    const grepFirst = fakeVariantWithScore(0.001, 'and');
+    const result = await isConfirmedAbsent(grepFirst, 'some query', 0.1);
+    expect(result).toBe(false);
+  });
+
+  it('confirms absent on an OR match scoring just under the threshold, even near the observed recency ceiling (~0.089)', async () => {
+    const grepFirst = fakeVariantWithScore(0.089, 'or');
+    const result = await isConfirmedAbsent(grepFirst, 'some query', 0.1);
+    expect(result).toBe(true);
   });
 });
