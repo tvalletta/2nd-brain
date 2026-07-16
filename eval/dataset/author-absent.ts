@@ -46,6 +46,53 @@ import type { EvalItem } from './types.js';
  */
 const DEFAULT_SCORE_THRESHOLD = 0.1;
 
+/** The single source of truth for the absent/not-absent decision (see
+ * isConfirmedAbsent's doc comment for the full rationale). Pure function over
+ * already-computed search outcome values so it can be shared between
+ * `isConfirmedAbsent` (which does its own `store.search()`) and `main()`
+ * (which needs the raw `hitCount`/`matchMode`/`score` values anyway for its
+ * console.log diagnostic line, and must not reimplement this predicate by
+ * hand a second time — the two copies already drifted out of sync once
+ * during this task's own development, score-only → matchMode-aware).
+ *
+ * Gating rule: zero hits is always absent. Otherwise, an 'and' match (every
+ * query token co-occurs in one doc — real relevance evidence) is never
+ * confirmed absent, regardless of its `final` score, since that score is
+ * dominated by recency rather than relevance once any match exists. An 'or'
+ * match (recall-relaxation fallback only found a partial, possibly-
+ * coincidental overlap) is confirmed absent unless its score clears the
+ * threshold — a safety net for the rare high-scoring OR match. */
+function decideAbsent(
+  hitCount: number,
+  matchMode: 'and' | 'or' | undefined,
+  score: number,
+  scoreThreshold: number,
+): boolean {
+  if (hitCount === 0) return true;
+  if (matchMode !== 'or') return false;
+  return score < scoreThreshold;
+}
+
+/** isConfirmedAbsent's soundness depends entirely on being called with a
+ * keyword-only variant (one that never mixes in semantic-only hits).
+ * `HybridSearchResult.ftsMatchMode` (src/search/hybrid-store.ts) is only
+ * ever explicitly set to `'or'` — never `'and'` — so a semantic-only hit
+ * with no real FTS overlap would also present `ftsMatchMode === undefined`
+ * and get misclassified by `decideAbsent`'s `matchMode !== 'or'` branch as
+ * "real evidence, never absent". Guard against that by refusing any variant
+ * that isn't keyword-only. */
+function assertKeywordOnly(variant: Variant): void {
+  if (!variant.keywordOnly) {
+    throw new Error(
+      `isConfirmedAbsent requires a keyword-only variant (e.g. "grep-first"), ` +
+        `got "${variant.name}" (keywordOnly: false). A non-keyword-only variant ` +
+        `can produce semantic-only hits with no real FTS overlap, whose ` +
+        `ftsMatchMode is undefined and would be silently misclassified as ` +
+        `"real evidence, never absent".`,
+    );
+  }
+}
+
 /** Check whether a query is confirmed absent against grep-first ALONE —
  * not all variants. The hybrid variants' scores are known-unreliable for
  * this purpose (issue I9: a scoring-floor artifact clusters `final` in a
@@ -55,27 +102,20 @@ const DEFAULT_SCORE_THRESHOLD = 0.1;
  * Stage 1 bake-off verdict, so confirming absence against it specifically
  * confirms exactly what matters going forward.
  *
- * Gating rule (see DEFAULT_SCORE_THRESHOLD's comment for the real-data
- * finding behind this): zero hits is always absent. Otherwise, an 'and'
- * match (every query token co-occurs in one doc — real relevance evidence)
- * is never confirmed absent, regardless of its `final` score, since that
- * score is dominated by recency rather than relevance once any match
- * exists. An 'or' match (recall-relaxation fallback only found a partial,
- * possibly-coincidental overlap) is confirmed absent unless its score
- * clears the threshold — a safety net for the rare high-scoring OR match. */
+ * See `decideAbsent` for the actual gating rule — this is the only place
+ * that rule is implemented; `main()` reuses it too rather than keeping a
+ * second hand-rolled copy of the same predicate. */
 export async function isConfirmedAbsent(
   grepFirstVariant: Variant,
   query: string,
   scoreThreshold = DEFAULT_SCORE_THRESHOLD,
 ): Promise<boolean> {
+  assertKeywordOnly(grepFirstVariant);
   const store = grepFirstVariant.openStore();
   try {
     const result = await store.search(query, { topK: 1 });
     const hits = toRunHits(result, 1);
-    if (hits.length === 0) return true;
-    if (result.ftsMatchMode !== 'or') return false;
-    if (hits[0].final >= scoreThreshold) return false;
-    return true;
+    return decideAbsent(hits.length, result.ftsMatchMode, hits[0]?.final ?? 0, scoreThreshold);
   } finally {
     store.close();
   }
@@ -119,10 +159,10 @@ async function main() {
     } finally {
       store.close();
     }
-    // See isConfirmedAbsent's doc comment: an 'and' match is real relevance
-    // evidence regardless of score; only 'or'-fallback matches are gated by
-    // the score threshold.
-    const absent = hitCount === 0 || (matchMode === 'or' && score < DEFAULT_SCORE_THRESHOLD);
+    // Single source of truth for the decision — see decideAbsent's doc
+    // comment. `hitCount`/`score`/`matchMode` above are only computed here
+    // for the console.log diagnostic below.
+    const absent = decideAbsent(hitCount, matchMode, score, DEFAULT_SCORE_THRESHOLD);
     console.log(
       `${absent ? 'ABSENT' : 'FOUND '} "${query}" grep-first score=${score} matchMode=${matchMode}`,
     );

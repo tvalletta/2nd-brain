@@ -125,4 +125,19 @@ describe('isConfirmedAbsent (grep-first-only gating)', () => {
     const result = await isConfirmedAbsent(grepFirst, 'some query', 0.1);
     expect(result).toBe(true);
   });
+
+  // Finding 2 (task review): isConfirmedAbsent's soundness depends entirely
+  // on being called with a keyword-only variant. A non-keyword-only variant
+  // can produce a semantic-only hit with no real FTS overlap, whose
+  // `ftsMatchMode` is undefined (hybrid-store.ts only ever explicitly sets it
+  // to 'or', never 'and') — which would be misclassified by the `!== 'or'`
+  // check as "real evidence, never absent". Guard against that at runtime.
+  it('throws when passed a non-keyword-only variant instead of grep-first', async () => {
+    const hybridVariant: Variant = {
+      ...fakeVariantWithScore(0.05, 'or'),
+      name: 'as-deployed',
+      keywordOnly: false,
+    };
+    await expect(isConfirmedAbsent(hybridVariant, 'some query', 0.1)).rejects.toThrow(/keyword-only/i);
+  });
 });
