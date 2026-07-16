@@ -37,6 +37,16 @@ export interface BehavioralEntry {
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
+/** Filters items to those whose `id` starts with any of the given
+ * comma-separated prefixes, or returns all items unchanged when no filter
+ * is given. Used by `--only` to scope pooling/judging to just-added items
+ * without re-spending real cost re-processing already-settled ones. */
+export function filterItemsByIdPrefix<T extends { id: string }>(items: T[], prefixFilter: string | undefined): T[] {
+  if (!prefixFilter) return items;
+  const prefixes = prefixFilter.split(',').map((p) => p.trim()).filter(Boolean);
+  return items.filter((it) => prefixes.some((p) => it.id.startsWith(p)));
+}
+
 function lookupTitle(db: Database.Database, docId: string): string {
   const row = db.prepare('SELECT title FROM notes_fts WHERE doc_id = ?').get(docId) as
     | { title: string }
@@ -96,33 +106,53 @@ export async function buildPoolForItem(
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
 
 async function main() {
+  const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+  const onlyPrefix = onlyArg?.slice('--only='.length);
+
   const { loadConfig } = await import('../../src/config/loader.js');
   const { buildVariants } = await import('../run/variants.js');
   const config = await loadConfig(REPO_ROOT);
   const dbPath = join(REPO_ROOT, config.stateDir, 'embeddings.sqlite');
   const variants = buildVariants(config, REPO_ROOT, 20);
 
-  const items: { id: string; query: string }[] = JSON.parse(
+  const allItems: { id: string; query: string }[] = JSON.parse(
     readFileSync(join(REPO_ROOT, 'eval/dataset/queries.json'), 'utf8'),
   );
+  const items = filterItemsByIdPrefix(allItems, onlyPrefix);
+  console.log(onlyPrefix ? `Scoped to ${items.length}/${allItems.length} items matching "${onlyPrefix}"` : `Processing all ${items.length} items`);
+
   const behavioral: BehavioralEntry[] = JSON.parse(
     readFileSync(join(REPO_ROOT, 'eval/dataset/behavioral-signal.json'), 'utf8'),
   );
 
   const db = new Database(dbPath, { readonly: true });
-  const pools: ItemPool[] = [];
+  const newPools: ItemPool[] = [];
   try {
     for (const item of items) {
       if (item.query.startsWith('<ABSENT-STUB')) continue;
-      pools.push(await buildPoolForItem(item, variants, db, behavioral, 20));
+      newPools.push(await buildPoolForItem(item, variants, db, behavioral, 20));
     }
   } finally {
     db.close();
   }
 
-  writeFileSync(join(REPO_ROOT, 'eval/dataset/pool.json'), JSON.stringify(pools, null, 2));
-  const totalCandidates = pools.reduce((sum, p) => sum + p.candidates.length, 0);
-  console.log(`Wrote eval/dataset/pool.json: ${pools.length} items, ${totalCandidates} total candidates`);
+  // Merge with existing pool.json when scoped — otherwise a --only run
+  // would silently discard every already-pooled item's data.
+  let finalPools = newPools;
+  if (onlyPrefix) {
+    let existingPools: ItemPool[] = [];
+    try {
+      existingPools = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/pool.json'), 'utf8'));
+    } catch {
+      /* no existing pool.json yet — fine, finalPools stays as newPools */
+    }
+    const newIds = new Set(newPools.map((p) => p.item_id));
+    finalPools = [...existingPools.filter((p) => !newIds.has(p.item_id)), ...newPools];
+  }
+
+  writeFileSync(join(REPO_ROOT, 'eval/dataset/pool.json'), JSON.stringify(finalPools, null, 2));
+  const totalCandidates = finalPools.reduce((sum, p) => sum + p.candidates.length, 0);
+  console.log(`Wrote eval/dataset/pool.json: ${finalPools.length} items, ${totalCandidates} total candidates`);
 }
 
 if (process.argv[1]?.endsWith('build-pool.ts')) {

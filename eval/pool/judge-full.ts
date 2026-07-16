@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
 import type { ItemPool, BehavioralEntry } from './build-pool.js';
+import { filterItemsByIdPrefix } from './build-pool.js';
 import { judgeItem, reconcileJudgments, type Judgment } from './judge.js';
 import { applyBehavioralShortcut } from './behavioral-shortcut.js';
 import { writeDisagreementReport } from './disagreement-report.js';
@@ -39,14 +40,22 @@ const JUDGE_MAX_TOKENS = 8192;
 
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
-  const pools: ItemPool[] = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/pool.json'), 'utf8'));
-  const items: { id: string; query: string; intent: string }[] = JSON.parse(
+  const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+  const onlyPrefix = onlyArg?.slice('--only='.length);
+
+  const allPools: ItemPool[] = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/pool.json'), 'utf8'));
+  const allItems: { id: string; query: string; intent: string }[] = JSON.parse(
     readFileSync(join(REPO_ROOT, 'eval/dataset/queries.json'), 'utf8'),
   );
+  const items = filterItemsByIdPrefix(allItems, onlyPrefix);
+  console.log(onlyPrefix ? `Scoped to ${items.length}/${allItems.length} items matching "${onlyPrefix}"` : `Processing all ${items.length} items`);
+
   const behavioral: BehavioralEntry[] = JSON.parse(
     readFileSync(join(REPO_ROOT, 'eval/dataset/behavioral-signal.json'), 'utf8'),
   );
   const itemById = new Map(items.map((it) => [it.id, it]));
+  const filteredItemIds = new Set(items.map((it) => it.id));
+  const pools = allPools.filter((p) => filteredItemIds.has(p.item_id));
 
   if (dryRun) {
     let shortcutCount = 0;
@@ -90,14 +99,28 @@ async function main() {
     console.error(`${failedItemIds.size} item(s) failed judging and were skipped: ${[...failedItemIds].join(', ')}`);
   }
 
-  writeFileSync(join(REPO_ROOT, 'eval/dataset/judgments.json'), JSON.stringify(allJudgments, null, 2));
-  console.log(`Wrote eval/dataset/judgments.json: ${allJudgments.length} judgments across ${pools.length} items`);
+  // Merge with existing judgments.json when scoped — otherwise a --only run
+  // would silently discard every already-judged item's data.
+  let finalJudgments = allJudgments;
+  if (onlyPrefix) {
+    let existingJudgments: Judgment[] = [];
+    try {
+      existingJudgments = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/judgments.json'), 'utf8'));
+    } catch {
+      /* no existing judgments.json yet */
+    }
+    const newItemIds = new Set(allJudgments.map((j) => j.item_id));
+    finalJudgments = [...existingJudgments.filter((j) => !newItemIds.has(j.item_id)), ...allJudgments];
+  }
+
+  writeFileSync(join(REPO_ROOT, 'eval/dataset/judgments.json'), JSON.stringify(finalJudgments, null, 2));
+  console.log(`Wrote eval/dataset/judgments.json: ${finalJudgments.length} judgments across ${pools.length} items`);
 
   const outDir = join(REPO_ROOT, 'eval', 'results');
   mkdirSync(outDir, { recursive: true });
   const date = new Date().toISOString().slice(0, 10);
   const disagreementPath = join(outDir, `${date}-disagreements.md`);
-  writeDisagreementReport(disagreementPath, allJudgments);
+  writeDisagreementReport(disagreementPath, finalJudgments);
   console.log(`Wrote disagreement log to eval/results/${date}-disagreements.md`);
 }
 
