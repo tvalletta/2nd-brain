@@ -111,9 +111,9 @@ describe('sync-fts-index handler', () => {
     db.pragma('journal_mode = WAL');
     const fts = openFTSIndex(db, { vaultRoot: dir });
     try {
-      const hits = fts.query('"second"', 5);
+      const { hits } = fts.query('"second"', 5);
       expect(hits.map((h) => h.docId)).toContain('wiki/concepts/a.md');
-      expect(fts.query('"first"', 5).map((h) => h.docId)).not.toContain('wiki/concepts/a.md');
+      expect(fts.query('"first"', 5).hits.map((h) => h.docId)).not.toContain('wiki/concepts/a.md');
     } finally {
       db.close();
     }

@@ -243,4 +243,20 @@ describe('hybrid store', () => {
     const result = await store.search('banana x');
     expect(result.hits.map((h) => h.docId)).not.toContain('x.md');
   });
+
+  it('surfaces ftsMatchMode "or" on the result when the FTS layer fell back to OR', async () => {
+    // Create docs where AND would fail but OR succeeds:
+    // each doc has only one of the two query terms.
+    await store.upsertDoc('apple.md', 'Apple Doc', 'apple fruit', []);
+    await store.upsertDoc('banana.md', 'Banana Doc', 'banana fruit', []);
+
+    // Query for "apple banana" — AND finds nothing, so FTS falls back to OR
+    // and finds both docs because they each contain one of the terms.
+    const result = await store.search('apple banana');
+
+    expect(result.ftsMatchMode).toBe('or');
+    const ids = result.hits.map((h) => h.docId).sort();
+    expect(ids).toContain('apple.md');
+    expect(ids).toContain('banana.md');
+  });
 });

@@ -79,7 +79,7 @@ export async function buildPoolForItem(
 
   const sweepStore = variants[0].openStore();
   try {
-    const ftsHits = sweepStore.fts.query(item.query, poolK);
+    const { hits: ftsHits } = sweepStore.fts.query(item.query, poolK);
     for (const h of ftsHits) add(h.docId, 'keyword-sweep', redactSecrets(h.snippet));
   } finally {
     sweepStore.close();

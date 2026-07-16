@@ -61,6 +61,7 @@ export interface HybridSearchResult {
   hits: HybridHit[];
   searchMode: 'hybrid' | 'keyword-only';
   degradationNote?: string;
+  ftsMatchMode?: 'and' | 'or';
 }
 
 export interface HybridStore {
@@ -104,7 +105,7 @@ export function createHybridStore(opts: HybridStoreOptions): HybridStore {
       const topK = options.topK ?? 10;
       const poolK = options.poolK ?? Math.max(50, topK * 5);
 
-      const ftsHits = fts.query(query, poolK);
+      const { hits: ftsHits, matchMode: ftsMatchMode } = fts.query(query, poolK);
       // Lightweight semantic-hit shape — we never need the BLOB vector after
       // the embedding store has scored it, so don't carry it through.
       type SemanticHit = {
@@ -251,6 +252,7 @@ export function createHybridStore(opts: HybridStoreOptions): HybridStore {
 
       const result: HybridSearchResult = { hits: sliced, searchMode };
       if (degradationNote) result.degradationNote = degradationNote;
+      if (ftsMatchMode === 'or') result.ftsMatchMode = ftsMatchMode;
       return result;
     },
 

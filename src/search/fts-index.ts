@@ -48,7 +48,7 @@ export interface FTSIndex {
    */
   upsert(docId: string, title: string, body: string, fileMtimeMs?: number): void;
   delete(docId: string): void;
-  query(text: string, limit: number): FTSHit[];
+  query(text: string, limit: number): { hits: FTSHit[]; matchMode: 'and' | 'or' };
   /** Scan vault dirs and reconcile fts_meta + notes_fts with the filesystem. */
   sync(vaultDirs: string[]): Promise<SyncStats>;
   /** Total docs currently indexed. */
@@ -160,11 +160,7 @@ export function openFTSIndex(db: Database.Database, opts: FTSIndexOptions): FTSI
     }
   }
 
-  function querySnippet(text: string, limit: number): FTSHit[] {
-    const trimmed = text.trim();
-    if (!trimmed) return [];
-    const sanitized = sanitizeFtsQuery(trimmed);
-    if (!sanitized) return [];
+  function runFtsQuery(sanitized: string, limit: number): FTSHit[] {
     try {
       // BM25 column weighting: doc_id (UNINDEXED) ignored, title 3x, body 1x.
       // Without a weight bias, raw term frequency in body trivially outranks
@@ -186,11 +182,31 @@ export function openFTSIndex(db: Database.Database, opts: FTSIndexOptions): FTSI
     }
   }
 
+  function querySnippet(text: string, limit: number): { hits: FTSHit[]; matchMode: 'and' | 'or' } {
+    const trimmed = text.trim();
+    if (!trimmed) return { hits: [], matchMode: 'and' };
+    const andQuery = sanitizeFtsQuery(trimmed);
+    if (!andQuery) return { hits: [], matchMode: 'and' };
+
+    const andHits = runFtsQuery(andQuery, limit);
+    if (andHits.length > 0) return { hits: andHits, matchMode: 'and' };
+
+    // AND found nothing — retry with OR so partial term overlap still
+    // surfaces candidates, letting BM25 ranking order them by quality
+    // rather than requiring every term to match (spec: grep-recall-
+    // improvements-design.md §3).
+    const orQuery = sanitizeFtsQueryOr(trimmed);
+    if (!orQuery) return { hits: [], matchMode: 'and' };
+    const orHits = runFtsQuery(orQuery, limit);
+    if (orHits.length > 0) return { hits: orHits, matchMode: 'or' };
+    return { hits: [], matchMode: 'and' };
+  }
+
   return {
     upsert: upsertImpl,
     delete: deleteImpl,
 
-    query(text: string, limit: number): FTSHit[] {
+    query(text: string, limit: number): { hits: FTSHit[]; matchMode: 'and' | 'or' } {
       return querySnippet(text, limit);
     },
 
@@ -305,4 +321,18 @@ export function sanitizeFtsQuery(query: string): string {
     .filter((t) => t.length > 0);
   if (tokens.length === 0) return '';
   return tokens.map((t) => `"${t}"`).join(' ');
+}
+
+/**
+ * Same tokenization/sanitization as `sanitizeFtsQuery`, but joins tokens
+ * with `OR` instead of implicit AND — used as a recall fallback when the
+ * AND query finds nothing (spec: grep-recall-improvements-design.md §3).
+ */
+export function sanitizeFtsQueryOr(query: string): string {
+  const tokens = query
+    .split(/[^\p{L}\p{N}_]+/u)
+    .map((t) => t.replace(/"/g, '').trim())
+    .filter((t) => t.length > 0);
+  if (tokens.length === 0) return '';
+  return tokens.map((t) => `"${t}"`).join(' OR ');
 }

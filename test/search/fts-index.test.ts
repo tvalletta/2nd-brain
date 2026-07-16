@@ -25,7 +25,7 @@ describe('fts-index', () => {
   it('upserts and queries returning ranked results', () => {
     index.upsert('a.md', 'FSRS algorithm', 'spaced repetition with retention forecasting');
     index.upsert('b.md', 'Cooking 101', 'how to make a roux');
-    const hits = index.query('FSRS', 5);
+    const { hits } = index.query('FSRS', 5);
     expect(hits.length).toBeGreaterThan(0);
     expect(hits[0].docId).toBe('a.md');
   });
@@ -33,27 +33,27 @@ describe('fts-index', () => {
   it('title matches outrank pure body matches when terms are equally distributed', () => {
     index.upsert('a.md', 'FSRS', 'mention of fsrs once');
     index.upsert('b.md', 'Misc', 'fsrs fsrs fsrs but title is unrelated');
-    const hits = index.query('fsrs', 5);
+    const { hits } = index.query('fsrs', 5);
     expect(hits[0].docId).toBe('a.md');
   });
 
   it('multi-word query requires ALL terms to be present (FTS5 default AND)', () => {
     index.upsert('a.md', 'A', 'apple banana');
     index.upsert('b.md', 'B', 'apple only');
-    const hits = index.query('apple banana', 5);
+    const { hits } = index.query('apple banana', 5);
     expect(hits.map((h) => h.docId)).toEqual(['a.md']);
   });
 
   it('delete removes a doc from query results', () => {
     index.upsert('a.md', 'A', 'unique-token-zzz');
-    expect(index.query('unique-token-zzz', 5)).toHaveLength(1);
+    expect(index.query('unique-token-zzz', 5).hits).toHaveLength(1);
     index.delete('a.md');
-    expect(index.query('unique-token-zzz', 5)).toHaveLength(0);
+    expect(index.query('unique-token-zzz', 5).hits).toHaveLength(0);
   });
 
   it('snippet() returns content around the match', () => {
     index.upsert('a.md', 'A', 'before before before TARGET after after after');
-    const hits = index.query('TARGET', 1);
+    const { hits } = index.query('TARGET', 1);
     expect(hits[0].snippet).toMatch(/«TARGET»/);
   });
 
@@ -89,8 +89,12 @@ describe('fts-index', () => {
     expect(r3.unchanged).toBe(0);
 
     // Edit reflected in queries.
-    expect(index.query('first-content-edited', 1)).toHaveLength(1);
-    expect(index.query('second-content', 1)).toHaveLength(0);
+    expect(index.query('first-content-edited', 1).hits).toHaveLength(1);
+    // Note: 'second-content' now falls back to OR and finds 'content' in a.md
+    // (which contains 'first-content-edited'), matching the OR-fallback behavior.
+    const secondContentResult = index.query('second-content', 1);
+    expect(secondContentResult.matchMode).toBe('or');
+    expect(secondContentResult.hits.map((h) => h.docId)).toEqual(['wiki/a.md']);
   });
 
   it('frontmatter title is extracted; falls back to path when missing', async () => {
@@ -99,7 +103,7 @@ describe('fts-index', () => {
     await writeFile(join(wiki, 'titled.md'), '---\ntitle: My Title\n---\nbody', 'utf-8');
     await writeFile(join(wiki, 'untitled.md'), 'body-only-no-frontmatter', 'utf-8');
     await index.sync(['wiki']);
-    const titledHit = index.query('My Title', 1);
+    const { hits: titledHit } = index.query('My Title', 1);
     expect(titledHit[0]?.docId).toBe('wiki/titled.md');
   });
 });
@@ -123,5 +127,62 @@ describe('sanitizeFtsQuery', () => {
   it('preserves Unicode tokens (accented, CJK)', () => {
     expect(sanitizeFtsQuery('résumé café')).toBe('"résumé" "café"');
     expect(sanitizeFtsQuery('東京 タワー')).toBe('"東京" "タワー"');
+  });
+});
+
+describe('AND-first, OR-fallback query relaxation', () => {
+  let dir: string;
+  let db: Database.Database;
+  let index: FTSIndex;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-fts-andor-'));
+    db = new Database(join(dir, 'fts.sqlite'));
+    db.pragma('journal_mode = WAL');
+    index = openFTSIndex(db, { vaultRoot: dir });
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('reports matchMode "and" when the exact AND query finds results', () => {
+    index.upsert('doc1.md', 'Doc One', 'apple banana cherry');
+    const result = index.query('apple banana', 5);
+    expect(result.matchMode).toBe('and');
+    expect(result.hits).toHaveLength(1);
+  });
+
+  it('falls back to OR and reports matchMode "or" when AND finds zero results', () => {
+    index.upsert('doc2.md', 'Doc Two', 'apple only, no other fruit here');
+    index.upsert('doc3.md', 'Doc Three', 'banana only, no other fruit here');
+    // "apple banana" as AND matches neither doc2 nor doc3 (each has only one term).
+    const result = index.query('apple banana', 5);
+    expect(result.matchMode).toBe('or');
+    expect(result.hits.map((h) => h.docId).sort()).toEqual(['doc2.md', 'doc3.md']);
+  });
+
+  it('does not fall back to OR when AND already found at least one result', () => {
+    index.upsert('doc4.md', 'Doc Four', 'apple banana together');
+    index.upsert('doc5.md', 'Doc Five', 'apple only');
+    const result = index.query('apple banana', 5);
+    expect(result.matchMode).toBe('and');
+    // Only doc4 matches AND; doc5 (apple-only) must NOT appear even though
+    // it would match under OR — proves the fallback didn't fire.
+    expect(result.hits.map((h) => h.docId)).toEqual(['doc4.md']);
+  });
+
+  it('single-term queries are unaffected by AND/OR distinction', () => {
+    index.upsert('doc6.md', 'Doc Six', 'unique-single-term-zzz');
+    const result = index.query('unique-single-term-zzz', 5);
+    expect(result.matchMode).toBe('and');
+    expect(result.hits).toHaveLength(1);
+  });
+
+  it('returns matchMode "and" with empty hits when even OR finds nothing', () => {
+    const result = index.query('completely-absent-term-xyz', 5);
+    expect(result.matchMode).toBe('and');
+    expect(result.hits).toHaveLength(0);
   });
 });
