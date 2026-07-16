@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
 import { openFTSIndex } from '../../src/search/fts-index.js';
 import { rebuildFtsWithStemmer, swapFtsTable } from '../../src/maintenance/rebuild-fts-tokenizer.js';
+import { openEmbeddingStore } from '../../src/embeddings/store.js';
+import { createDeterministicProvider } from '../../src/embeddings/provider.js';
 
 describe('rebuildFtsWithStemmer', () => {
   let vaultDir: string;
@@ -53,6 +55,54 @@ describe('rebuildFtsWithStemmer', () => {
     // Porter-stemmed: "meeting" and "meetings" collapse to the same stem, so
     // this must match c.md (which only contains "meetings", plural) too.
     expect(rows.some((r) => r.doc_id.endsWith('c.md'))).toBe(true);
+  });
+
+  it('leaves the embeddings table (sharing this same database file) byte-for-byte untouched across build + swap', async () => {
+    interface RawEmbeddingRow {
+      provider_id: string;
+      doc_id: string;
+      chunk_index: number;
+      chunk_hash: string;
+      text: string;
+      vector: Buffer;
+      metadata: string;
+      updated_at: string;
+    }
+
+    // Real schema, real store, real provider — createDeterministicProvider()
+    // is the hash-based fallback used by tests, requiring no network/model
+    // dependency. Sharing `db` mirrors production, where notes_fts and
+    // embeddings live in the same .karpathy/state/embeddings.sqlite file.
+    const provider = createDeterministicProvider();
+    const store = openEmbeddingStore({ db, provider });
+    await store.upsert([
+      {
+        doc_id: 'wiki/a.md',
+        chunk_index: 0,
+        chunk_hash: 'hash-abc123',
+        text: 'We made several decisions this week about meeting cadence.',
+        metadata: { source: 'wiki/a.md' },
+      },
+    ]);
+
+    const before = db.prepare(`SELECT * FROM embeddings ORDER BY doc_id, chunk_index`).all() as RawEmbeddingRow[];
+    expect(before).toHaveLength(1);
+
+    await rebuildFtsWithStemmer(db, vaultDir, ['wiki']);
+    swapFtsTable(db);
+
+    const after = db.prepare(`SELECT * FROM embeddings ORDER BY doc_id, chunk_index`).all() as RawEmbeddingRow[];
+    expect(after).toHaveLength(1);
+    expect(after[0].provider_id).toBe(before[0].provider_id);
+    expect(after[0].doc_id).toBe(before[0].doc_id);
+    expect(after[0].chunk_index).toBe(before[0].chunk_index);
+    expect(after[0].chunk_hash).toBe(before[0].chunk_hash);
+    expect(after[0].text).toBe(before[0].text);
+    expect(after[0].metadata).toBe(before[0].metadata);
+    expect(after[0].updated_at).toBe(before[0].updated_at);
+    expect(Buffer.compare(after[0].vector, before[0].vector)).toBe(0);
+
+    store.close();
   });
 });
 
