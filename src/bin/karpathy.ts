@@ -2,6 +2,7 @@ import { resolve, join, dirname } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
 
 // Load .env from project root synchronously so env vars are available before any client is created
 try {
@@ -1503,8 +1504,10 @@ async function maintenanceCommand(args: string[]): Promise<void> {
   const pruneArg = args.find((a) => a.startsWith('--prune-provider'));
   const folderArgIdx = args.indexOf('--folder');
   const folderArg = folderArgIdx !== -1 ? args[folderArgIdx + 1] : undefined;
+  const rebuildFtsTokenizer = args.includes('--rebuild-fts-tokenizer');
+  const confirmSwap = args.includes('--confirm');
 
-  if (!populateFts && !reEmbed && !pruneArg) {
+  if (!populateFts && !reEmbed && !pruneArg && !rebuildFtsTokenizer) {
     process.stderr.write(
       [
         'Usage: karpathy maintenance <flag>',
@@ -1517,6 +1520,11 @@ async function maintenanceCommand(args: string[]): Promise<void> {
         '                          any vault-relative path (e.g. "AI Conversations").',
         '  --prune-provider <id>   Delete every embedding row owned by <id>. Use after',
         '                          switching providers (e.g. titan-v2-1024 -> ollama).',
+        '  --rebuild-fts-tokenizer [--confirm]  Build a Porter-stemmed replacement for',
+        '                          the FTS5 index (build-verify-swap). Without --confirm,',
+        '                          only builds + reports counts; never touches the live',
+        '                          table. Pass --confirm to perform the atomic swap after',
+        '                          reviewing the dry-run numbers.',
         '',
       ].join('\n'),
     );
@@ -1600,6 +1608,46 @@ async function maintenanceCommand(args: string[]): Promise<void> {
       );
     } finally {
       store.close();
+    }
+  }
+
+  if (rebuildFtsTokenizer) {
+    // Same db path convention as openHybridStoreFromConfig/openStoreFromConfig
+    // above — one shared SQLite file for both the embedding store and the
+    // FTS index. This command only ever opens a raw handle to run DDL against
+    // notes_fts/notes_fts_v2 — it must not touch the `embeddings` table.
+    const dbPath = join(projectRoot, config.stateDir, 'embeddings.sqlite');
+    const db = new Database(dbPath);
+    try {
+      const { rebuildFtsWithStemmer, swapFtsTable } = await import('../maintenance/rebuild-fts-tokenizer.js');
+      const vaultDirs = [config.layout.wiki, config.layout.aiSummaries, config.layout.sources, config.layout.review];
+      process.stdout.write('Building new Porter-stemmed FTS table (does not touch the live table yet)...\n');
+      const result = await rebuildFtsWithStemmer(db, config.vaultPath, vaultDirs);
+      process.stdout.write(
+        `Old table: ${result.oldCount} rows. New table: ${result.newCount} rows. Sample queries OK: ${result.sampleQueriesOk}.\n`,
+      );
+      if (!result.sampleQueriesOk) {
+        process.stderr.write(
+          'Sample verification queries failed against the new table — NOT swapping. Investigate before retrying.\n',
+        );
+        return;
+      }
+      if (Math.abs(result.newCount - result.oldCount) > result.oldCount * 0.05) {
+        process.stderr.write(
+          `New table's row count differs from the old table by more than 5% (${result.oldCount} -> ${result.newCount}) — NOT swapping automatically. Investigate before retrying with --confirm.\n`,
+        );
+        return;
+      }
+      if (!confirmSwap) {
+        process.stdout.write('Dry run complete and looks safe. Re-run with --confirm to perform the live swap.\n');
+        return;
+      }
+      swapFtsTable(db);
+      process.stdout.write(
+        'Swap complete. Old table preserved as notes_fts_old for one verification cycle — drop it manually once confirmed working.\n',
+      );
+    } finally {
+      db.close();
     }
   }
 }
@@ -1735,6 +1783,8 @@ async function main(): Promise<void> {
           '                        --populate-fts          Build/refresh the FTS5 keyword index',
           '                        --re-embed              Re-embed wiki notes with the current provider',
           '                        --prune-provider <id>   Drop rows under a stale provider id',
+          '                        --rebuild-fts-tokenizer [--confirm]  Build-verify-swap rebuild',
+          '                                                of the FTS5 index with a Porter stemmer',
           '  drain-queue         Drain pending jobs (used by background hooks)',
           '  ingest <file> [--enrich]  Ingest a raw source file (--enrich for LLM enrichment)',
           '  reingest [--no-enrich]    Re-ingest all raw files through the pipeline',
