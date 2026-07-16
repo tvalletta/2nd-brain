@@ -38,7 +38,7 @@ const REPO_ROOT = join(import.meta.dirname, '..', '..');
  * observed so far is 61 candidates; 8192 covers that with headroom. */
 const JUDGE_MAX_TOKENS = 8192;
 
-async function main() {
+export async function main() {
   const dryRun = process.argv.includes('--dry-run');
   const onlyArg = process.argv.find((a) => a.startsWith('--only='));
   const onlyPrefix = onlyArg?.slice('--only='.length);

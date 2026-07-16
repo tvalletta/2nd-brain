@@ -105,7 +105,7 @@ export async function buildPoolForItem(
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
 
-async function main() {
+export async function main() {
   const onlyArg = process.argv.find((a) => a.startsWith('--only='));
   const onlyPrefix = onlyArg?.slice('--only='.length);
 
