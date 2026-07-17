@@ -226,6 +226,90 @@ describe('buildBakeoff', () => {
   });
 });
 
+describe('subtype-scoped bootstrap CIs', () => {
+  // NOTE: the task brief referenced a `buildFixtureBakeoffInput()` helper
+  // that doesn't actually exist in this file. The real convention (seen in
+  // the `buildBakeoff` describe block above) is inline fixtures built with
+  // the module-level `judgment()`/`runResult()` helpers, so that's what's
+  // used here.
+  //
+  // fuzzy-* items get a mix of hits/misses (recalls: 1, 0.5, 0, 1, 1) while
+  // the non-fuzzy decisions items are all perfect hits (recalls: 1, 1, 1) --
+  // distinct known values so the two groups' bootstrap CIs are distinguishable.
+  const subtypeJudgments = [
+    judgment('fuzzy-001', 'f1.md', 2),
+    judgment('fuzzy-002', 'f2.md', 2),
+    judgment('fuzzy-002', 'f2b.md', 2), // fuzzy-002 has 2 relevant docs; only 1 is returned below -> recall 0.5
+    judgment('fuzzy-003', 'f3.md', 2),
+    judgment('fuzzy-004', 'f4.md', 2),
+    judgment('fuzzy-005', 'f5.md', 2),
+    judgment('relationship-001', 'r1.md', 2),
+    judgment('relationship-002', 'r2.md', 2),
+    judgment('relationship-003', 'r3.md', 2),
+    judgment('decisions-101', 'd1.md', 2),
+    judgment('decisions-102', 'd2.md', 2),
+    judgment('decisions-103', 'd3.md', 2),
+  ];
+
+  function subtypeResultsForVariant(variant: string, latencyMs: number, tokens: number): RunResult[] {
+    return [
+      runResult('fuzzy-001', variant, [{ path: 'f1.md', rank: 0, final: 1, excerpt: '' }], latencyMs, tokens),
+      runResult('fuzzy-002', variant, [{ path: 'f2.md', rank: 0, final: 1, excerpt: '' }], latencyMs, tokens), // 1 of 2 relevant -> recall 0.5
+      runResult('fuzzy-003', variant, [], latencyMs, tokens), // miss -> recall 0
+      runResult('fuzzy-004', variant, [{ path: 'f4.md', rank: 0, final: 1, excerpt: '' }], latencyMs, tokens),
+      runResult('fuzzy-005', variant, [{ path: 'f5.md', rank: 0, final: 1, excerpt: '' }], latencyMs, tokens),
+      runResult('relationship-001', variant, [{ path: 'r1.md', rank: 0, final: 1, excerpt: '' }], latencyMs, tokens),
+      runResult('relationship-002', variant, [], latencyMs, tokens), // miss -> recall 0
+      runResult('relationship-003', variant, [{ path: 'r3.md', rank: 0, final: 1, excerpt: '' }], latencyMs, tokens),
+      runResult('decisions-101', variant, [{ path: 'd1.md', rank: 0, final: 1, excerpt: '' }], latencyMs, tokens),
+      runResult('decisions-102', variant, [{ path: 'd2.md', rank: 0, final: 1, excerpt: '' }], latencyMs, tokens),
+      runResult('decisions-103', variant, [{ path: 'd3.md', rank: 0, final: 1, excerpt: '' }], latencyMs, tokens),
+    ];
+  }
+
+  const subtypeRunsResults: RunResult[] = [
+    ...subtypeResultsForVariant('grep-first', 200, 2000),
+    ...subtypeResultsForVariant('full-cov-hybrid', 100, 1000),
+  ];
+
+  const subtypeScorecard: Scorecard = {
+    run: { date: '2026-07-16', generated_at: 'x', db_doc_count: 100, any_degraded_runs: false },
+    by_category_variant: [],
+    routing: {},
+    coverage: {},
+  };
+
+  const subtypeBackfillReport = { notes_embedded: 1, wall_clock_min: 1, db_size_delta_gb: 1 };
+
+  it('reports recall/precision/mrr CIs for fuzzy-* items separately from the rest of the decisions category', () => {
+    const result = buildBakeoff({
+      runsResults: subtypeRunsResults,
+      scorecard: subtypeScorecard,
+      judgments: subtypeJudgments,
+      backfillReport: subtypeBackfillReport,
+    });
+    const fuzzySlice = result.subtypeSlices?.find((s) => s.idPrefix === 'fuzzy-');
+    expect(fuzzySlice).toBeDefined();
+    expect(fuzzySlice!.byVariant['grep-first'].recall_ci).toHaveLength(2);
+    // CI bounds must bracket the point estimate.
+    const [low, high] = fuzzySlice!.byVariant['grep-first'].recall_ci;
+    expect(low).toBeLessThanOrEqual(high);
+  });
+
+  it('composite_ci is present and brackets the point-estimate composite for the relationship slice', () => {
+    const result = buildBakeoff({
+      runsResults: subtypeRunsResults,
+      scorecard: subtypeScorecard,
+      judgments: subtypeJudgments,
+      backfillReport: subtypeBackfillReport,
+    });
+    const relationshipSlice = result.subtypeSlices?.find((s) => s.idPrefix === 'relationship-');
+    expect(relationshipSlice).toBeDefined();
+    const ci = relationshipSlice!.byVariant['full-cov-hybrid'].composite_ci;
+    expect(ci[0]).toBeLessThanOrEqual(ci[1]);
+  });
+});
+
 describe('renderBakeoffMarkdown', () => {
   it('includes the winner, margin, and a composite table row per arm', () => {
     const bakeoff = buildBakeoff({

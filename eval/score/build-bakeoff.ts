@@ -5,6 +5,7 @@ import type { Judgment } from '../pool/judge.js';
 import { VARIANT_PROFILES } from '../run/variants.js';
 import { computeCell, buildRelevanceIndex, type MetricCell, type Scorecard } from './build-scorecard.js';
 import { median, percentile } from './stats.js';
+import { bootstrapCI } from './bootstrap.js';
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..');
 
@@ -38,6 +39,16 @@ export interface Bakeoff {
   backfill_ledger: { notes_embedded: number; wall_clock_min: number; db_size_delta_gb: number };
   arms: ArmComposite[];
   verdict: BakeoffVerdict;
+  subtypeSlices?: Array<{
+    label: string;
+    idPrefix: string;
+    byVariant: Record<string, {
+      recall_ci: [number, number];
+      precision_ci: [number, number];
+      mrr_ci: [number, number];
+      composite_ci: [number, number];
+    }>;
+  }>;
 }
 
 export interface BakeoffInput {
@@ -77,6 +88,50 @@ function pooledAccuracyCell(
 
 function accuracySub(cell: MetricCell): number {
   return 0.6 * cell.recall_at_k.mean + 0.25 * cell.precision_at_k.mean + 0.15 * cell.mrr.mean;
+}
+
+/** Bootstrap 95% CIs for recall/precision/MRR on a single id-prefix slice
+ * (e.g. "fuzzy-" or "relationship-") of one contender's results, plus a
+ * composite-level CI that only propagates accuracy-side resampling
+ * uncertainty — latency/tokens/simplicity sub-scores are held fixed at
+ * their point estimates, since they aren't naturally item-resampled
+ * quantities the same way per-item recall/precision/MRR are. This is a
+ * stated, documented limitation of the composite CI, not a full
+ * uncertainty propagation (spec: eval-methodology-hardening-design.md §7.3). */
+function subtypeSliceCIs(
+  idPrefix: string,
+  variantResults: RunResult[],
+  relevanceIndex: ReturnType<typeof buildRelevanceIndex>,
+  fixedLatSub: number,
+  fixedTokSub: number,
+  fixedSimSub: number,
+): {
+  recall_ci: [number, number];
+  precision_ci: [number, number];
+  mrr_ci: [number, number];
+  composite_ci: [number, number];
+} {
+  const sliceResults = variantResults.filter((r) => r.itemId.startsWith(idPrefix));
+  const recalls: number[] = [];
+  const precisions: number[] = [];
+  const rrs: number[] = [];
+  const composites: number[] = [];
+
+  for (const result of sliceResults) {
+    const cell = computeCell(10, 'e', 'full-corpus', [result], relevanceIndex);
+    recalls.push(cell.recall_at_k.mean);
+    precisions.push(cell.precision_at_k.mean);
+    rrs.push(cell.mrr.mean);
+    const itemAccSub = 0.6 * cell.recall_at_k.mean + 0.25 * cell.precision_at_k.mean + 0.15 * cell.mrr.mean;
+    composites.push(0.5 * itemAccSub + 0.2 * fixedLatSub + 0.15 * fixedTokSub + 0.15 * fixedSimSub);
+  }
+
+  return {
+    recall_ci: bootstrapCI(recalls),
+    precision_ci: bootstrapCI(precisions),
+    mrr_ci: bootstrapCI(rrs),
+    composite_ci: bootstrapCI(composites),
+  };
 }
 
 /** Pure bake-off assembly — no file I/O, directly unit-testable with small
@@ -169,6 +224,26 @@ export function buildBakeoff(input: BakeoffInput): Bakeoff {
     };
   });
 
+  const subtypeSlices = [
+    { label: 'fuzzy-recall', idPrefix: 'fuzzy-' },
+    { label: 'relationship', idPrefix: 'relationship-' },
+  ].map(({ label, idPrefix }) => {
+    const byVariant: Record<string, ReturnType<typeof subtypeSliceCIs>> = {};
+    for (const name of CONTENDERS) {
+      const variantResults = runsResults.filter((r) => r.variant === name);
+      const arm = arms.find((a) => a.name === name)!;
+      byVariant[name] = subtypeSliceCIs(
+        idPrefix,
+        variantResults,
+        relevanceIndex,
+        arm.latency.sub,
+        arm.tokens.sub,
+        arm.simplicity.sub,
+      );
+    }
+    return { label, idPrefix, byVariant };
+  });
+
   const [a, b] = arms;
   const margin = Math.abs(a.composite - b.composite);
   // Ties within 0.03 go to grep-first (simplicity tiebreak, spec §4.5's stated lean).
@@ -199,6 +274,7 @@ export function buildBakeoff(input: BakeoffInput): Bakeoff {
     },
     arms,
     verdict: { winner, margin: +margin.toFixed(3), rationale, mixed },
+    subtypeSlices,
   };
 }
 
@@ -225,6 +301,28 @@ export function renderBakeoffMarkdown(bakeoff: Bakeoff): string {
     );
   }
   lines.push('');
+  for (const slice of bakeoff.subtypeSlices ?? []) {
+    lines.push(`## ${slice.label} (subtype-scoped, with 95% CI)`, '');
+    lines.push(`| Variant | Recall@10 CI | Precision@10 CI | MRR CI | Composite CI |`);
+    lines.push(`|---|---|---|---|---|`);
+    for (const [variant, ci] of Object.entries(slice.byVariant)) {
+      lines.push(
+        `| ${variant} | [${ci.recall_ci[0].toFixed(3)}, ${ci.recall_ci[1].toFixed(3)}] | ` +
+        `[${ci.precision_ci[0].toFixed(3)}, ${ci.precision_ci[1].toFixed(3)}] | ` +
+        `[${ci.mrr_ci[0].toFixed(3)}, ${ci.mrr_ci[1].toFixed(3)}] | ` +
+        `[${ci.composite_ci[0].toFixed(3)}, ${ci.composite_ci[1].toFixed(3)}] |`,
+      );
+    }
+    lines.push('');
+  }
+  if ((bakeoff.subtypeSlices?.length ?? 0) > 0) {
+    lines.push(
+      `_Composite CIs only propagate accuracy-side resampling uncertainty — ` +
+      `latency/tokens/simplicity sub-scores are held fixed at their point estimates ` +
+      `for this computation (see spec §7.3)._`,
+      '',
+    );
+  }
   lines.push(`## By category`, '');
   const categories = [...new Set(bakeoff.arms.flatMap((arm) => Object.keys(arm.by_category)))].sort();
   if (categories.length > 0) {
