@@ -958,5 +958,113 @@
     "is_regression": false,
     "query_truncated": false,
     "needs_review": false
+  },
+  {
+    "id": "relationship-001",
+    "query": "Besides pvaughn, who else on the Directors Squad ended up owning one of the three restructured recurring meetings that came out of the offsite?",
+    "category": "entities",
+    "subtype": "relationship",
+    "source": "synthetic",
+    "source_ref": "author:relationship-authored",
+    "intent": "entity-graph-walk test: Directors Squad membership -> meeting-ownership assignment for two other members",
+    "is_regression": false,
+    "query_truncated": false,
+    "needs_review": false
+  },
+  {
+    "id": "relationship-002",
+    "query": "Kevin Bement's group-management style was compared against two peer team leads during his calibration review - who were they, and what leadership trait were they both praised for that he was implicitly being measured against?",
+    "category": "entities",
+    "subtype": "relationship",
+    "source": "synthetic",
+    "source_ref": "author:relationship-authored",
+    "intent": "entity-graph-walk test: one person's review references two named peers plus the shared trait connecting all three",
+    "is_regression": false,
+    "query_truncated": false,
+    "needs_review": false
+  },
+  {
+    "id": "relationship-003",
+    "query": "Who evaluated Matt Newman during his calibration review, and what recurring criticism did that same evaluator flag about people who lean too far into future strategic thinking rather than execution?",
+    "category": "entities",
+    "subtype": "relationship",
+    "source": "synthetic",
+    "source_ref": "author:relationship-authored",
+    "intent": "entity-graph-walk test: evaluator -> subject -> characterization, cross-referenced from both entities' notes",
+    "is_regression": false,
+    "query_truncated": false,
+    "needs_review": false
+  },
+  {
+    "id": "relationship-004",
+    "query": "In the calibration review notes, which colleague was Arevik unfavorably compared to on the basis of team visibility, and what was that colleague specifically noted for by contrast?",
+    "category": "entities",
+    "subtype": "relationship",
+    "source": "synthetic",
+    "source_ref": "author:relationship-authored",
+    "intent": "entity-graph-walk test: mutually cross-referencing peer-comparison pair",
+    "is_regression": false,
+    "query_truncated": false,
+    "needs_review": false
+  },
+  {
+    "id": "fuzzy-001",
+    "query": "that meeting where we went back and forth on how you'd even build trust in work that AI generated when the reviewers can't keep up with how much of it there is",
+    "category": "decisions",
+    "subtype": "lookup",
+    "source": "synthetic",
+    "source_ref": "author:fuzzy-recall-verified",
+    "intent": "paraphrase-only recall test (no exact terms) - same underlying meeting as decisions-001, phrased as natural narrative recall instead of keyword salad",
+    "is_regression": false,
+    "query_truncated": false,
+    "needs_review": false
+  },
+  {
+    "id": "fuzzy-002",
+    "query": "the ask from a stakeholder who just wants the short version up front instead of having to dig through a big interactive document to find what actually matters",
+    "category": "decisions",
+    "subtype": "lookup",
+    "source": "synthetic",
+    "source_ref": "author:fuzzy-recall-verified",
+    "intent": "paraphrase-only recall test (no exact terms, no name)",
+    "is_regression": false,
+    "query_truncated": false,
+    "needs_review": false
+  },
+  {
+    "id": "fuzzy-003",
+    "query": "the realization that if your main account runs dry mid-session, the tool won't automatically switch you over to the backup way of paying for it - that has to be decided ahead of time",
+    "category": "decisions",
+    "subtype": "lookup",
+    "source": "synthetic",
+    "source_ref": "author:fuzzy-recall-verified",
+    "intent": "paraphrase-only recall test (no tool/vendor names)",
+    "is_regression": false,
+    "query_truncated": false,
+    "needs_review": false
+  },
+  {
+    "id": "fuzzy-004",
+    "query": "the call that each team gets to pick its own meeting cadence instead of being told when to meet, even though everyone's encouraged to get together often",
+    "category": "decisions",
+    "subtype": "lookup",
+    "source": "synthetic",
+    "source_ref": "author:fuzzy-recall-verified",
+    "intent": "paraphrase-only recall test (no org/group names)",
+    "is_regression": false,
+    "query_truncated": false,
+    "needs_review": false
+  },
+  {
+    "id": "fuzzy-005",
+    "query": "the request to double check a prior batch of review findings against good design principles before anyone trusts them",
+    "category": "decisions",
+    "subtype": "lookup",
+    "source": "synthetic",
+    "source_ref": "author:fuzzy-recall-verified",
+    "intent": "paraphrase-only recall test (no exact terms)",
+    "is_regression": false,
+    "query_truncated": false,
+    "needs_review": false
   }
 ]
