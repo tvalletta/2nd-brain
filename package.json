@@ -25,6 +25,7 @@
     "eval:score": "tsx eval/score/build-scorecard.ts",
     "eval:arm-b-backfill": "tsx eval/state/backfill-arm-b.ts",
     "eval:bakeoff": "tsx eval/score/build-bakeoff.ts",
+    "eval:answer-quality": "tsx eval/report/main.ts",
     "eval:typecheck": "tsc --noEmit -p tsconfig.eval.json"
   },
   "engines": {
