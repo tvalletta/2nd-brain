@@ -62,7 +62,7 @@ export interface HybridSearchOptions {
 
 export interface HybridSearchResult {
   hits: HybridHit[];
-  searchMode: 'hybrid' | 'keyword-only';
+  searchMode: 'hybrid' | 'keyword-only' | 'keyword-with-semantic-fallback';
   degradationNote?: string;
   ftsMatchMode?: 'and' | 'or';
 }
@@ -121,14 +121,31 @@ export function createHybridStore(opts: HybridStoreOptions): HybridStore {
         similarity: number;
       };
       let semanticHits: SemanticHit[] = [];
-      let searchMode: 'hybrid' | 'keyword-only' = 'hybrid';
+      let searchMode: 'hybrid' | 'keyword-only' | 'keyword-with-semantic-fallback' = 'hybrid';
       let degradationNote: string | undefined;
 
-      // Embedding pool — gated on provider availability.
-      const providerUp =
-        config.embeddings.provider === 'ollama' ? await isProviderAvailable() : true;
+      // Confidence gate (spec: semantic-latency-fallback-design.md §4): when
+      // the fallback feature is enabled, only consult the semantic pool if
+      // keyword search alone looks under-confident — zero hits or fewer
+      // than 3. Score-based gating is deliberately deferred until real
+      // BM25-score-distribution calibration data exists (see the plan's
+      // Task 3 post-plan note), rather than guessing a cutoff. When the
+      // flag is off, behavior is byte-for-byte the pre-existing always-on
+      // path.
+      const keywordLooksLowConfidence = ftsHits.length === 0 || ftsHits.length < 3;
+      const shouldConsultSemantic =
+        !config.search.semanticFallbackEnabled || keywordLooksLowConfidence;
+      const isFallbackAttempt =
+        config.search.semanticFallbackEnabled && keywordLooksLowConfidence;
 
-      if (providerUp) {
+      // Embedding pool — gated on provider availability (and, when the
+      // fallback flag is on, on keyword confidence too).
+      const providerUp =
+        shouldConsultSemantic && config.embeddings.provider === 'ollama'
+          ? await isProviderAvailable()
+          : shouldConsultSemantic;
+
+      if (shouldConsultSemantic && providerUp) {
         try {
           const raw = await embeddings.search(query, { topK: poolK });
           semanticHits = raw.map((h) => ({
@@ -140,10 +157,13 @@ export function createHybridStore(opts: HybridStoreOptions): HybridStore {
             updated_at: h.updated_at,
             similarity: h.similarity,
           }));
+          if (isFallbackAttempt) searchMode = 'keyword-with-semantic-fallback';
         } catch (err) {
           searchMode = 'keyword-only';
           degradationNote = `Semantic search unavailable: ${(err as Error).message}. Returning keyword results only.`;
         }
+      } else if (!shouldConsultSemantic) {
+        searchMode = 'keyword-only';
       } else {
         searchMode = 'keyword-only';
         degradationNote =

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -308,5 +308,81 @@ describe('hybrid store', () => {
     const ids = result.hits.map((h) => h.docId).sort();
     expect(ids).toContain('apple.md');
     expect(ids).toContain('banana.md');
+  });
+
+  describe('confidence-gated semantic fallback', () => {
+    async function buildStoreWithFlag(semanticFallbackEnabled: boolean) {
+      const fbDir = await mkdtemp(join(tmpdir(), 'karpathy-hybrid-fb-'));
+      const fbConfig = KarpathyConfigSchema.parse({
+        vaultPath: fbDir,
+        embeddings: { provider: 'deterministic' },
+        search: { semanticFallbackEnabled },
+      });
+      const fbDb = new Database(join(fbDir, 'hybrid.sqlite'));
+      fbDb.pragma('journal_mode = WAL');
+      const fbFts = openFTSIndex(fbDb, { vaultRoot: fbDir });
+      const fbEmbeddings = openEmbeddingStore({ db: fbDb, provider: createDeterministicProvider() });
+      const searchSpy = vi.spyOn(fbEmbeddings, 'search');
+      const fbStore = createHybridStore({ config: fbConfig, db: fbDb, fts: fbFts, embeddings: fbEmbeddings });
+      return {
+        store: fbStore,
+        searchSpy,
+        cleanup: async () => {
+          fbStore.close();
+          fbDb.close();
+          await rm(fbDir, { recursive: true, force: true });
+        },
+      };
+    }
+
+    it('does not run the semantic path when keyword search already found >= 3 hits and semanticFallbackEnabled is true', async () => {
+      const { store: fbStore, searchSpy, cleanup } = await buildStoreWithFlag(true);
+      try {
+        await fbStore.upsertDoc('a.md', 'Banana', 'banana harness one', []);
+        await fbStore.upsertDoc('b.md', 'Banana', 'banana harness two', []);
+        await fbStore.upsertDoc('c.md', 'Banana', 'banana harness three', []);
+        const result = await fbStore.search('banana harness');
+        expect(searchSpy).not.toHaveBeenCalled();
+        expect(result.searchMode).toBe('keyword-only');
+      } finally {
+        await cleanup();
+      }
+    });
+
+    it('runs the semantic path as a fallback when keyword search returns zero hits and semanticFallbackEnabled is true', async () => {
+      const { store: fbStore, searchSpy, cleanup } = await buildStoreWithFlag(true);
+      try {
+        await fbStore.upsertDoc(
+          'd.md',
+          'Sourdough',
+          'sourdough starter feeding schedule',
+          [
+            {
+              doc_id: 'd.md',
+              chunk_index: 0,
+              chunk_hash: 'h1',
+              text: 'sourdough starter feeding schedule',
+              metadata: { type: 'concept' },
+            },
+          ],
+        );
+        const result = await fbStore.search('a completely different unrelated topic zzz');
+        expect(searchSpy).toHaveBeenCalled();
+        expect(result.searchMode).toBe('keyword-with-semantic-fallback');
+      } finally {
+        await cleanup();
+      }
+    });
+
+    it('never runs the semantic path at all when semanticFallbackEnabled is false, regardless of keyword confidence', async () => {
+      const { store: fbStore, searchSpy, cleanup } = await buildStoreWithFlag(false);
+      try {
+        const result = await fbStore.search('zero fts hits for this query zzz');
+        expect(searchSpy).toHaveBeenCalled(); // unchanged today's behavior: always consults semantic when flag is off
+        expect(result.searchMode).toBe('hybrid');
+      } finally {
+        await cleanup();
+      }
+    });
   });
 });

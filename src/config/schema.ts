@@ -269,6 +269,14 @@ export const LayoutConfigSchema = z.object({
   clippings: z.string().default('clippings'),
 });
 
+export const SearchConfigSchema = z.object({
+  /** When true, keyword search runs first and semantic search only fires
+   * as a fallback on low keyword confidence, instead of running
+   * unconditionally on every query. Defaults off — see the
+   * semantic-latency-fallback design spec's rollout-care requirement. */
+  semanticFallbackEnabled: z.boolean().default(false),
+});
+
 export const KarpathyConfigSchema = z.object({
   vaultPath: z.string(),
   projectRoot: z.string().optional(),
@@ -286,6 +294,7 @@ export const KarpathyConfigSchema = z.object({
   intelligence: IntelligenceConfigSchema.default({}),
   notifications: NotificationsConfigSchema.default({}),
   layout: LayoutConfigSchema.default({}),
+  search: SearchConfigSchema.default({}),
 });
 
 // Partial versions of sub-configs for use in GlobalConfigSchema overrides
@@ -299,6 +308,7 @@ const PartialEmbeddingsConfigSchema = EmbeddingsConfigSchema.partial();
 const PartialIntelligenceConfigSchema = IntelligenceConfigSchema.partial();
 const PartialNotificationsConfigSchema = NotificationsConfigSchema.partial();
 const PartialLayoutConfigSchema = LayoutConfigSchema.partial();
+const PartialSearchConfigSchema = SearchConfigSchema.partial();
 
 export const ProjectOverrideSchema = z.object({
   vaultPath: z.string().optional(),
@@ -316,6 +326,7 @@ export const ProjectOverrideSchema = z.object({
   intelligence: PartialIntelligenceConfigSchema.optional(),
   notifications: PartialNotificationsConfigSchema.optional(),
   layout: PartialLayoutConfigSchema.optional(),
+  search: PartialSearchConfigSchema.optional(),
 });
 
 export const GlobalDefaultsSchema = z.object({
@@ -334,6 +345,7 @@ export const GlobalDefaultsSchema = z.object({
   intelligence: PartialIntelligenceConfigSchema.optional(),
   notifications: PartialNotificationsConfigSchema.optional(),
   layout: PartialLayoutConfigSchema.optional(),
+  search: PartialSearchConfigSchema.optional(),
 });
 
 export const GlobalConfigSchema = z.object({
@@ -345,4 +357,5 @@ export type KarpathyConfig = z.infer<typeof KarpathyConfigSchema>;
 export type LLMConfig = z.infer<typeof LLMConfigSchema>;
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 export type LayoutConfig = z.infer<typeof LayoutConfigSchema>;
+export type SearchConfig = z.infer<typeof SearchConfigSchema>;
 export type ProjectOverride = z.infer<typeof ProjectOverrideSchema>;
