@@ -45,4 +45,61 @@ describe('generateAnswers', () => {
     const grepAnswer = result[0].answers.find((a) => a.variant === 'grep-first')!;
     expect(grepAnswer.answer).toBe("I don't know");
   });
+
+  it('concatenates multiple retrieved docs for a single variant, in rank order, joined by a blank line, each wrapped in its own header', async () => {
+    const items: DisagreementItem[] = [
+      { itemId: 'fuzzy-004', query: 'Q', variantHits: {
+        'full-cov-hybrid': { docIds: ['doc1.md', 'doc2.md'] },
+      } },
+    ];
+    const fakeVault: Pick<VaultAdapter, 'read'> = {
+      read: vi.fn(async (path: string) => (path === 'doc1.md' ? 'First doc content' : 'Second doc content')),
+    };
+    let capturedPrompt = '';
+    const fakeLLM: LLMClient = {
+      complete: vi.fn(async (prompt: string) => {
+        capturedPrompt = prompt;
+        return 'irrelevant';
+      }),
+      extractStructured: vi.fn(),
+    };
+
+    await generateAnswers(items, fakeVault as VaultAdapter, fakeLLM, 5000);
+
+    const expectedContextBlock = '--- doc1.md ---\nFirst doc content\n\n--- doc2.md ---\nSecond doc content';
+    expect(capturedPrompt).toContain(expectedContextBlock);
+    // rank order: doc1's block must appear entirely before doc2's block
+    expect(capturedPrompt.indexOf('First doc content')).toBeLessThan(capturedPrompt.indexOf('Second doc content'));
+  });
+
+  it('truncates a retrieved doc whose content exceeds docCharCap, appending the truncation marker and dropping content past the cap', async () => {
+    const docCharCap = 20;
+    const fullContent = 'x'.repeat(50);
+    const items: DisagreementItem[] = [
+      { itemId: 'fuzzy-005', query: 'Q', variantHits: {
+        'grep-first': { docIds: ['long-doc.md'] },
+      } },
+    ];
+    const fakeVault: Pick<VaultAdapter, 'read'> = {
+      read: vi.fn(async () => fullContent),
+    };
+    let capturedPrompt = '';
+    const fakeLLM: LLMClient = {
+      complete: vi.fn(async (prompt: string) => {
+        capturedPrompt = prompt;
+        return 'irrelevant';
+      }),
+      extractStructured: vi.fn(),
+    };
+
+    await generateAnswers(items, fakeVault as VaultAdapter, fakeLLM, docCharCap);
+
+    const expectedTruncated = fullContent.slice(0, docCharCap);
+    const expectedBlock = `--- long-doc.md ---\n${expectedTruncated}\n[...truncated...]`;
+    expect(capturedPrompt).toContain(expectedBlock);
+    expect(expectedTruncated).toHaveLength(docCharCap);
+    // content past the cap must not appear anywhere in the prompt
+    const remainder = fullContent.slice(docCharCap);
+    expect(capturedPrompt.split(remainder).length - 1).toBe(0);
+  });
 });
