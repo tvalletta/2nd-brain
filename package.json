@@ -40,6 +40,7 @@
     "chokidar": "^5.0.0",
     "gray-matter": "^4.0.3",
     "nanoid": "^5.1.7",
+    "sqlite-vec": "^0.1.9",
     "zod": "^3.25.76"
   },
   "devDependencies": {

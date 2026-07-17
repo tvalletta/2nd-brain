@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import Database from 'better-sqlite3';
 import {
   openEmbeddingStore,
   createDeterministicProvider,
@@ -158,6 +159,64 @@ describe('embedding store', () => {
     const [c] = await provider.embed(['totally unrelated banana']);
     expect(cosineSimilarity(a, c)).toBeLessThan(1);
     expect(cosineSimilarity(a, c)).toBeGreaterThanOrEqual(-1);
+  });
+});
+
+describe('vec_embeddings (sqlite-vec) integration', () => {
+  let vecDir: string;
+  let vecDb: Database.Database;
+
+  beforeEach(async () => {
+    vecDir = await mkdtemp(join(tmpdir(), 'karpathy-emb-vec-'));
+    vecDb = new Database(join(vecDir, 'embeddings.sqlite'));
+  });
+
+  afterEach(async () => {
+    vecDb.close();
+    await rm(vecDir, { recursive: true, force: true });
+  });
+
+  it('creates the vec_embeddings virtual table alongside embeddings', () => {
+    const vecStore = openEmbeddingStore({ db: vecDb, provider: createDeterministicProvider() });
+    const tables = vecDb
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='vec_embeddings'`)
+      .all();
+    expect(tables).toHaveLength(1);
+    vecStore.close();
+  });
+
+  it('dual-writes into vec_embeddings on upsert, keyed by the embeddings row rowid', async () => {
+    const vecStore = openEmbeddingStore({ db: vecDb, provider: createDeterministicProvider() });
+    await vecStore.upsert([{ doc_id: 'a.md', chunk_index: 0, chunk_hash: 'h1', text: 'hello world' }]);
+    const embRow = vecDb.prepare(`SELECT rowid FROM embeddings WHERE doc_id = 'a.md'`).get() as {
+      rowid: number;
+    };
+    const vecRow = vecDb.prepare(`SELECT rowid FROM vec_embeddings WHERE rowid = ?`).get(embRow.rowid);
+    expect(vecRow).toBeDefined();
+    vecStore.close();
+  });
+
+  it('removes the matching vec_embeddings row on deleteDoc', async () => {
+    const vecStore = openEmbeddingStore({ db: vecDb, provider: createDeterministicProvider() });
+    await vecStore.upsert([{ doc_id: 'b.md', chunk_index: 0, chunk_hash: 'h2', text: 'goodbye world' }]);
+    const embRow = vecDb.prepare(`SELECT rowid FROM embeddings WHERE doc_id = 'b.md'`).get() as {
+      rowid: number;
+    };
+    vecStore.deleteDoc('b.md');
+    const vecRow = vecDb.prepare(`SELECT rowid FROM vec_embeddings WHERE rowid = ?`).get(embRow.rowid);
+    expect(vecRow).toBeUndefined();
+    vecStore.close();
+  });
+
+  it('search() finds the closer of two docs via the vec0 path', async () => {
+    const vecStore = openEmbeddingStore({ db: vecDb, provider: createDeterministicProvider() });
+    await vecStore.upsert([
+      { doc_id: 'close.md', chunk_index: 0, chunk_hash: 'h3', text: 'apple banana cherry' },
+      { doc_id: 'far.md', chunk_index: 0, chunk_hash: 'h4', text: 'completely unrelated topic zzz' },
+    ]);
+    const results = await vecStore.search('apple banana cherry', { topK: 2 });
+    expect(results[0].doc_id).toBe('close.md');
+    vecStore.close();
   });
 });
 

@@ -1,16 +1,17 @@
 // A2: Content-addressable embedding store.
 //
 // Backed by better-sqlite3 (already a dep). Keyed by `(provider_id, doc_id, chunk_hash)`.
-// Stores raw Float32 vectors as BLOBs; no extension required. Brute-force cosine
-// scan is plenty fast for our scale (≤100k chunks, <100ms).
+// Stores raw Float32 vectors as BLOBs, and dual-writes them into a `vec_embeddings`
+// vec0 virtual table (via the `sqlite-vec` extension) for KNN-accelerated search —
+// see `search()` below.
 
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import {
   type EmbeddingProvider,
   bufferToVector,
-  cosineSimilarity,
   vectorToBuffer,
 } from './provider.js';
 
@@ -58,7 +59,7 @@ export interface EmbeddingStore {
   /** Replace all chunks for `doc_id` with the provided list (anything missing is deleted). */
   replaceDoc(docId: string, inputs: UpsertInput[]): Promise<void>;
   deleteDoc(docId: string): void;
-  /** Brute-force cosine search. `filter` is an optional predicate over metadata. */
+  /** KNN cosine search via the `vec_embeddings` vec0 virtual table. `filter` is an optional predicate over metadata. */
   search(
     queryText: string,
     options?: { topK?: number; filter?: (row: EmbeddingRow) => boolean },
@@ -109,6 +110,8 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
     db.pragma('synchronous = NORMAL');
   }
 
+  sqliteVec.load(db);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS embeddings (
       provider_id TEXT NOT NULL,
@@ -123,6 +126,12 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
     );
     CREATE INDEX IF NOT EXISTS idx_emb_doc ON embeddings(provider_id, doc_id);
     CREATE INDEX IF NOT EXISTS idx_emb_hash ON embeddings(provider_id, chunk_hash);
+  `);
+
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS vec_embeddings USING vec0(
+      vector float[${opts.provider.dimensions}] distance_metric=cosine
+    );
   `);
 
   const upsertStmt = db.prepare(`
@@ -156,6 +165,31 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
   const cacheLookupStmt = db.prepare(
     `SELECT vector FROM embeddings WHERE provider_id = ? AND chunk_hash = ? LIMIT 1`,
   );
+
+  // vec0 virtual tables support neither `ON CONFLICT ... DO UPDATE` (fails at
+  // prepare time: "UPSERT not implemented for virtual table") nor
+  // `INSERT OR REPLACE` (fails at run time: "UNIQUE constraint failed" — the
+  // module doesn't implement REPLACE conflict resolution either). The
+  // supported idiom is an explicit delete-then-insert, wrapped below in
+  // `vecUpsert`. Also, vec0 enforces that its rowid bind value have SQLite
+  // storage class INTEGER; better-sqlite3 binds plain JS numbers as REAL
+  // (`sqlite3_bind_double`) unless given a BigInt, which vec0 then rejects
+  // with "Only integers are allowed for primary key values" — so rowids are
+  // always wrapped in `BigInt(...)` before being bound here.
+  const vecInsertStmt = db.prepare(`INSERT INTO vec_embeddings (rowid, vector) VALUES (?, ?)`);
+  const vecDeleteByRowidStmt = db.prepare(`DELETE FROM vec_embeddings WHERE rowid = ?`);
+  const embeddingRowidStmt = db.prepare(
+    `SELECT rowid FROM embeddings WHERE provider_id = ? AND doc_id = ? AND chunk_index = ?`,
+  );
+
+  function vecDeleteRowid(rowid: number): void {
+    vecDeleteByRowidStmt.run(BigInt(rowid));
+  }
+
+  function vecUpsert(rowid: number, vector: Buffer): void {
+    vecDeleteRowid(rowid);
+    vecInsertStmt.run(BigInt(rowid), vector);
+  }
 
   let cacheHits = 0;
   let cacheMisses = 0;
@@ -220,6 +254,15 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
     };
   }
 
+  /** Looks up the definitive rowid for a just-upserted embeddings row (not
+   * `.lastInsertRowid` from the upsert statement, whose semantics on the
+   * ON CONFLICT DO UPDATE branch aren't reliably "the updated row" across
+   * better-sqlite3/SQLite versions — an explicit lookup is unambiguous). */
+  function currentRowid(providerId: string, docId: string, chunkIndex: number): number {
+    const row = embeddingRowidStmt.get(providerId, docId, chunkIndex) as { rowid: number };
+    return row.rowid;
+  }
+
   return {
     async upsert(inputs: UpsertInput[]) {
       if (inputs.length === 0) return;
@@ -237,6 +280,8 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
             metadata: JSON.stringify(it.metadata ?? {}),
             updated_at: now,
           });
+          const rowid = currentRowid(opts.provider.id, it.doc_id, it.chunk_index);
+          vecUpsert(rowid, vectorToBuffer(vectors[idx]));
         });
       });
       tx(inputs);
@@ -261,7 +306,9 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
       const tx = db.transaction(() => {
         for (const row of existing) {
           if (!wantedIndices.has(row.chunk_index)) {
+            const staleRowid = currentRowid(opts.provider.id, docId, row.chunk_index);
             deleteChunkStmt.run(opts.provider.id, docId, row.chunk_index);
+            vecDeleteRowid(staleRowid);
           }
         }
         inputs.forEach((it, idx) => {
@@ -275,33 +322,72 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
             metadata: JSON.stringify(it.metadata ?? {}),
             updated_at: now,
           });
+          const rowid = currentRowid(opts.provider.id, it.doc_id, it.chunk_index);
+          vecUpsert(rowid, vectorToBuffer(vectors[idx]));
         });
       });
       tx();
     },
 
     deleteDoc(docId: string) {
-      deleteDocStmt.run(opts.provider.id, docId);
+      const rows = db.prepare(`SELECT rowid FROM embeddings WHERE provider_id = ? AND doc_id = ?`).all(opts.provider.id, docId) as { rowid: number }[];
+      const tx = db.transaction(() => {
+        deleteDocStmt.run(opts.provider.id, docId);
+        for (const row of rows) vecDeleteRowid(row.rowid);
+      });
+      tx();
     },
 
     async search(queryText, options = {}) {
       const topK = options.topK ?? 10;
       const [qVec] = await opts.provider.embed([queryText]);
-      const allRows = (selectAllStmt.all(opts.provider.id) as Parameters<typeof rowToTyped>[0][]).map(
-        rowToTyped,
-      );
-      const filtered = options.filter ? allRows.filter(options.filter) : allRows;
-      const scored = filtered.map((row) => ({
-        doc_id: row.doc_id,
-        chunk_index: row.chunk_index,
-        chunk_hash: row.chunk_hash,
-        text: row.text,
-        metadata: row.metadata,
-        updated_at: row.updated_at,
-        similarity: cosineSimilarity(qVec, row.vector),
-      }));
-      scored.sort((a, b) => b.similarity - a.similarity);
-      return scored.slice(0, topK);
+      const qBuf = vectorToBuffer(qVec);
+
+      // sqlite-vec's KNN doesn't support an arbitrary JS predicate mid-query,
+      // so when a `filter` is given, over-fetch a wider candidate window
+      // (10x topK, capped) and filter in JS after hydrating full rows — this
+      // preserves the exact same filter semantics as the old brute-force
+      // path, just with a much cheaper candidate-generation step.
+      const knnLimit = options.filter ? Math.min(topK * 10, 2000) : topK;
+
+      const knnRows = db
+        .prepare(
+          `SELECT rowid, distance FROM vec_embeddings WHERE vector MATCH ? AND k = ? ORDER BY distance`,
+        )
+        .all(qBuf, knnLimit) as Array<{ rowid: number; distance: number }>;
+
+      if (knnRows.length === 0) return [];
+
+      const rowids = knnRows.map((r) => r.rowid);
+      const placeholders = rowids.map(() => '?').join(',');
+      const hydrated = db
+        .prepare(
+          `SELECT rowid, doc_id, chunk_index, chunk_hash, text, vector, metadata, updated_at
+           FROM embeddings WHERE rowid IN (${placeholders})`,
+        )
+        .all(...rowids) as Array<Parameters<typeof rowToTyped>[0] & { rowid: number }>;
+      const byRowid = new Map(hydrated.map((r) => [r.rowid, rowToTyped(r)]));
+
+      // cosine distance in sqlite-vec is `1 - cosine_similarity` — convert
+      // back to similarity so callers (and existing tests/callers expecting
+      // `SearchHit.similarity`) see the same semantics as before.
+      const scored: SearchHit[] = [];
+      for (const { rowid, distance } of knnRows) {
+        const row = byRowid.get(rowid);
+        if (!row) continue;
+        if (options.filter && !options.filter(row)) continue;
+        scored.push({
+          doc_id: row.doc_id,
+          chunk_index: row.chunk_index,
+          chunk_hash: row.chunk_hash,
+          text: row.text,
+          metadata: row.metadata,
+          updated_at: row.updated_at,
+          similarity: 1 - distance,
+        });
+        if (scored.length >= topK) break;
+      }
+      return scored;
     },
 
     all(filter) {
