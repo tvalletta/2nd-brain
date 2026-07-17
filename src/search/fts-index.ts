@@ -323,10 +323,28 @@ export function sanitizeFtsQuery(query: string): string {
   return tokens.map((t) => `"${t}"`).join(' ');
 }
 
+// A short, standard English stopword list. Filtering these out of the
+// OR-fallback path avoids unioning enormous FTS5 posting lists for common
+// words on long natural-language queries — a 30+ word paraphrase-only
+// query previously took ~58-61 seconds identically across every search
+// variant sharing this FTS layer, traced to exactly this (found via the
+// 2026-07-17 bake-off re-run's fuzzy-recall latency data).
+const OR_FALLBACK_STOPWORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'been', 'but', 'by', 'for',
+  'from', 'had', 'has', 'have', 'he', 'her', 'his', 'how', 'i', 'if', 'in',
+  'into', 'is', 'it', 'its', 'me', 'my', 'no', 'not', 'of', 'on', 'or',
+  'our', 'she', 'so', 'that', 'the', 'their', 'them', 'then', 'there',
+  'these', 'they', 'this', 'to', 'up', 'was', 'we', 'were', 'what', 'when',
+  'where', 'which', 'who', 'will', 'with', 'would', 'you', 'your',
+]);
+
 /**
  * Same tokenization/sanitization as `sanitizeFtsQuery`, but joins tokens
  * with `OR` instead of implicit AND — used as a recall fallback when the
  * AND query finds nothing (spec: grep-recall-improvements-design.md §3).
+ *
+ * Filters out common English stopwords to avoid unioning pathologically-large
+ * FTS5 posting lists for long natural-language queries.
  */
 export function sanitizeFtsQueryOr(query: string): string {
   const tokens = query
@@ -334,5 +352,14 @@ export function sanitizeFtsQueryOr(query: string): string {
     .map((t) => t.replace(/"/g, '').trim())
     .filter((t) => t.length > 0);
   if (tokens.length === 0) return '';
-  return tokens.map((t) => `"${t}"`).join(' OR ');
+
+  const filtered = tokens.filter((t) => !OR_FALLBACK_STOPWORDS.has(t.toLowerCase()));
+  // If filtering stopwords would leave nothing (e.g. a query that happens
+  // to be entirely stopwords), fall back to the unfiltered list rather
+  // than returning an empty query — that would incorrectly trigger
+  // querySnippet's "no OR query" branch for a query that does have real
+  // (if all-common) words.
+  const finalTokens = filtered.length > 0 ? filtered : tokens;
+
+  return finalTokens.map((t) => `"${t}"`).join(' OR ');
 }

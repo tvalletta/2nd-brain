@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir, utimes, unlink } from 'node:fs/promises'
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
-import { openFTSIndex, sanitizeFtsQuery, type FTSIndex } from '../../src/search/fts-index.js';
+import { openFTSIndex, sanitizeFtsQuery, sanitizeFtsQueryOr, type FTSIndex } from '../../src/search/fts-index.js';
 
 describe('fts-index', () => {
   let dir: string;
@@ -127,6 +127,24 @@ describe('sanitizeFtsQuery', () => {
   it('preserves Unicode tokens (accented, CJK)', () => {
     expect(sanitizeFtsQuery('résumé café')).toBe('"résumé" "café"');
     expect(sanitizeFtsQuery('東京 タワー')).toBe('"東京" "タワー"');
+  });
+});
+
+describe('sanitizeFtsQueryOr stopword filtering', () => {
+  it('filters common English stopwords out of the OR-joined query', () => {
+    const result = sanitizeFtsQueryOr('that meeting where we went back and forth on trust');
+    // "that", "where", "we", "and", "on" are stopwords; "meeting", "went",
+    // "back", "forth", "trust" are not.
+    expect(result).toBe('"meeting" OR "went" OR "back" OR "forth" OR "trust"');
+  });
+
+  it('falls back to the unfiltered token list if every token is a stopword', () => {
+    const result = sanitizeFtsQueryOr('the and or but');
+    expect(result).toBe('"the" OR "and" OR "or" OR "but"');
+  });
+
+  it('returns an empty string for an empty query, same as before', () => {
+    expect(sanitizeFtsQueryOr('   ')).toBe('');
   });
 });
 
