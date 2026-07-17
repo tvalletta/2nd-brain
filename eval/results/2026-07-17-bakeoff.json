@@ -1,0 +1,246 @@
+{
+  "run": {
+    "date": "2026-07-17",
+    "eval_set_version": "2026-07-17",
+    "k": 10,
+    "any_degraded_runs": false
+  },
+  "backfill_ledger": {
+    "notes_embedded": 19650,
+    "wall_clock_min": 15.66,
+    "db_size_delta_gb": 1.27
+  },
+  "arms": [
+    {
+      "name": "grep-first",
+      "accuracy": {
+        "recall_at_10": 0.2389850887195256,
+        "precision_at_10": 0.605171130952381,
+        "mrr": 0.6931547619047619,
+        "sub": 0.3986570502555249
+      },
+      "latency": {
+        "median_ms": 55.49545799999896,
+        "p95_ms": 443.4524999999994,
+        "sub": 1
+      },
+      "tokens": {
+        "median": 619,
+        "sub": 1
+      },
+      "simplicity": {
+        "penalty": 0,
+        "sub": 1
+      },
+      "composite": 0.6993285251277624,
+      "by_category": {
+        "plaud": {
+          "composite": 0.7453185422063644
+        },
+        "ai-session": {
+          "composite": 0.8105886769122064
+        },
+        "entities": {
+          "composite": 0.6509699648405686
+        },
+        "hot-topics": {
+          "composite": 0.6901439786699106
+        },
+        "decisions": {
+          "composite": 0.6915889427728646
+        }
+      }
+    },
+    {
+      "name": "full-cov-hybrid",
+      "accuracy": {
+        "recall_at_10": 0.25346999873354475,
+        "precision_at_10": 0.39895833333333336,
+        "mrr": 0.6973958333333335,
+        "sub": 0.3564309575734602
+      },
+      "latency": {
+        "median_ms": 225.51862499999697,
+        "p95_ms": 541.1076250000042,
+        "sub": 0.24607926728889779
+      },
+      "tokens": {
+        "median": 890,
+        "sub": 0.6955056179775281
+      },
+      "simplicity": {
+        "penalty": 7.27,
+        "sub": 0
+      },
+      "composite": 0.3317571749411389,
+      "by_category": {
+        "plaud": {
+          "composite": 0.32771300697354594
+        },
+        "ai-session": {
+          "composite": 0.364076927352345
+        },
+        "entities": {
+          "composite": 0.30423860780226325
+        },
+        "hot-topics": {
+          "composite": 0.33320341005748927
+        },
+        "decisions": {
+          "composite": 0.35938383823887055
+        }
+      }
+    }
+  ],
+  "verdict": {
+    "winner": "grep-first",
+    "margin": 0.368,
+    "rationale": "grep-first wins by a 0.368 composite margin over full-cov-hybrid.",
+    "mixed": false
+  },
+  "subtypeSlices": [
+    {
+      "label": "fuzzy-recall",
+      "idPrefix": "fuzzy-",
+      "byVariant": {
+        "grep-first": {
+          "recall_ci": [
+            0.08421717171717173,
+            0.2896407358521696
+          ],
+          "precision_ci": [
+            0.15833333333333333,
+            0.6166666666666667
+          ],
+          "mrr_ci": [
+            0.18333333333333335,
+            0.6833333333333332
+          ],
+          "composite_ci": [
+            0.5611206896551725,
+            0.709063548369356
+          ]
+        },
+        "full-cov-hybrid": {
+          "recall_ci": [
+            0.20300993841197423,
+            0.4102690787473396
+          ],
+          "precision_ci": [
+            0.275,
+            0.6
+          ],
+          "mrr_ci": [
+            0.46527777777777773,
+            0.875
+          ],
+          "composite_ci": [
+            0.29650534291954295,
+            0.393356077643734
+          ]
+        }
+      }
+    },
+    {
+      "label": "relationship",
+      "idPrefix": "relationship-",
+      "byVariant": {
+        "grep-first": {
+          "recall_ci": [
+            0.19855072463768114,
+            0.5777777777777777
+          ],
+          "precision_ci": [
+            0.35,
+            0.775
+          ],
+          "mrr_ci": [
+            1,
+            1
+          ],
+          "composite_ci": [
+            0.6783152173913044,
+            0.8358333333333334
+          ]
+        },
+        "full-cov-hybrid": {
+          "recall_ci": [
+            0.3067632850241546,
+            0.4555555555555556
+          ],
+          "precision_ci": [
+            0.44999999999999996,
+            0.6749999999999999
+          ],
+          "mrr_ci": [
+            1,
+            1
+          ],
+          "composite_ci": [
+            0.39223734832832186,
+            0.4450000294877421
+          ]
+        }
+      }
+    }
+  ],
+  "weightSensitivity": [
+    {
+      "label": "equal-weight",
+      "weights": {
+        "label": "equal-weight",
+        "accuracy": 0.25,
+        "latency": 0.25,
+        "tokens": 0.25,
+        "simplicity": 0.25
+      },
+      "results": {
+        "grep-first": {
+          "composite": 0.8496642625638813
+        },
+        "full-cov-hybrid": {
+          "composite": 0.3245039607099715
+        }
+      },
+      "winner": "grep-first"
+    },
+    {
+      "label": "zero-simplicity",
+      "weights": {
+        "label": "zero-simplicity",
+        "accuracy": 0.5,
+        "latency": 0.3,
+        "tokens": 0.2,
+        "simplicity": 0
+      },
+      "results": {
+        "grep-first": {
+          "composite": 0.6993285251277624
+        },
+        "full-cov-hybrid": {
+          "composite": 0.39114038256890504
+        }
+      },
+      "winner": "grep-first"
+    },
+    {
+      "label": "accuracy-only",
+      "weights": {
+        "label": "accuracy-only",
+        "accuracy": 1,
+        "latency": 0,
+        "tokens": 0,
+        "simplicity": 0
+      },
+      "results": {
+        "grep-first": {
+          "composite": 0.3986570502555249
+        },
+        "full-cov-hybrid": {
+          "composite": 0.3564309575734602
+        }
+      },
+      "winner": "grep-first"
+    }
+  ]
+}
