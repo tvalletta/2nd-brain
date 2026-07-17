@@ -1631,7 +1631,7 @@ async function maintenanceCommand(args: string[]): Promise<void> {
     sqliteVec.load(db);
     try {
       const { rebuildFtsWithStemmer, swapFtsTable } = await import('../maintenance/rebuild-fts-tokenizer.js');
-      const vaultDirs = [config.layout.wiki, config.layout.aiSummaries, config.layout.sources, config.layout.review];
+      const vaultDirs = ['.'];
       process.stdout.write('Building new Porter-stemmed FTS table (does not touch the live table yet)...\n');
       const result = await rebuildFtsWithStemmer(db, config.vaultPath, vaultDirs);
       process.stdout.write(

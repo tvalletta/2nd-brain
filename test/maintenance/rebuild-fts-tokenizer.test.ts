@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { mkdtemp } from 'node:fs/promises';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
 import Database from 'better-sqlite3';
 import { openFTSIndex } from '../../src/search/fts-index.js';
 import { rebuildFtsWithStemmer, swapFtsTable } from '../../src/maintenance/rebuild-fts-tokenizer.js';
@@ -228,5 +230,42 @@ describe('swapFtsTable', () => {
 
     db2.close();
     rmSync(vaultDir2, { recursive: true, force: true });
+  });
+});
+
+describe('CLI scope bug: vaultDirs=["."] (the fix) vs the 4-folder set (the bug)', () => {
+  it('scanning vaultDirs=["."] covers files outside the 4-folder set that vaultDirs=[wiki,aiSummaries,sources,review] misses', async () => {
+    // Build a fixture vault with a markdown file under a folder NOT in
+    // [wiki, outputs/session-summaries, outputs/source-summaries, review] —
+    // e.g. raw/ai-conversations/claude/ (matching real bug report).
+    const dir = await mkdtemp(join(tmpdir(), 'karpathy-rebuild-scope-'));
+    await mkdir(join(dir, 'raw', 'ai-conversations', 'claude'), { recursive: true });
+    await writeFile(
+      join(dir, 'raw', 'ai-conversations', 'claude', 'session.md'),
+      '---\ntitle: Session\n---\nClaude session content here.',
+    );
+    const db = new Database(join(dir, 'test.sqlite'));
+    db.pragma('journal_mode = WAL');
+
+    // Initialize the FTS table (normally done by openFTSIndex in production)
+    openFTSIndex(db, { vaultRoot: dir });
+
+    // Test the buggy scope: [wiki, outputs/session-summaries, outputs/source-summaries, review]
+    // This should miss the file in raw/ai-conversations/claude/
+    const buggyScopeResult = await rebuildFtsWithStemmer(db, dir, [
+      'wiki',
+      'outputs/session-summaries',
+      'outputs/source-summaries',
+      'review',
+    ]);
+    expect(buggyScopeResult.newCount).toBe(0);
+
+    // Test the fixed scope: ['.'] (entire vault)
+    // This should catch the file in raw/ai-conversations/claude/
+    const fixedScopeResult = await rebuildFtsWithStemmer(db, dir, ['.']);
+    expect(fixedScopeResult.newCount).toBe(1);
+
+    db.close();
+    await rm(dir, { recursive: true, force: true });
   });
 });
