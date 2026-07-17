@@ -12,6 +12,15 @@ const REPO_ROOT = join(import.meta.dirname, '..', '..');
 const CONTENDERS = ['grep-first', 'full-cov-hybrid'] as const;
 type Contender = (typeof CONTENDERS)[number];
 
+/** Alternate composite weightings for the sensitivity check (Task 7): does
+ * "grep-first wins" hold up under weighting schemes other than the primary
+ * 0.50/0.20/0.15/0.15, or is it an artifact of those specific weights? */
+const WEIGHT_SCHEMES: Array<{ label: string; accuracy: number; latency: number; tokens: number; simplicity: number }> = [
+  { label: 'equal-weight', accuracy: 0.25, latency: 0.25, tokens: 0.25, simplicity: 0.25 },
+  { label: 'zero-simplicity', accuracy: 0.5, latency: 0.3, tokens: 0.2, simplicity: 0 },
+  { label: 'accuracy-only', accuracy: 1.0, latency: 0, tokens: 0, simplicity: 0 },
+];
+
 const DEPS_WEIGHT = 2;
 const JOBS_WEIGHT = 2;
 const FAILURE_MODES_WEIGHT = 1;
@@ -48,6 +57,12 @@ export interface Bakeoff {
       mrr_ci: [number, number];
       composite_ci: [number, number];
     }>;
+  }>;
+  weightSensitivity: Array<{
+    label: string;
+    weights: { accuracy: number; latency: number; tokens: number; simplicity: number };
+    results: Record<string, { composite: number }>;
+    winner: string;
   }>;
 }
 
@@ -244,6 +259,22 @@ export function buildBakeoff(input: BakeoffInput): Bakeoff {
     return { label, idPrefix, byVariant };
   });
 
+  const weightSensitivity = WEIGHT_SCHEMES.map((scheme) => {
+    const results: Record<string, { composite: number }> = {};
+    for (const arm of arms) {
+      results[arm.name] = {
+        composite:
+          scheme.accuracy * arm.accuracy.sub +
+          scheme.latency * arm.latency.sub +
+          scheme.tokens * arm.tokens.sub +
+          scheme.simplicity * arm.simplicity.sub,
+      };
+    }
+    const [nameA, nameB] = CONTENDERS;
+    const winner = results[nameA].composite >= results[nameB].composite ? nameA : nameB;
+    return { label: scheme.label, weights: scheme, results, winner };
+  });
+
   const [a, b] = arms;
   const margin = Math.abs(a.composite - b.composite);
   // Ties within 0.03 go to grep-first (simplicity tiebreak, spec §4.5's stated lean).
@@ -275,6 +306,7 @@ export function buildBakeoff(input: BakeoffInput): Bakeoff {
     arms,
     verdict: { winner, margin: +margin.toFixed(3), rationale, mixed },
     subtypeSlices,
+    weightSensitivity,
   };
 }
 
@@ -323,6 +355,24 @@ export function renderBakeoffMarkdown(bakeoff: Bakeoff): string {
       '',
     );
   }
+  lines.push(`## Composite-weight sensitivity`, '');
+  lines.push(`| Weighting | grep-first | full-cov-hybrid | Winner |`);
+  lines.push(`|---|---|---|---|`);
+  for (const scheme of bakeoff.weightSensitivity) {
+    const [nameA, nameB] = ['grep-first', 'full-cov-hybrid'] as const;
+    lines.push(
+      `| ${scheme.label} | ${scheme.results[nameA].composite.toFixed(3)} | ` +
+      `${scheme.results[nameB].composite.toFixed(3)} | ${scheme.winner} |`,
+    );
+  }
+  const allGrepWins = bakeoff.weightSensitivity.every((s) => s.winner === 'grep-first');
+  lines.push(
+    '',
+    allGrepWins
+      ? '**grep-first wins under every tested weighting scheme, including the primary — the verdict is not an artifact of the specific 0.50/0.20/0.15/0.15 weights.**'
+      : '**grep-first does NOT win under every tested weighting scheme — the verdict is sensitive to weighting choice; see the table above for which schemes flip it.**',
+    '',
+  );
   lines.push(`## By category`, '');
   const categories = [...new Set(bakeoff.arms.flatMap((arm) => Object.keys(arm.by_category)))].sort();
   if (categories.length > 0) {

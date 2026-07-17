@@ -310,6 +310,82 @@ describe('subtype-scoped bootstrap CIs', () => {
   });
 });
 
+describe('composite-weight sensitivity', () => {
+  // NOTE: the task brief referenced a `buildFixtureBakeoffInput()` helper
+  // that doesn't actually exist in this file (same situation as the
+  // subtype-scoped CI tests above) — this uses a local inline fixture built
+  // with the module-level `judgment()`/`runResult()` helpers instead.
+  const weightJudgments = [
+    judgment('decisions-201', 'w1.md', 2),
+    judgment('decisions-202', 'w2.md', 2),
+  ];
+
+  const weightRunsResults: RunResult[] = [
+    runResult('decisions-201', 'grep-first', [{ path: 'w1.md', rank: 0, final: 1, excerpt: '' }], 200, 2000),
+    runResult('decisions-202', 'grep-first', [{ path: 'w2.md', rank: 0, final: 1, excerpt: '' }], 220, 2100),
+    runResult('decisions-201', 'full-cov-hybrid', [{ path: 'w1.md', rank: 0, final: 1, excerpt: '' }], 100, 1000),
+    runResult('decisions-202', 'full-cov-hybrid', [{ path: 'w2.md', rank: 0, final: 1, excerpt: '' }], 110, 1050),
+    runResult('decisions-201', 'as-deployed', [], 5, 10),
+    runResult('decisions-202', 'as-deployed', [], 5, 10),
+  ];
+
+  const weightScorecard: Scorecard = {
+    run: { date: '2026-07-17', generated_at: 'x', db_doc_count: 100, any_degraded_runs: false },
+    by_category_variant: [
+      {
+        category: 'decisions',
+        variant: 'grep-first',
+        n_items: 2,
+        cells: [{ k: 10, relevance: 'e', scope: 'full-corpus', n: 2, recall_at_k: { mean: 1, ci: [1, 1] }, precision_at_k: { mean: 1, ci: [1, 1] }, mrr: { mean: 1, ci: [1, 1] }, median_first_rank: 1 }],
+        latency_ms_median: 210,
+        latency_ms_p95: 220,
+        response_tokens_median: 2050,
+      },
+      {
+        category: 'decisions',
+        variant: 'full-cov-hybrid',
+        n_items: 2,
+        cells: [{ k: 10, relevance: 'e', scope: 'full-corpus', n: 2, recall_at_k: { mean: 1, ci: [1, 1] }, precision_at_k: { mean: 1, ci: [1, 1] }, mrr: { mean: 1, ci: [1, 1] }, median_first_rank: 1 }],
+        latency_ms_median: 105,
+        latency_ms_p95: 110,
+        response_tokens_median: 1025,
+      },
+    ],
+    routing: {},
+    coverage: {},
+  };
+
+  const weightBackfillReport = { notes_embedded: 1, wall_clock_min: 1, db_size_delta_gb: 1 };
+
+  it('reports the composite winner under 3 alternate weightings alongside the primary', () => {
+    const result = buildBakeoff({
+      runsResults: weightRunsResults,
+      scorecard: weightScorecard,
+      judgments: weightJudgments,
+      backfillReport: weightBackfillReport,
+    });
+    expect(result.weightSensitivity).toHaveLength(3);
+    const labels = result.weightSensitivity.map((w) => w.label);
+    expect(labels).toEqual(['equal-weight', 'zero-simplicity', 'accuracy-only']);
+    // Every scheme must report a composite for both real contenders.
+    for (const scheme of result.weightSensitivity) {
+      expect(Object.keys(scheme.results)).toEqual(['grep-first', 'full-cov-hybrid']);
+    }
+  });
+
+  it('accuracy-only weighting produces a composite equal to the accuracy sub-score alone', () => {
+    const result = buildBakeoff({
+      runsResults: weightRunsResults,
+      scorecard: weightScorecard,
+      judgments: weightJudgments,
+      backfillReport: weightBackfillReport,
+    });
+    const accuracyOnly = result.weightSensitivity.find((w) => w.label === 'accuracy-only')!;
+    const grepArm = result.arms.find((a) => a.name === 'grep-first')!;
+    expect(accuracyOnly.results['grep-first'].composite).toBeCloseTo(grepArm.accuracy.sub, 5);
+  });
+});
+
 describe('renderBakeoffMarkdown', () => {
   it('includes the winner, margin, and a composite table row per arm', () => {
     const bakeoff = buildBakeoff({
