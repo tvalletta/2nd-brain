@@ -7,44 +7,55 @@ import type { EvalItem } from './types.js';
 /**
  * Score ceiling for an OR-fallback match's `final` score to still count as
  * "no meaningful match" (see isConfirmedAbsent for the full gating rule —
- * this threshold is now a secondary safety net, not the primary signal).
+ * this threshold is a secondary safety net, not the primary signal; see
+ * below for why it can now almost never fire).
  *
- * Recalibration history (2026-07-16), after grep-recall-improvements' AND-
- * first/OR-fallback relaxation landed (commit 6c6e30a):
+ * Recalibration history — this number has been wrong twice, for two
+ * different reasons:
  *
- * A real run against the live vault showed ALL 10 original candidates
- * scoring 0.036-0.089 — well above the old 0.02 threshold (0/10 confirmed
- * absent). Investigation showed `final` alone can no longer discriminate
- * present from absent at all: `final = α·rrf + β·recency`, and once ANY
- * token overlaps (near-guaranteed for an English query against a large,
- * broad-coverage vault once OR-fallback is in play), the score is dominated
- * by the matched doc's recency (β·min(0.5, exp(-Δt/30)), up to 0.15 for
- * default-content-type docs) rather than the tiny top-rank RRF contribution
- * (≤ ~0.017 for a single-list keyword pool, k=60). Concretely: 5 known-
- * relevant "lookup" queries from queries.json scored 0.033-0.089 — the
- * *same* band as the "absent" candidates — and a further 30 deliberately
- * obscure candidates (beekeeping, axolotl husbandry, philately, etc.) also
- * landed in that band almost without exception. Only true zero-token-
- * overlap queries reliably score 0. Simply raising DEFAULT_SCORE_THRESHOLD
- * to clear this band (tried: 0.1 alone) breaks the "returns false when a
- * real match exists" test, because a genuine single-doc match hits the
- * exact same ~0.089 ceiling as a spurious one — proving no fixed score
- * threshold alone can separate the two. This is the same shape of problem
- * as I9 (a scoring-floor artifact defeating threshold-based confidence),
- * now reproducing for grep-first via the OR-fallback + recency-fusion
- * interaction rather than the embedding pool.
+ * 1. (2026-07-16, pre-I9-fix) After grep-recall-improvements' AND-first/
+ *    OR-fallback relaxation landed (commit 6c6e30a), a live run showed all
+ *    10 original candidates scoring 0.036-0.089 (raw, unnormalized `final`),
+ *    because `final = α·rrf + β·recency` let β·recency dominate the tiny
+ *    raw RRF contribution (≤ ~0.017 for a single-list keyword pool, k=60).
+ *    DEFAULT_SCORE_THRESHOLD was set to 0.1 to sit above that observed
+ *    ~0.089 ceiling, with the actual absent/present decision moved onto
+ *    `result.ftsMatchMode` as the primary signal (this threshold as a
+ *    rarely-firing safety net only).
  *
- * Fix: gate primarily on `result.ftsMatchMode` (see isConfirmedAbsent) —
- * an 'and' match means every query token co-occurs in one document (real
- * evidence of relevance, regardless of score); an 'or' match means only the
- * recall-relaxation fallback found a partial/coincidental overlap, which is
- * consistent with genuine topical absence. The score threshold below is now
- * only a safety net for unusually high-scoring OR matches (e.g. a `session`
- * content-type doc, β=0.3, which could reach ~0.16) and is set comfortably
- * above the observed OR-mode ceiling (0.089) so it doesn't fire in practice
- * on this vault, while still guarding against that edge case.
+ * 2. (2026-07-17, post-I9-fix) The I9 fix (commit 4d137bb, `hybrid-store.ts`
+ *    `search()`) normalizes raw RRF by the theoretical max for the query's
+ *    pool composition (`maxPossibleRrfScore = lists.length / 60`) before
+ *    blending with recency. `isConfirmedAbsent`/`main()` route through this
+ *    same `search()`, so grep-first's scores moved too, even though nobody
+ *    was specifically targeting grep-first with that fix. For a keyword-
+ *    only variant, `lists.length === 1`, so a rank-0 hit's raw RRF (~1/61)
+ *    now normalizes to ~0.98 instead of contributing its old tiny raw
+ *    value. Re-running against the live vault (2026-07-17) confirmed this:
+ *    all 10 candidates now score 0.850-0.911 regardless of `ftsMatchMode`
+ *    ('and' or 'or') — the old 0.1 threshold no longer clears anything
+ *    (0/10 confirmed absent, where 7/10 should be). DEFAULT_SCORE_THRESHOLD
+ *    is recalibrated to 0.95, comfortably above the entire observed
+ *    0.850-0.911 band (and above the theoretical per-content-type ceiling,
+ *    worked out from `score < (1 - β) + β·recencyCap`: with the lowest
+ *    configured β = 0.1 for `concept` docs and recency capped at 0.5, the
+ *    ceiling is ~0.935), while still being a real number below 1.0 rather
+ *    than an intentionally-unreachable one.
+ *
+ * Bottom line for anyone re-running this tool: `ftsMatchMode` is now the
+ * *sole* practical signal — an 'and' match (every query token co-occurs in
+ * one document, real relevance evidence) is never confirmed absent no
+ * matter the score, and an 'or' match (recall-relaxation fallback found
+ * only a partial/coincidental overlap) is confirmed absent unless its score
+ * clears this threshold, which real-world 'or' matches essentially never
+ * do post-I9-fix (they cluster in the same 0.85-0.91 band as 'and'
+ * matches — normalization collapses the score's ability to discriminate
+ * real relevance from coincidental overlap for a top-ranked single-doc
+ * hit). This threshold is retained as a nominal safety net for a
+ * hypothetical unusually-low-recency, unusually-low-β OR match, not
+ * because it's expected to ever actually fire on this vault.
  */
-const DEFAULT_SCORE_THRESHOLD = 0.1;
+const DEFAULT_SCORE_THRESHOLD = 0.95;
 
 /** The single source of truth for the absent/not-absent decision (see
  * isConfirmedAbsent's doc comment for the full rationale). Pure function over
@@ -94,13 +105,17 @@ function assertKeywordOnly(variant: Variant): void {
 }
 
 /** Check whether a query is confirmed absent against grep-first ALONE —
- * not all variants. The hybrid variants' scores are known-unreliable for
- * this purpose (issue I9: a scoring-floor artifact clusters `final` in a
- * narrow ~0.11-0.16 band regardless of actual relevance, confirmed still
- * reproducing on both as-deployed and full-cov-hybrid as of 2026-07-15).
- * grep-first is also now the actual production-bound architecture per the
- * Stage 1 bake-off verdict, so confirming absence against it specifically
- * confirms exactly what matters going forward.
+ * not all variants. Historically (as of 2026-07-15) the hybrid variants'
+ * scores were also known-unreliable for this purpose (issue I9: a scoring-
+ * floor artifact clustered `final` in a narrow ~0.11-0.16 band regardless
+ * of actual relevance, reproducing on both as-deployed and full-cov-
+ * hybrid). I9 was fixed 2026-07-16 (commit 4d137bb, `hybrid-store.ts`
+ * `search()`) for all variants, not just grep-first — but grep-first is
+ * still the only variant exercised here, because it's now the actual
+ * production-bound architecture per the Stage 1 bake-off verdict, so
+ * confirming absence against it specifically confirms exactly what matters
+ * going forward (not re-tested against the other variants here since
+ * they're no longer in scope for this tool's purpose).
  *
  * See `decideAbsent` for the actual gating rule — this is the only place
  * that rule is implemented; `main()` reuses it too rather than keeping a

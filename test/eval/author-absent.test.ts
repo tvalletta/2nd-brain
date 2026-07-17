@@ -109,20 +109,35 @@ describe('isConfirmedAbsent (grep-first-only gating)', () => {
   // grep-recall-improvements' OR-fallback landed, a top-1 `final` score
   // alone can no longer discriminate present from absent — a genuine
   // single-doc match and a spurious OR-fallback match can land at the same
-  // ~0.089 recency-dominated ceiling (see DEFAULT_SCORE_THRESHOLD's doc
-  // comment for the full real-data finding). `ftsMatchMode` is the
-  // structural signal that actually discriminates: 'and' means every query
-  // token co-occurs in one document (real relevance evidence), so it must
-  // never be confirmed absent regardless of score.
+  // recency-dominated ceiling (see DEFAULT_SCORE_THRESHOLD's doc comment
+  // for the full real-data finding, including the 2026-07-17 post-I9-fix
+  // recalibration — the fixture scores below are illustrative, not the
+  // current real observed band; use explicit threshold params here rather
+  // than the ever-changing default). `ftsMatchMode` is the structural
+  // signal that actually discriminates: 'and' means every query token
+  // co-occurs in one document (real relevance evidence), so it must never
+  // be confirmed absent regardless of score.
   it('does not confirm absent on a low-scoring AND match — full term co-occurrence outranks score', async () => {
     const grepFirst = fakeVariantWithScore(0.001, 'and');
     const result = await isConfirmedAbsent(grepFirst, 'some query', 0.1);
     expect(result).toBe(false);
   });
 
-  it('confirms absent on an OR match scoring just under the threshold, even near the observed recency ceiling (~0.089)', async () => {
+  it('confirms absent on an OR match scoring just under the threshold', async () => {
     const grepFirst = fakeVariantWithScore(0.089, 'or');
     const result = await isConfirmedAbsent(grepFirst, 'some query', 0.1);
+    expect(result).toBe(true);
+  });
+
+  // Regression coverage for the 2026-07-17 post-I9-fix recalibration:
+  // real grep-first OR-fallback matches now score ~0.85-0.91 (RRF
+  // normalization, see DEFAULT_SCORE_THRESHOLD's doc comment) — well above
+  // the pre-I9-fix 0.1 threshold, which would have wrongly treated all of
+  // these as "found" rather than "confirmed absent". The recalibrated
+  // default (0.95) must still clear a real observed OR-match score.
+  it('confirms absent on an OR match at the current real observed score band, using the recalibrated default threshold', async () => {
+    const grepFirst = fakeVariantWithScore(0.911, 'or');
+    const result = await isConfirmedAbsent(grepFirst, 'some query');
     expect(result).toBe(true);
   });
 
