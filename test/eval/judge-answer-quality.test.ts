@@ -62,4 +62,33 @@ describe('judgeAnswerQuality', () => {
     const result = await judgeAnswerQuality(answerSets, fakeLLM, 1);
     expect(result[0].comparisons).toHaveLength(3);
   });
+
+  it('instructs the judge to respond with only JSON in code fences, matching the working judgePrompt convention (eval/pool/prompts.ts)', async () => {
+    const answerSets: AnswerSet[] = [
+      { itemId: 'fuzzy-002', query: 'Q', answers: [
+        { variant: 'grep-first', answer: 'Answer one.', retrievedDocIds: [] },
+        { variant: 'full-cov-hybrid', answer: 'Answer two.', retrievedDocIds: [] },
+      ] },
+    ];
+    let capturedPrompt = '';
+    const fakeLLM: LLMClient = {
+      complete: vi.fn(),
+      extractStructured: vi.fn(async (prompt: string) => {
+        capturedPrompt = prompt;
+        return { verdict: 'A', reason: 'r' };
+      }),
+    };
+
+    await judgeAnswerQuality(answerSets, fakeLLM, 42);
+
+    // A bare natural-language question ("Which answer is more helpful...")
+    // reliably produces free-text prose instead of parseable structured
+    // output — extractStructured then throws ExtractionError. The working
+    // judgePrompt avoids this by explicitly demanding JSON wrapped in
+    // ```json code fences; this prompt must do the same.
+    expect(capturedPrompt.toLowerCase()).toContain('json');
+    expect(capturedPrompt).toMatch(/```json/);
+    expect(capturedPrompt).toContain('verdict');
+    expect(capturedPrompt).toContain('reason');
+  });
 });

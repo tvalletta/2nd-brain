@@ -53,7 +53,11 @@ ${answerA}
 Answer B:
 ${answerB}
 
-Which answer is more helpful and accurate?`;
+Which answer is more helpful and accurate?
+
+Return a JSON object: { "verdict": "A"|"B"|"tie", "reason": "<one or two sentences>" }.
+
+Respond with only the JSON object, wrapped in \`\`\`json code fences. If your reason contains a double-quote character, escape it as \\" inside the "reason" string so the JSON stays valid.`;
 
 /** Blind pairwise comparison of every 2-way combination of a multi-variant
  * answer set. `seed` makes the A/B position assignment reproducible for a
