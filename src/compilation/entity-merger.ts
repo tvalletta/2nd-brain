@@ -4,7 +4,7 @@ import { extractProtectedRegions, updateProtectedRegion, getProtectedRegion } fr
 import { nowISO } from '../shared/date-utils.js';
 import { createLogger } from '../shared/logger.js';
 import { normalizeName, levenshtein, buildEntityIndex } from '../ingest/entity-resolver.js';
-import { WIKI_CONTENT_FOLDERS } from '../vault/paths.js';
+import { wikiContentFolders, DEFAULT_LAYOUT, type VaultLayout } from '../vault/paths.js';
 
 const log = createLogger('entity-merger');
 
@@ -30,6 +30,7 @@ export async function mergeEntities(
   sourcePath: string,
   targetPath: string,
   vault: VaultAdapter,
+  layout: VaultLayout = DEFAULT_LAYOUT,
 ): Promise<MergeResult> {
   log.info('Merging entities', { from: sourcePath, into: targetPath });
 
@@ -140,7 +141,7 @@ export async function mergeEntities(
 
   const sourceSlug = extractSlug(sourcePath);
   const targetSlug = extractSlug(targetPath);
-  const wikilinksRewritten = await rewriteWikilinks(vault, sourceSlug, targetSlug);
+  const wikilinksRewritten = await rewriteWikilinks(vault, sourceSlug, targetSlug, layout);
 
   // --- Delete source page ---
 
@@ -172,10 +173,11 @@ async function rewriteWikilinks(
   vault: VaultAdapter,
   sourceSlug: string,
   targetSlug: string,
+  layout: VaultLayout = DEFAULT_LAYOUT,
 ): Promise<number> {
   let total = 0;
 
-  const folders = WIKI_CONTENT_FOLDERS;
+  const folders = wikiContentFolders(layout);
 
   for (const folder of folders) {
     let files: string[];
@@ -240,8 +242,9 @@ export interface MergeCandidate {
  */
 export async function detectMergeCandidates(
   vault: VaultAdapter,
+  layout: VaultLayout = DEFAULT_LAYOUT,
 ): Promise<MergeCandidate[]> {
-  const index = await buildEntityIndex(vault);
+  const index = await buildEntityIndex(vault, layout);
   const candidates: MergeCandidate[] = [];
   const seen = new Set<string>();
 
@@ -338,8 +341,9 @@ export async function detectMergeCandidates(
 export async function autoMerge(
   vault: VaultAdapter,
   threshold = 0.85,
+  layout: VaultLayout = DEFAULT_LAYOUT,
 ): Promise<MergeResult[]> {
-  const candidates = await detectMergeCandidates(vault);
+  const candidates = await detectMergeCandidates(vault, layout);
   const results: MergeResult[] = [];
 
   // Track already-merged paths to avoid double-merging
@@ -357,7 +361,7 @@ export async function autoMerge(
         confidence: candidate.confidence,
       });
 
-      const result = await mergeEntities(candidate.sourcePath, candidate.targetPath, vault);
+      const result = await mergeEntities(candidate.sourcePath, candidate.targetPath, vault, layout);
       results.push(result);
       mergedPaths.add(candidate.sourcePath);
     } catch (err) {

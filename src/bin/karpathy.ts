@@ -967,7 +967,7 @@ async function mergeCommand(args: string[]): Promise<void> {
 
   if (detectFlag) {
     // Detect potential merge candidates
-    const candidates = await detectMergeCandidates(vault);
+    const candidates = await detectMergeCandidates(vault, config.layout);
     if (candidates.length === 0) {
       process.stdout.write('No merge candidates detected.\n');
       return;
@@ -986,7 +986,7 @@ async function mergeCommand(args: string[]): Promise<void> {
   if (autoFlag) {
     // Auto-merge high-confidence duplicates
     const threshold = parseFloat(args.find((a) => a.startsWith('--threshold='))?.split('=')[1] ?? '0.85');
-    const results = await autoMerge(vault, threshold);
+    const results = await autoMerge(vault, threshold, config.layout);
     if (results.length === 0) {
       process.stdout.write('No high-confidence duplicates found to auto-merge.\n');
       return;
@@ -1019,7 +1019,7 @@ async function mergeCommand(args: string[]): Promise<void> {
   const targetName = nonFlagArgs[1];
 
   // Resolve names to paths using entity index
-  const index = await buildEntityIndex(vault);
+  const index = await buildEntityIndex(vault, config.layout);
 
   // Try each entity kind to find matches
   const kinds: EntityKind[] = ['person', 'project', 'concept', 'topic', 'decision', 'tool', 'organization'];
@@ -1048,7 +1048,7 @@ async function mergeCommand(args: string[]): Promise<void> {
 
   process.stdout.write(`Merging "${sourceName}" (${sourcePath})\n    into "${targetName}" (${targetPath})\n`);
 
-  const result = await mergeEntities(sourcePath, targetPath, vault);
+  const result = await mergeEntities(sourcePath, targetPath, vault, config.layout);
 
   process.stdout.write(
     [
@@ -1362,7 +1362,7 @@ async function curatorCommand(): Promise<void> {
   const layout = config.layout;
 
   // Detect new candidates and append to queue.
-  const candidates = await detectMergeCandidates(vault);
+  const candidates = await detectMergeCandidates(vault, layout);
   const added = await refreshQueue(vault, candidates, layout);
   if (added > 0) {
     process.stdout.write(`Found ${added} new candidate(s). Refreshing queue...\n`);
@@ -1407,7 +1407,7 @@ async function curatorCommand(): Promise<void> {
 
     if (answer === 'm') {
       process.stdout.write(`Merging "${entry.sourceName}" → "${entry.targetName}"...\n`);
-      const result = await mergeEntities(entry.sourcePath, entry.targetPath, vault);
+      const result = await mergeEntities(entry.sourcePath, entry.targetPath, vault, layout);
       await resolveEntry(vault, entry.id, 'merge', undefined, layout);
       process.stdout.write(
         `  Aliases added: ${result.aliasesAdded.join(', ') || 'none'}\n` +
@@ -1421,7 +1421,7 @@ async function curatorCommand(): Promise<void> {
         continue;
       }
       process.stdout.write(`Merging with rename to "${newName}"...\n`);
-      const result = await mergeEntities(entry.sourcePath, entry.targetPath, vault);
+      const result = await mergeEntities(entry.sourcePath, entry.targetPath, vault, layout);
       await resolveEntry(vault, entry.id, 'rename', newName, layout);
       process.stdout.write(
         `  Aliases added: ${result.aliasesAdded.join(', ') || 'none'}\n` +
