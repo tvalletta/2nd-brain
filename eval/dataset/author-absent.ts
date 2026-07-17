@@ -54,6 +54,17 @@ import type { EvalItem } from './types.js';
  * hit). This threshold is retained as a nominal safety net for a
  * hypothetical unusually-low-recency, unusually-low-β OR match, not
  * because it's expected to ever actually fire on this vault.
+ *
+ * KNOWN, ACCEPTED METHODOLOGICAL LIMITATION: this threshold's calibration
+ * history above is coupled to this same codebase's own observed scoring
+ * behavior across multiple iterations, not derived from an independent
+ * standard. This is a disclosed, accepted limitation specific to this
+ * absent-item confirmation mechanism — it does not affect the ground truth
+ * for the rest of the eval dataset (plaud/ai-session/entities/hot-topics/
+ * decisions items are grounded in real usage + manual verification,
+ * independent of this threshold). Anyone re-tuning this threshold in the
+ * future should treat it as testing self-consistency with the current
+ * system, not as an independently-verified absolute standard.
  */
 const DEFAULT_SCORE_THRESHOLD = 0.95;
 
