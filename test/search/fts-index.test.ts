@@ -3,7 +3,13 @@ import { mkdtemp, rm, writeFile, mkdir, utimes, unlink } from 'node:fs/promises'
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import Database from 'better-sqlite3';
-import { openFTSIndex, sanitizeFtsQuery, sanitizeFtsQueryOr, type FTSIndex } from '../../src/search/fts-index.js';
+import {
+  openFTSIndex,
+  sanitizeFtsQuery,
+  sanitizeFtsQueryAnd,
+  sanitizeFtsQueryOr,
+  type FTSIndex,
+} from '../../src/search/fts-index.js';
 
 describe('fts-index', () => {
   let dir: string;
@@ -148,6 +154,24 @@ describe('sanitizeFtsQueryOr stopword filtering', () => {
   });
 });
 
+describe('sanitizeFtsQueryAnd stopword filtering', () => {
+  it('filters common English stopwords out of the AND-joined query', () => {
+    const result = sanitizeFtsQueryAnd('that meeting where we went back and forth on trust');
+    // Same stopword set as sanitizeFtsQueryOr, but joined with implicit AND
+    // (space) instead of "OR".
+    expect(result).toBe('"meeting" "went" "back" "forth" "trust"');
+  });
+
+  it('falls back to the unfiltered token list if every token is a stopword', () => {
+    const result = sanitizeFtsQueryAnd('the and or but');
+    expect(result).toBe('"the" "and" "or" "but"');
+  });
+
+  it('returns an empty string for an empty query, same as before', () => {
+    expect(sanitizeFtsQueryAnd('   ')).toBe('');
+  });
+});
+
 describe('AND-first, OR-fallback query relaxation', () => {
   let dir: string;
   let db: Database.Database;
@@ -202,5 +226,17 @@ describe('AND-first, OR-fallback query relaxation', () => {
     const result = index.query('completely-absent-term-xyz', 5);
     expect(result.matchMode).toBe('and');
     expect(result.hits).toHaveLength(0);
+  });
+
+  it('AND-first path filters stopwords too, so a natural-language query does not require literal stopword tokens ("we", "the") to be present in the doc', () => {
+    index.upsert('doc7.md', 'Doc Seven', 'absolutely trust meeting outcome matters');
+    // Before the fix, sanitizeFtsQuery (no stopword filtering) required "we"
+    // and "the" to literally appear in the doc too, so this AND query found
+    // zero hits and fell back to OR — same eventual hits, but at OR-fallback
+    // cost, and (per the real-vault diagnosis) the *unfiltered* AND query
+    // itself is the pathologically expensive step, not just the OR fallback.
+    const result = index.query('we absolutely trust the meeting outcome', 5);
+    expect(result.matchMode).toBe('and');
+    expect(result.hits.map((h) => h.docId)).toEqual(['doc7.md']);
   });
 });

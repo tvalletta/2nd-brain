@@ -5,6 +5,7 @@ export {
   type SyncStats,
   openFTSIndex,
   sanitizeFtsQuery,
+  sanitizeFtsQueryAnd,
 } from './fts-index.js';
 export { rrf, type RRFInput, type RRFResult } from './rrf.js';
 export {

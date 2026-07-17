@@ -185,7 +185,11 @@ export function openFTSIndex(db: Database.Database, opts: FTSIndexOptions): FTSI
   function querySnippet(text: string, limit: number): { hits: FTSHit[]; matchMode: 'and' | 'or' } {
     const trimmed = text.trim();
     if (!trimmed) return { hits: [], matchMode: 'and' };
-    const andQuery = sanitizeFtsQuery(trimmed);
+    // Stopword-filtered AND (not the raw sanitizeFtsQuery) — see
+    // sanitizeFtsQueryAnd's doc comment for why: ANDing in near-universal
+    // English words alongside real content terms costs enormously more
+    // without changing which docs match.
+    const andQuery = sanitizeFtsQueryAnd(trimmed);
     if (!andQuery) return { hits: [], matchMode: 'and' };
 
     const andHits = runFtsQuery(andQuery, limit);
@@ -302,6 +306,16 @@ export function openFTSIndex(db: Database.Database, opts: FTSIndexOptions): FTSI
   };
 }
 
+// Split on anything that isn't a Unicode letter/digit/underscore so accented
+// terms, CJK, em-dashes, etc. survive; then strip stray double quotes (which
+// would otherwise let a token break out of FTS5's quoted-phrase syntax).
+function tokenizeFtsQuery(query: string): string[] {
+  return query
+    .split(/[^\p{L}\p{N}_]+/u)
+    .map((t) => t.replace(/"/g, '').trim())
+    .filter((t) => t.length > 0);
+}
+
 /**
  * Defensive sanitization for free-text user queries before handing them to
  * FTS5. Strips control chars, double quotes, and any non-alphanumeric
@@ -310,26 +324,46 @@ export function openFTSIndex(db: Database.Database, opts: FTSIndexOptions): FTSI
  *
  * If the query has fewer than 1 useful token after sanitization, returns
  * empty string and the caller short-circuits to no results.
+ *
+ * This does NOT filter stopwords — see `sanitizeFtsQueryAnd` for the
+ * stopword-filtered variant used internally by `querySnippet`'s AND-first
+ * path. This function is kept as-is (exact tokenize+quote, no filtering)
+ * because it's part of the public `search` API surface and other callers
+ * may rely on its literal, unfiltered behavior.
  */
 export function sanitizeFtsQuery(query: string): string {
-  // Split on anything that isn't a Unicode letter/digit/underscore so accented
-  // terms, CJK, em-dashes, etc. survive; then quote each token to prevent FTS5
-  // operator injection (AND/OR/NOT/NEAR/^/*/:).
-  const tokens = query
-    .split(/[^\p{L}\p{N}_]+/u)
-    .map((t) => t.replace(/"/g, '').trim())
-    .filter((t) => t.length > 0);
+  const tokens = tokenizeFtsQuery(query);
   if (tokens.length === 0) return '';
   return tokens.map((t) => `"${t}"`).join(' ');
 }
 
-// A short, standard English stopword list. Filtering these out of the
-// OR-fallback path avoids unioning enormous FTS5 posting lists for common
-// words on long natural-language queries — a 30+ word paraphrase-only
-// query previously took ~58-61 seconds identically across every search
-// variant sharing this FTS layer, traced to exactly this (found via the
-// 2026-07-17 bake-off re-run's fuzzy-recall latency data).
-const OR_FALLBACK_STOPWORDS = new Set([
+// A short, standard English stopword list. Filtering these out of both the
+// AND-first and OR-fallback query paths avoids enormous FTS5 posting-list
+// costs for common words on long natural-language queries.
+//
+// Originally added only to the OR-fallback path (sanitizeFtsQueryOr) to fix
+// fuzzy-003 (a 34-word query that fell through to OR and unioned every
+// token's posting list, ~58-61s -> ~226-437ms). Real re-verification against
+// the live vault found two more pathological queries, fuzzy-001 (~14-15s)
+// and fuzzy-002 (~24s), UNCHANGED by that fix — because both AND-first
+// queries actually succeed (return nonzero hits) and never reach the OR
+// path at all. The cost lived in `sanitizeFtsQuery`'s *unfiltered* AND
+// query: ANDing in 5-8 near-universal English words (e.g. "that", "we",
+// "how", "of", "up") alongside the real content terms. Measured directly
+// against the live index (23,731 docs):
+//   fuzzy-001 AND, unfiltered: ~10.5-13.9s, 47 rows
+//   fuzzy-001 AND, stopwords filtered:  ~186ms, 47 rows (byte-identical doc set)
+//   fuzzy-002 AND, unfiltered: ~8.7-24.2s, 17 rows
+//   fuzzy-002 AND, stopwords filtered:  ~163ms, 17 rows (byte-identical doc set)
+// i.e. filtering stopwords out of the AND query changes nothing about which
+// docs match (they're near-universal, so they add zero selectivity) but
+// removes most of FTS5's merge cost. This ruled out a vault-specific
+// high-frequency term (e.g. "AI", present in 73% of docs here) as the
+// driver of the AND-path cost — a vault-specific corpus-frequency
+// mechanism was considered but isn't justified by the data: this same
+// generic stopword list, applied consistently to both paths, fully
+// resolves the measured regression.
+const FTS_STOPWORDS = new Set([
   'a', 'an', 'and', 'are', 'as', 'at', 'be', 'been', 'but', 'by', 'for',
   'from', 'had', 'has', 'have', 'he', 'her', 'his', 'how', 'i', 'if', 'in',
   'into', 'is', 'it', 'its', 'me', 'my', 'no', 'not', 'of', 'on', 'or',
@@ -337,6 +371,16 @@ const OR_FALLBACK_STOPWORDS = new Set([
   'these', 'they', 'this', 'to', 'up', 'was', 'we', 'were', 'what', 'when',
   'where', 'which', 'who', 'will', 'with', 'would', 'you', 'your',
 ]);
+
+// If filtering stopwords would leave nothing (e.g. a query that happens to
+// be entirely stopwords), fall back to the unfiltered list rather than
+// returning an empty query — that would incorrectly trigger querySnippet's
+// "no query" short-circuit for a query that does have real (if all-common)
+// words.
+function filterFtsStopwords(tokens: string[]): string[] {
+  const filtered = tokens.filter((t) => !FTS_STOPWORDS.has(t.toLowerCase()));
+  return filtered.length > 0 ? filtered : tokens;
+}
 
 /**
  * Same tokenization/sanitization as `sanitizeFtsQuery`, but joins tokens
@@ -347,19 +391,28 @@ const OR_FALLBACK_STOPWORDS = new Set([
  * FTS5 posting lists for long natural-language queries.
  */
 export function sanitizeFtsQueryOr(query: string): string {
-  const tokens = query
-    .split(/[^\p{L}\p{N}_]+/u)
-    .map((t) => t.replace(/"/g, '').trim())
-    .filter((t) => t.length > 0);
+  const tokens = tokenizeFtsQuery(query);
   if (tokens.length === 0) return '';
+  return filterFtsStopwords(tokens)
+    .map((t) => `"${t}"`)
+    .join(' OR ');
+}
 
-  const filtered = tokens.filter((t) => !OR_FALLBACK_STOPWORDS.has(t.toLowerCase()));
-  // If filtering stopwords would leave nothing (e.g. a query that happens
-  // to be entirely stopwords), fall back to the unfiltered list rather
-  // than returning an empty query — that would incorrectly trigger
-  // querySnippet's "no OR query" branch for a query that does have real
-  // (if all-common) words.
-  const finalTokens = filtered.length > 0 ? filtered : tokens;
-
-  return finalTokens.map((t) => `"${t}"`).join(' OR ');
+/**
+ * Same tokenization/sanitization as `sanitizeFtsQuery`, but filters out
+ * common English stopwords before joining with implicit AND (space) — used
+ * by `querySnippet`'s AND-first path instead of `sanitizeFtsQuery`.
+ *
+ * Without this, ANDing in near-universal words (e.g. "that", "we", "of")
+ * alongside real content terms adds no selectivity (see `FTS_STOPWORDS`
+ * comment above for measured before/after) but makes FTS5's AND merge
+ * pathologically expensive on long natural-language queries — even when
+ * the AND query still succeeds and never reaches the OR fallback.
+ */
+export function sanitizeFtsQueryAnd(query: string): string {
+  const tokens = tokenizeFtsQuery(query);
+  if (tokens.length === 0) return '';
+  return filterFtsStopwords(tokens)
+    .map((t) => `"${t}"`)
+    .join(' ');
 }
