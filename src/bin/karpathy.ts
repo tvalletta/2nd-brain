@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 
 // Load .env from project root synchronously so env vars are available before any client is created
 try {
@@ -1619,6 +1620,15 @@ async function maintenanceCommand(args: string[]): Promise<void> {
     // notes_fts/notes_fts_v2 — it must not touch the `embeddings` table.
     const dbPath = join(projectRoot, config.stateDir, 'embeddings.sqlite');
     const db = new Database(dbPath);
+    // This shared database also holds a real `vec_embeddings` vec0 virtual
+    // table (src/embeddings/store.ts). Any connection to this file that
+    // references — or, depending on the SQLite/sqlite-vec version and
+    // schema-reparse path taken, otherwise touches — that table needs the
+    // sqlite-vec extension loaded on THIS connection first, or it can raise
+    // "no such module: vec0" (the module is registered per-connection, not
+    // per-file). Load it before any DDL/rebuild runs, matching the exact
+    // pattern store.ts uses when it opens this same file.
+    sqliteVec.load(db);
     try {
       const { rebuildFtsWithStemmer, swapFtsTable } = await import('../maintenance/rebuild-fts-tokenizer.js');
       const vaultDirs = [config.layout.wiki, config.layout.aiSummaries, config.layout.sources, config.layout.review];

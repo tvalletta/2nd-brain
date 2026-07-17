@@ -106,6 +106,105 @@ describe('rebuildFtsWithStemmer', () => {
   });
 });
 
+// Finding 2 (whole-branch cross-plan review): the FTS-rebuild CLI
+// (`src/bin/karpathy.ts`'s `--rebuild-fts-tokenizer` handler) opens the
+// shared `.karpathy/state/embeddings.sqlite` file with a plain
+// `new Database(dbPath)`. That file now also holds a real `vec_embeddings`
+// vec0 virtual table (semantic-latency-fallback's `src/embeddings/store.ts`
+// dual-writes into it) — a plan that landed AFTER grep-recall-improvements
+// built this rebuild mechanism against a database shape that, at the time,
+// had no vec0 table at all. The sqlite-vec module is registered
+// per-connection (`sqliteVec.load(db)`, see store.ts), not per-file, so any
+// fresh connection to this file that ends up touching `vec_embeddings`
+// without having loaded the extension first throws "no such module: vec0".
+// These tests use file-backed databases and separate `Database` connections
+// (rather than sharing one in-memory handle across the whole test, as the
+// rest of this file does) specifically to reproduce the real CLI's
+// connection lifecycle: one process/connection creates the vec0 table
+// (mirroring the embedding store's ingest path), a DIFFERENT connection
+// later opens that same file to run the rebuild (mirroring the CLI).
+describe('rebuild-fts-tokenizer + shared vec0 table (issue: "no such module: vec0")', () => {
+  let dir: string;
+  let dbPath: string;
+  let vaultDir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'fts-rebuild-vec0-'));
+    dbPath = join(dir, 'embeddings.sqlite');
+    vaultDir = mkdtempSync(join(tmpdir(), 'fts-rebuild-vec0-vault-'));
+    mkdirSync(join(vaultDir, 'wiki'), { recursive: true });
+    writeFileSync(join(vaultDir, 'wiki', 'a.md'), '---\ntitle: A\n---\nWe made several decisions this week about meeting cadence.');
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(vaultDir, { recursive: true, force: true });
+  });
+
+  /** Seeds `dbPath` with the real production shape: notes_fts (via
+   * openFTSIndex) plus a real vec_embeddings vec0 table with one row (via
+   * the real embedding store, not a hand-rolled CREATE VIRTUAL TABLE), then
+   * closes the connection so a later connection can reopen the same file
+   * fresh. */
+  async function seedProductionShapeDb(): Promise<void> {
+    const db = new Database(dbPath);
+    openFTSIndex(db, { vaultRoot: vaultDir });
+    const provider = createDeterministicProvider();
+    const store = openEmbeddingStore({ db, provider });
+    await store.upsert([
+      {
+        doc_id: 'wiki/a.md',
+        chunk_index: 0,
+        chunk_hash: 'hash-abc123',
+        text: 'We made several decisions this week about meeting cadence.',
+        metadata: { source: 'wiki/a.md' },
+      },
+    ]);
+    db.close();
+  }
+
+  it('grounds the diagnosis: a fresh connection that never loads sqlite-vec throws "no such module: vec0" the moment vec_embeddings is referenced', async () => {
+    await seedProductionShapeDb();
+    const freshDb = new Database(dbPath); // no sqliteVec.load(freshDb) — the pre-fix CLI behavior
+    expect(() => freshDb.prepare(`SELECT COUNT(*) AS n FROM vec_embeddings`).get()).toThrow(/no such module: vec0/);
+    freshDb.close();
+  });
+
+  it('rebuild+swap does not throw and the vec0 table survives untouched, once the connection loads sqlite-vec before running (the fix)', async () => {
+    await seedProductionShapeDb();
+
+    // Mirrors the fixed CLI handler: a fresh connection to the shared file,
+    // sqlite-vec loaded immediately after opening, before any DDL runs.
+    const db = new Database(dbPath);
+    const sqliteVec = await import('sqlite-vec');
+    sqliteVec.load(db);
+
+    const before = db.prepare(`SELECT rowid FROM vec_embeddings ORDER BY rowid`).all() as { rowid: number }[];
+    expect(before).toHaveLength(1);
+
+    await expect(
+      (async () => {
+        const result = await rebuildFtsWithStemmer(db, vaultDir, ['wiki']);
+        swapFtsTable(db);
+        return result;
+      })(),
+    ).resolves.not.toThrow();
+
+    const after = db.prepare(`SELECT rowid FROM vec_embeddings ORDER BY rowid`).all() as { rowid: number }[];
+    expect(after).toEqual(before);
+
+    // The rebuild+swap itself must still have happened correctly.
+    const tables = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'notes_fts%' AND sql LIKE 'CREATE VIRTUAL TABLE%'`,
+      )
+      .all() as { name: string }[];
+    expect(tables.map((t) => t.name).sort()).toEqual(['notes_fts', 'notes_fts_old']);
+
+    db.close();
+  });
+});
+
 describe('swapFtsTable', () => {
   it('atomically renames notes_fts_v2 to notes_fts and the old one to notes_fts_old', async () => {
     const vaultDir2 = mkdtempSync(join(tmpdir(), 'fts-swap-vault-'));
