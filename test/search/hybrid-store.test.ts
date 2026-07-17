@@ -244,6 +244,56 @@ describe('hybrid store', () => {
     expect(result.hits.map((h) => h.docId)).not.toContain('x.md');
   });
 
+  it('recency no longer dominates the blended score for a weak-RRF match (I9 regression guard)', async () => {
+    await store.upsertDoc(
+      'irrelevant.md',
+      'Sourdough Starter Tips',
+      'sourdough starter feeding schedule and hydration ratio',
+      [
+        {
+          doc_id: 'irrelevant.md',
+          chunk_index: 0,
+          chunk_hash: 'h1',
+          text: 'sourdough starter feeding schedule and hydration ratio',
+          metadata: { type: 'concept' },
+        },
+      ],
+    );
+    const result = await store.search('quarterly OKR planning process for the engineering org');
+    const hit = result.hits.find((h) => h.docId === 'irrelevant.md');
+    expect(hit).toBeDefined();
+
+    // Test design note (discovered while red/green-ing this test — see the
+    // task report for the full derivation): with createDeterministicProvider
+    // and only one doc in the store, this doc trivially takes rank 0 in the
+    // semantic pool — any two vectors have *some* cosine similarity, and RRF
+    // has no way to express "bad candidate" when it's the only candidate in
+    // the pool. That's a structural property of rank-based fusion, not
+    // something a recency/RRF scale fix can or should change. So asserting
+    // an absolute `final < 0.05` ceiling (as originally drafted) is not
+    // achievable post-fix: it was confirmed empirically to become ~0.5,
+    // *higher* than the pre-fix ~0.065, because the RRF term — now correctly
+    // scaled to [0,1] — legitimately dominates a rank-0-of-1-contributing-list
+    // result, exactly as it should for a doc that's the sole occupant of a
+    // pool.
+    //
+    // The actual I9 bug (and the actual fix) is about *proportion*, not
+    // absolute magnitude: pre-fix, `beta*recency` (bounded [0, 0.5]) is
+    // combined directly against a raw RRF term capped at ~0.033, so recency
+    // alone supplies the overwhelming majority of the score for *any* doc
+    // with a weak/incidental RRF signal — a doc can look "confident" purely
+    // because it's fresh, independent of relevance. Test that proportion
+    // directly, since it's what actually breaks downstream confidence gates.
+    const beta = config.intelligence.recencyWeight.concept;
+    const recencyContribution = beta * hit!.scores.recency;
+    const recencyFraction = recencyContribution / hit!.scores.final;
+    // Pre-fix this fraction is ~0.77 (recency alone supplies over 3/4 of the
+    // score for a doc whose only "evidence" is a coincidental semantic
+    // match). Post-fix it's ~0.10 — recency plays its configured minority
+    // role instead of manufacturing the score on its own.
+    expect(recencyFraction).toBeLessThan(0.3);
+  });
+
   it('surfaces ftsMatchMode "or" on the result when the FTS layer fell back to OR', async () => {
     // Create docs where AND would fail but OR succeeds:
     // each doc has only one of the two query terms.

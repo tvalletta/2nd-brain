@@ -4,8 +4,11 @@
 //   - FTSIndex (FTS5/BM25 keyword pool over the entire vault)
 //   - EmbeddingStore (cosine similarity pool over ingest-pipeline content)
 //   - Reciprocal Rank Fusion to merge them
-//   - Recency fusion (`final = α · rrf + β · exp(-Δt/30)`) using the existing
-//     per-content-type β from `config.intelligence.recencyWeight`.
+//   - Recency fusion (`final = α · normalize(rrf) + β · exp(-Δt/30)`) using
+//     the existing per-content-type β from `config.intelligence.recencyWeight`.
+//     (Issue I9: the raw RRF score is normalized to [0,1] against the
+//     theoretical max for the query's pool composition before blending —
+//     see the fusion comment in search() for why.)
 //
 // Degradation: if Ollama (or whichever provider is configured) is unreachable
 // when the search() call starts, we skip the semantic pool entirely and return
@@ -38,7 +41,7 @@ export interface HybridHit {
     rrf: number;
     /** `exp(-Δt / 30)` for the chunk's updated_at. */
     recency: number;
-    /** Final blended ranking score `α · rrf + β · recency`. */
+    /** Final blended ranking score `α · normalize(rrf) + β · recency` (issue I9). */
     final: number;
   };
   /** FTS5 snippet if keyword matched, else the chunk text. */
@@ -167,6 +170,17 @@ export function createHybridStore(opts: HybridStoreOptions): HybridStore {
       }
       const fused = rrf(lists);
 
+      // Fix for issue I9: raw RRF scores (max ~1/60 per contributing list,
+      // so ~0.017-0.033 total) are on a wildly different scale than
+      // `recency` (bounded [0, 0.5]) — combining them directly as
+      // `alpha*score + beta*recency` lets recency swamp genuine relevance
+      // for ANY query, not just irrelevant ones. Normalize by the
+      // theoretical max RRF score for this query's actual pool composition
+      // (1/60 per list that contributed) so `normalizedScore` is
+      // genuinely in [0, 1] and comparable to recency's scale.
+      const maxPossibleRrfScore = lists.length / 60;
+      const normalizeScore = (raw: number) => (maxPossibleRrfScore > 0 ? raw / maxPossibleRrfScore : 0);
+
       // ---- Stage 3: Hydrate per-doc metadata + recency fusion --------------
       const ftsByDoc = new Map(ftsHits.map((h) => [h.docId, h]));
       const semanticBestByDoc = new Map<string, SemanticHit>();
@@ -211,7 +225,7 @@ export function createHybridStore(opts: HybridStoreOptions): HybridStore {
         const beta = pickBeta(config, ct, options.betaOverride);
         const alpha = 1 - beta;
         const recency = recencyScore(updatedAt, nowMs);
-        const finalScore = alpha * score + beta * recency;
+        const finalScore = alpha * normalizeScore(score) + beta * recency;
 
         const hit: HybridHit = {
           docId,
