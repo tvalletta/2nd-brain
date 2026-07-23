@@ -449,4 +449,69 @@ describe('renderBakeoffMarkdown', () => {
     expect(md).toContain('full-cov-hybrid');
     expect(md).toContain('| Arm | Accuracy | Latency | Tokens | Simplicity | Composite |');
   });
+
+  it('renders a missing-validation warning', () => {
+    const bakeoff = buildBakeoff({
+      runsResults: [
+        { itemId: 'x', variant: 'grep-first', query: 'q', returned: [], searchMode: 'keyword-only', latencyMs: 100, responseChars: 40, responseTokensEst: 10 },
+        { itemId: 'x', variant: 'full-cov-hybrid', query: 'q', returned: [], searchMode: 'hybrid', latencyMs: 50, responseChars: 40, responseTokensEst: 10 },
+        { itemId: 'x', variant: 'as-deployed', query: 'q', returned: [], searchMode: 'hybrid', latencyMs: 5, responseChars: 40, responseTokensEst: 10 },
+      ],
+      scorecard: {
+        run: { date: '2026-07-15', generated_at: 'x', db_doc_count: 1, any_degraded_runs: false },
+        by_category_variant: [],
+        routing: {},
+        coverage: {},
+      },
+      judgments: [],
+      backfillReport: { notes_embedded: 1, wall_clock_min: 1, db_size_delta_gb: 1 },
+      answerQualityCheck: { status: 'missing', answerQualityDate: null },
+    });
+    const md = renderBakeoffMarkdown(bakeoff);
+    expect(md).toContain('UNVALIDATED');
+  });
+
+  it('renders a stale-validation warning with the answer-quality date', () => {
+    const bakeoff = buildBakeoff({
+      runsResults: [
+        { itemId: 'x', variant: 'grep-first', query: 'q', returned: [], searchMode: 'keyword-only', latencyMs: 100, responseChars: 40, responseTokensEst: 10 },
+        { itemId: 'x', variant: 'full-cov-hybrid', query: 'q', returned: [], searchMode: 'hybrid', latencyMs: 50, responseChars: 40, responseTokensEst: 10 },
+        { itemId: 'x', variant: 'as-deployed', query: 'q', returned: [], searchMode: 'hybrid', latencyMs: 5, responseChars: 40, responseTokensEst: 10 },
+      ],
+      scorecard: {
+        run: { date: '2026-07-15', generated_at: 'x', db_doc_count: 1, any_degraded_runs: false },
+        by_category_variant: [],
+        routing: {},
+        coverage: {},
+      },
+      judgments: [],
+      backfillReport: { notes_embedded: 1, wall_clock_min: 1, db_size_delta_gb: 1 },
+      answerQualityCheck: { status: 'stale', answerQualityDate: '2026-07-10' },
+    });
+    const md = renderBakeoffMarkdown(bakeoff);
+    expect(md).toContain('2026-07-10');
+    expect(md).toMatch(/stale|predates/i);
+  });
+
+  it('renders a fresh confirmation, not a warning', () => {
+    const bakeoff = buildBakeoff({
+      runsResults: [
+        { itemId: 'x', variant: 'grep-first', query: 'q', returned: [], searchMode: 'keyword-only', latencyMs: 100, responseChars: 40, responseTokensEst: 10 },
+        { itemId: 'x', variant: 'full-cov-hybrid', query: 'q', returned: [], searchMode: 'hybrid', latencyMs: 50, responseChars: 40, responseTokensEst: 10 },
+        { itemId: 'x', variant: 'as-deployed', query: 'q', returned: [], searchMode: 'hybrid', latencyMs: 5, responseChars: 40, responseTokensEst: 10 },
+      ],
+      scorecard: {
+        run: { date: '2026-07-15', generated_at: 'x', db_doc_count: 1, any_degraded_runs: false },
+        by_category_variant: [],
+        routing: {},
+        coverage: {},
+      },
+      judgments: [],
+      backfillReport: { notes_embedded: 1, wall_clock_min: 1, db_size_delta_gb: 1 },
+      answerQualityCheck: { status: 'fresh', answerQualityDate: '2026-07-17' },
+    });
+    const md = renderBakeoffMarkdown(bakeoff);
+    expect(md).not.toContain('UNVALIDATED');
+    expect(md).toContain('2026-07-17');
+  });
 });

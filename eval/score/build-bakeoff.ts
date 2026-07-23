@@ -328,6 +328,22 @@ export function renderBakeoffMarkdown(bakeoff: Bakeoff): string {
   if (bakeoff.run.any_degraded_runs) {
     lines.push(`⚠️ **This run's underlying harness pass was flagged degraded** (the live index changed mid-run) — see the scorecard for details.`, '');
   }
+  const aq = bakeoff.run.answerQualityValidation;
+  if (aq.status === 'missing') {
+    lines.push(
+      `⚠️ **UNVALIDATED: no downstream answer-quality check found for this bake-off.** ` +
+      `This composite verdict has not been checked against real generated-answer quality — run \`npm run eval:answer-quality\` before trusting it.`,
+      '',
+    );
+  } else if (aq.status === 'stale') {
+    lines.push(
+      `⚠️ **STALE validation: the latest downstream answer-quality check is dated ${aq.answerQualityDate}, which predates this bake-off run (${bakeoff.run.date}).** ` +
+      `It may not reflect the current dataset/judgments — re-run \`npm run eval:answer-quality\` before trusting this verdict.`,
+      '',
+    );
+  } else {
+    lines.push(`✅ Downstream answer-quality check dated ${aq.answerQualityDate} validates this composite verdict.`, '');
+  }
   lines.push(`## Backfill cost (Arm B, full-cov-hybrid)`, '');
   lines.push(`- Notes embedded: ${bakeoff.backfill_ledger.notes_embedded}`);
   lines.push(`- Wall clock: ${bakeoff.backfill_ledger.wall_clock_min} min`);
@@ -449,13 +465,27 @@ async function main() {
   };
   const judgments: Judgment[] = JSON.parse(readFileSync(join(REPO_ROOT, 'eval/dataset/judgments.json'), 'utf8'));
 
-  const bakeoff = buildBakeoff({ runsResults: runsFile.results, scorecard, judgments, backfillReport });
+  // Compare against today's date, matching bakeoff.run.date (not scorecard.run.date,
+  // which is the underlying eval-set/harness-pass version, a separate concept —
+  // see Task 8 Step 5's note).
+  const today = new Date().toISOString().slice(0, 10);
+  const answerQualityCheck = checkAnswerQualityFreshness(resultsDir, today);
+  const bakeoff = buildBakeoff({ runsResults: runsFile.results, scorecard, judgments, backfillReport, answerQualityCheck });
 
   const date = bakeoff.run.date;
   writeFileSync(join(resultsDir, `${date}-bakeoff.json`), JSON.stringify(bakeoff, null, 2));
   writeFileSync(join(resultsDir, `${date}-bakeoff.md`), renderBakeoffMarkdown(bakeoff));
   console.log(`Wrote eval/results/${date}-bakeoff.json and .md`);
   console.log(`Verdict: ${bakeoff.verdict.winner} (margin ${bakeoff.verdict.margin}, mixed: ${bakeoff.verdict.mixed})`);
+
+  if (answerQualityCheck.status !== 'fresh') {
+    console.error(
+      `\n⚠️  WARNING: answer-quality validation status is '${answerQualityCheck.status}' — ` +
+      `this composite verdict has NOT been confirmed against real answer quality. ` +
+      `Run 'npm run eval:answer-quality' and re-run this script before trusting the verdict.\n`,
+    );
+    process.exitCode = 1;
+  }
 }
 
 if (process.argv[1]?.endsWith('build-bakeoff.ts')) {
