@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { buildBakeoff, renderBakeoffMarkdown } from '../../eval/score/build-bakeoff.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { buildBakeoff, renderBakeoffMarkdown, checkAnswerQualityFreshness } from '../../eval/score/build-bakeoff.js';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { RunResult } from '../../eval/run/types.js';
 import type { Judgment } from '../../eval/pool/judge.js';
 import type { Scorecard } from '../../eval/score/build-scorecard.js';
@@ -74,6 +77,7 @@ describe('buildBakeoff', () => {
     expect(fullCov.latency.sub).toBeCloseTo(1.0);
     // grep-first's sub should reflect its ratio to full-cov-hybrid (~105/210), NOT to as-deployed's ~5ms.
     expect(grepFirst.latency.sub).toBeCloseTo(105 / 210, 1);
+    expect(bakeoff.run.answerQualityValidation).toEqual({ status: 'missing', answerQualityDate: null });
   });
 
   it('computes composite as 0.5*accuracy + 0.2*latency + 0.15*tokens + 0.15*simplicity', () => {
@@ -223,6 +227,42 @@ describe('buildBakeoff', () => {
     const degradedScorecard: Scorecard = { ...scorecard, run: { ...scorecard.run, any_degraded_runs: true } };
     const degraded = buildBakeoff({ runsResults, scorecard: degradedScorecard, judgments, backfillReport });
     expect(degraded.run.any_degraded_runs).toBe(true);
+  });
+});
+
+describe('checkAnswerQualityFreshness', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-aq-freshness-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('reports missing when no answer-quality file exists', () => {
+    const result = checkAnswerQualityFreshness(dir, '2026-07-17');
+    expect(result).toEqual({ status: 'missing', answerQualityDate: null });
+  });
+
+  it('reports fresh when the latest answer-quality file is dated on or after the bake-off run', async () => {
+    await writeFile(join(dir, '2026-07-17-answer-quality.json'), '{}');
+    const result = checkAnswerQualityFreshness(dir, '2026-07-17');
+    expect(result).toEqual({ status: 'fresh', answerQualityDate: '2026-07-17' });
+  });
+
+  it('reports stale when the latest answer-quality file predates the bake-off run', async () => {
+    await writeFile(join(dir, '2026-07-10-answer-quality.json'), '{}');
+    const result = checkAnswerQualityFreshness(dir, '2026-07-17');
+    expect(result).toEqual({ status: 'stale', answerQualityDate: '2026-07-10' });
+  });
+
+  it('uses the latest of multiple answer-quality files', async () => {
+    await writeFile(join(dir, '2026-07-01-answer-quality.json'), '{}');
+    await writeFile(join(dir, '2026-07-20-answer-quality.json'), '{}');
+    const result = checkAnswerQualityFreshness(dir, '2026-07-17');
+    expect(result).toEqual({ status: 'fresh', answerQualityDate: '2026-07-20' });
   });
 });
 

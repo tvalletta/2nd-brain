@@ -44,7 +44,13 @@ export interface BakeoffVerdict {
 }
 
 export interface Bakeoff {
-  run: { date: string; eval_set_version: string; k: number; any_degraded_runs: boolean };
+  run: {
+    date: string;
+    eval_set_version: string;
+    k: number;
+    any_degraded_runs: boolean;
+    answerQualityValidation: { status: AnswerQualityValidationStatus; answerQualityDate: string | null };
+  };
   backfill_ledger: { notes_embedded: number; wall_clock_min: number; db_size_delta_gb: number };
   arms: ArmComposite[];
   verdict: BakeoffVerdict;
@@ -71,6 +77,7 @@ export interface BakeoffInput {
   scorecard: Scorecard;
   judgments: Judgment[];
   backfillReport: { notes_embedded: number; wall_clock_min: number; db_size_delta_gb: number };
+  answerQualityCheck?: { status: AnswerQualityValidationStatus; answerQualityDate: string | null };
 }
 
 /** Total simplicity penalty for one arm (spec §4.6). deps/jobs/failure-mode
@@ -297,6 +304,7 @@ export function buildBakeoff(input: BakeoffInput): Bakeoff {
       eval_set_version: scorecard.run.date,
       k: 10,
       any_degraded_runs: scorecard.run.any_degraded_runs,
+      answerQualityValidation: input.answerQualityCheck ?? { status: 'missing', answerQualityDate: null },
     },
     backfill_ledger: {
       notes_embedded: backfillReport.notes_embedded,
@@ -392,6 +400,35 @@ function findLatestDatedFile(dir: string, suffixPattern: RegExp): string {
   if (candidates.length === 0) throw new Error(`No file matching ${suffixPattern} found in ${dir}`);
   candidates.sort();
   return join(dir, candidates[candidates.length - 1]);
+}
+
+export type AnswerQualityValidationStatus = 'fresh' | 'stale' | 'missing';
+
+/**
+ * Compare the latest downstream answer-quality check file's date against
+ * this bake-off run's date. 'stale' means the answer-quality check predates
+ * this bake-off run, so it was computed against an older dataset/judgments
+ * snapshot and may no longer validate the current composite verdict.
+ */
+export function checkAnswerQualityFreshness(
+  resultsDir: string,
+  bakeoffDate: string,
+): { status: AnswerQualityValidationStatus; answerQualityDate: string | null } {
+  const pattern = /^(\d{4}-\d{2}-\d{2})-answer-quality\.json$/;
+  let candidates: string[];
+  try {
+    candidates = readdirSync(resultsDir).filter((f) => pattern.test(f));
+  } catch {
+    candidates = [];
+  }
+  if (candidates.length === 0) {
+    return { status: 'missing', answerQualityDate: null };
+  }
+  candidates.sort();
+  const latest = candidates[candidates.length - 1];
+  const answerQualityDate = latest.match(pattern)![1];
+  const status: AnswerQualityValidationStatus = answerQualityDate >= bakeoffDate ? 'fresh' : 'stale';
+  return { status, answerQualityDate };
 }
 
 async function main() {
