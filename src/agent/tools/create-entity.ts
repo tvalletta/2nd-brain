@@ -35,8 +35,8 @@ export const createEntityTool: AgentToolDef = {
     const kind = input.kind as EntityKind;
 
     // Check if entity already exists
-    const index = await buildEntityIndex(context.vault);
-    const resolution = resolveEntity({ name, kind }, index);
+    const index = await buildEntityIndex(context.vault, context.config.layout);
+    const resolution = resolveEntity({ name, kind }, index, context.config.layout);
 
     if (resolution.status === 'matched') {
       return `Entity already exists: ${resolution.matchedPath}. Use update_protected_region to modify it.`;
