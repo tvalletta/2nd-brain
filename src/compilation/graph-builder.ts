@@ -1,7 +1,7 @@
 import type { VaultAdapter } from '../vault/adapter.js';
 import type { EntityIndex } from '../ingest/entity-resolver.js';
 import { parseNote } from '../vault/frontmatter.js';
-import { slugify, WIKI_CONTENT_FOLDERS } from '../vault/paths.js';
+import { slugify, DEFAULT_LAYOUT, wikiContentFolders, type VaultLayout } from '../vault/paths.js';
 import { createLogger } from '../shared/logger.js';
 
 const log = createLogger('graph-builder');
@@ -30,20 +30,18 @@ export interface GraphAnalysis {
   missingLinks: Array<{ source: string; mention: string; suggestedTarget: string }>;
 }
 
-const WIKI_FOLDERS = WIKI_CONTENT_FOLDERS;
-
 const WIKILINK_PATTERN = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
 
 /**
  * Build an in-memory graph of all wiki pages and their wikilink relationships.
  */
-export async function buildGraph(vault: VaultAdapter): Promise<WikiGraph> {
+export async function buildGraph(vault: VaultAdapter, layout: VaultLayout = DEFAULT_LAYOUT): Promise<WikiGraph> {
   const nodes = new Map<string, GraphNode>();
   const edges: GraphEdge[] = [];
 
   // Collect all markdown files from wiki folders
   const allFiles: string[] = [];
-  for (const folder of WIKI_FOLDERS) {
+  for (const folder of wikiContentFolders(layout)) {
     try {
       const files = await vault.listMarkdownFiles(folder);
       allFiles.push(...files);

@@ -5,6 +5,7 @@ import { slugify } from '../vault/paths.js';
 import { buildGraph } from '../compilation/graph-builder.js';
 import { buildEntityIndex, levenshtein } from '../ingest/entity-resolver.js';
 import type { EntityIndex } from '../ingest/entity-resolver.js';
+import { DEFAULT_LAYOUT, type VaultLayout } from '../vault/paths.js';
 import { createLogger } from '../shared/logger.js';
 
 const log = createLogger('lint');
@@ -67,16 +68,17 @@ const PENDING_ENRICHMENT = 'Pending enrichment.';
 
 export async function lintWiki(
   vault: VaultAdapter,
-  options?: { autoFix?: boolean },
+  options?: { autoFix?: boolean; layout?: VaultLayout },
 ): Promise<LintResult> {
   const autoFix = options?.autoFix ?? false;
+  const layout = options?.layout ?? DEFAULT_LAYOUT;
   const issues: LintIssue[] = [];
   let autoFixed = 0;
 
   // Build shared data structures once
   const [graph, entityIndex] = await Promise.all([
-    buildGraph(vault),
-    buildEntityIndex(vault),
+    buildGraph(vault, layout),
+    buildEntityIndex(vault, layout),
   ]);
 
   const scanned = graph.nodes.size;

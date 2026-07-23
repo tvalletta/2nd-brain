@@ -9,7 +9,7 @@ export const lintWikiHandler: JobHandler = {
     log.info('Running wiki lint');
 
     // 1. Call lintWiki with autoFix enabled
-    const result = await lintWiki(context.vault, { autoFix: true });
+    const result = await lintWiki(context.vault, { autoFix: true, layout: context.config.layout });
 
     // 2. Log results
     const counts: Record<string, number> = {};
