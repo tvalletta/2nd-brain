@@ -2,6 +2,7 @@ import type { VaultAdapter } from '../vault/adapter.js';
 import type { LLMClient } from '../enrichment/llm-client.js';
 import { buildEntityIndex } from '../ingest/entity-resolver.js';
 import type { EntityIndex } from '../ingest/entity-resolver.js';
+import { DEFAULT_LAYOUT, type VaultLayout } from '../vault/paths.js';
 import { parseNote, serializeNote } from '../vault/frontmatter.js';
 import { slugify } from '../vault/paths.js';
 import { createLogger } from '../shared/logger.js';
@@ -23,13 +24,13 @@ export interface CrossLinkResult {
  */
 export async function crossLinkPages(
   pagePaths: string[],
-  context: { vault: VaultAdapter; llm?: LLMClient },
+  context: { vault: VaultAdapter; llm?: LLMClient; layout?: VaultLayout },
 ): Promise<CrossLinkResult> {
-  const { vault } = context;
+  const { vault, layout = DEFAULT_LAYOUT } = context;
 
   log.info('Starting cross-linking', { pageCount: pagePaths.length });
 
-  const entityIndex = await buildEntityIndex(vault);
+  const entityIndex = await buildEntityIndex(vault, layout);
   const lookupTable = buildLookupTable(entityIndex);
 
   let totalLinksInserted = 0;

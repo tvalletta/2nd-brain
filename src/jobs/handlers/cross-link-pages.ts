@@ -14,7 +14,7 @@ export const crossLinkPagesHandler: JobHandler = {
     log.info('Cross-linking pages', { pageCount: pagePaths.length });
 
     // 1. Call crossLinkPages
-    const result = await crossLinkPages(pagePaths, { vault: context.vault });
+    const result = await crossLinkPages(pagePaths, { vault: context.vault, layout: context.config.layout });
 
     log.info('Cross-linking complete', {
       linksInserted: result.linksInserted,
