@@ -32,7 +32,7 @@ export const linkConceptsHandler: JobHandler = {
     if (!entitiesPayload) throw new Error('link-concepts: no entities in payload');
 
     // Build entity index from vault
-    const index = await buildEntityIndex(context.vault);
+    const index = await buildEntityIndex(context.vault, context.config.layout);
 
     // Collect all entities to resolve
     const toResolve: Array<{ entity: PayloadEntity; kind: EntityKind }> = [];
@@ -77,7 +77,7 @@ export const linkConceptsHandler: JobHandler = {
     const mergedPages: string[] = [];
 
     for (const { entity, kind } of filtered) {
-      const resolution = resolveEntity({ name: entity.name, kind }, index);
+      const resolution = resolveEntity({ name: entity.name, kind }, index, context.config.layout);
       const info: ExtractedEntityInfo = {
         name: entity.name,
         kind,
