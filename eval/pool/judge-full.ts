@@ -1,6 +1,9 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { loadEvalEnv } from '../shared/load-env.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
+
+loadEvalEnv(join(import.meta.dirname, '..', '..'));
 import type { ItemPool, BehavioralEntry } from './build-pool.js';
 import { filterItemsByIdPrefix } from './build-pool.js';
 import { judgeItem, reconcileJudgments, type Judgment } from './judge.js';

@@ -1,6 +1,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { loadEvalEnv } from '../shared/load-env.js';
 import { loadConfig } from '../../src/config/loader.js';
+
+loadEvalEnv(join(import.meta.dirname, '..', '..'));
 import { createFsAdapter } from '../../src/vault/fs-adapter.js';
 import { createLLMForTier } from '../pool/llm.js';
 import { computeDisagreementSample } from './answer-quality-sample.js';
