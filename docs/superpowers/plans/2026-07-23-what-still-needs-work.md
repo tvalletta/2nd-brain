@@ -20,7 +20,7 @@
   - `src/bin/karpathy.ts`'s `mergeCommand` (resolveEntity only — buildEntityIndex there was already fixed in a prior round)
   - `src/maintenance/lint.ts` + `src/compilation/graph-builder.ts` (buildEntityIndex AND buildGraph both require a signature extension — see Task 5's scope-correction note)
   - `src/compilation/cross-linker.ts` (buildEntityIndex, requires a signature extension)
-- `buildEntityIndex(vault, layout: VaultLayout = DEFAULT_LAYOUT)` and `resolveEntity(entity, index, layout: VaultLayout = DEFAULT_LAYOUT)` (both in `src/ingest/entity-resolver.ts`) already accept an optional `layout` parameter — every fix in this plan is "pass the real value instead of relying on the default", never a signature change to these two functions.
+- `buildEntityIndex(vault, layout: VaultLayout = DEFAULT_LAYOUT)` and `resolveEntity(entity, index, layout: VaultLayout = DEFAULT_LAYOUT)` (both in `src/ingest/entity-resolver.ts`) already accept an optional `layout` parameter — every fix in this plan is "pass the real value instead of relying on the default", never a signature change to these two functions. **`src/ingest/entity-resolver.ts` itself is never modified by any task in this plan** — `resolveEntity`'s step 4 (`// 4. Cross-folder matches`) is a deliberately ungated fallback (matches by slug/name/alias in any folder, at confidence `0.85`), so omitting `layout` degrades match *confidence*, not match *status* — `buildEntityIndex` omitting `layout` is the severe failure mode (an empty/wrong-folder index has nothing to match against at all). If a task's test seems to require changing `resolveEntity`'s matching logic to pass, the test's assertion is wrong, not the production code — see Task 1's corrected test for the concrete example.
 - Do not modify `src/bin/karpathy.ts`'s existing `.env`-loading block (lines 8-21) — the eval `.env` fix is a new, eval-scoped module, not a shared refactor of production CLI code.
 - The composite-validation gate must never throw/crash the `eval:bakeoff` script — it warns loudly (`console.error`) and sets `process.exitCode = 1`, while still writing the `.json`/`.md` artifacts so they remain inspectable.
 
@@ -37,12 +37,14 @@
 - Consumes: `buildEntityIndex(vault, layout?)` and `resolveEntity(entity, index, layout?)` from `src/ingest/entity-resolver.ts` (both already exist, no changes to their signatures).
 - Produces: nothing new consumed by later tasks — this task establishes the test pattern (custom `VaultLayout` + `KarpathyConfigSchema.parse` + regression-style assertion) that Tasks 2-4 reuse.
 
-- [ ] **Step 1: Write the failing foundational test proving `resolveEntity` needs `layout` under a non-default layout**
+- [ ] **Step 1: Write the failing foundational test proving `resolveEntity` needs `layout` for exact-match confidence**
+
+**Correction found during execution of this task (documented here so the plan and the real code stay in sync):** `resolveEntity` has a 4th matching step — `// 4. Cross-folder matches` — that is a deliberately lenient fallback with **no folder gating at all**: it matches by slug/canonical-name/alias regardless of which folder the match lives in, at confidence `0.85` (vs. the exact-match `1.0` from steps 1-3). This means a caller that omits `layout` does **not** get `status: 'new'` for an entity that exists elsewhere in the index — it still gets `status: 'matched'`, just at the lower `0.85` confidence. Do NOT add a `matchedPath.startsWith(folder)` condition to step 4 to make an "should not match" test pass — that makes step 4 unreachable dead code (any match satisfying `startsWith(folder)` would already have returned at step 1-3), silently deleting the intentional cross-folder-fallback feature. If you find yourself tempted to change `src/ingest/entity-resolver.ts`'s matching logic to make this task's test pass, stop — the fix belongs in the test's assertions, not in production matching logic, which is unchanged by this task per the file list above.
 
 Add this new `describe` block inside the existing `describe('resolveEntity', ...)` block in `test/ingest/entity-resolver.test.ts` (after the existing `it('matches by exact slug', ...)` test, before `it('matches by canonical name', ...)`):
 
 ```typescript
-    it('does NOT match under a non-default layout unless the layout is passed through', async () => {
+    it('matches with lower cross-folder confidence unless the real layout is passed through', async () => {
       // Same vault, but the entity lives under a custom `Curated/wiki` root,
       // not the DEFAULT_LAYOUT `wiki` root the beforeEach folders assume.
       await vault.ensureFolder('Curated/wiki/entities');
@@ -66,12 +68,18 @@ Add this new `describe` block inside the existing `describe('resolveEntity', ...
       const customLayout: VaultLayout = { ...DEFAULT_LAYOUT, wiki: 'Curated/wiki' };
       const index = await buildEntityIndex(vault, customLayout);
 
+      // Without the real layout, steps 1-3's `startsWith(folder)` check fails
+      // (folder computed from DEFAULT_LAYOUT is 'wiki/entities', but the file
+      // is under 'Curated/wiki/entities'), so it falls through to step 4's
+      // lenient cross-folder fallback: still matched, but at confidence 0.85.
       const withoutLayout = resolveEntity({ name: 'Jordan Ellis', kind: 'person' }, index);
-      expect(withoutLayout.status).not.toBe('matched');
+      expect(withoutLayout.status).toBe('matched');
+      expect(withoutLayout.confidence).toBe(0.85);
 
       const withLayout = resolveEntity({ name: 'Jordan Ellis', kind: 'person' }, index, customLayout);
       expect(withLayout.status).toBe('matched');
       expect(withLayout.matchedPath).toBe('Curated/wiki/entities/jordan-ellis.md');
+      expect(withLayout.confidence).toBe(1.0);
     });
 ```
 
@@ -90,8 +98,8 @@ import { DEFAULT_LAYOUT, type VaultLayout } from '../../src/vault/paths.js';
 
 - [ ] **Step 2: Run the test to verify it passes already (documents existing, correct behavior)**
 
-Run: `npx vitest run test/ingest/entity-resolver.test.ts -t "does NOT match under a non-default layout"`
-Expected: PASS. This test doesn't fail — `resolveEntity`'s own layout-gating already works correctly when the caller passes `layout` explicitly. It exists to document the exact mechanism (folder-prefix gating via `kindToFolder`) that Tasks 1-4's real call-site fixes depend on, and to catch any future regression in `resolveEntity` itself.
+Run: `npx vitest run test/ingest/entity-resolver.test.ts -t "matches with lower cross-folder confidence"`
+Expected: PASS. This test doesn't fail — `resolveEntity`'s own layout-gating already works correctly when the caller passes `layout` explicitly, and its cross-folder fallback already works correctly when it isn't. It exists to document the exact mechanism (folder-prefix gating via `kindToFolder` for exact matches, deliberately ungated for the cross-folder fallback) that Tasks 2-4's real call-site fixes depend on — those fixes upgrade match *confidence and precision*, not match/no-match status — and to catch any future regression in `resolveEntity` itself.
 
 - [ ] **Step 3: Fix `topic-refresh.ts`'s `buildEntityIndex` call**
 
@@ -643,6 +651,7 @@ git commit -m "fix(agent-tools): thread real vault layout into resolve_entity + 
 
 **Interfaces:**
 - Consumes: `resolveEntity(entity, index, layout?)` (unchanged signature). `config.layout` is already in scope in `mergeCommand` — it's used two lines above these call sites (`const index = await buildEntityIndex(vault, config.layout);`, confirmed at line 1022), which is itself the fix from a prior round (commit `9556bc5`) that only threaded layout into `buildEntityIndex` and missed these two `resolveEntity` calls.
+- **Corrected severity (found during Task 1's execution):** `resolveEntity`'s steps 1-3 gate matches on `matchedPath.startsWith(folder)`, but step 4 (`// 4. Cross-folder matches`) is a deliberately lenient fallback with no folder gating at all — it matches by slug/canonical-name/alias regardless of folder, at confidence `0.85` instead of the exact-match `1.0`. Since `mergeCommand` only reads `.status` (never `.confidence` — confirmed via `grep -n "sr.status\|tr.status\|\.confidence" src/bin/karpathy.ts`), this means `mergeCommand` **already resolves entities correctly today**, just via the looser cross-folder path at lower confidence, not the "silently fails to find the entity" bug this task's earlier description assumed. The fix below is still worth doing — it makes the reported confidence accurate, and it correctly restricts the match to the *intended* layout+kind folder rather than any slug/name/alias collision across kinds (e.g. a `decision` and a `project` that happen to slugify identically would currently cross-match at 0.85 regardless of vault layout) — but it is a precision/correctness improvement, not a fix for a broken feature.
 
 - [ ] **Step 1: Fix both call sites**
 
@@ -689,10 +698,12 @@ git add src/bin/karpathy.ts
 git commit -m "fix(karpathy-cli): thread real vault layout into mergeCommand's resolveEntity calls
 
 Commit 9556bc5 fixed buildEntityIndex's layout in mergeCommand but missed
-the two resolveEntity calls a few lines below it, so entity matching in
-mergeCommand still silently failed under a non-default layout even after
-that fix — resolveEntity gates matches by folder prefix using its own
-layout parameter, independent of the index passed in."
+the two resolveEntity calls a few lines below it. resolveEntity's cross-folder
+fallback (step 4) already matches regardless of folder, so mergeCommand
+wasn't silently failing — but passing the real layout makes the reported
+confidence accurate (1.0 exact match vs 0.85 cross-folder fallback) and
+correctly restricts matches to the intended layout+kind folder rather than
+any slug/name/alias collision across kinds."
 ```
 
 ---

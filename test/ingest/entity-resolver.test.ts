@@ -161,12 +161,23 @@ describe('entity-resolver', () => {
       const customLayout: VaultLayout = { ...DEFAULT_LAYOUT, wiki: 'Curated/wiki' };
       const index = await buildEntityIndex(vault, customLayout);
 
+      // Without the real layout, step 1 (exact slug match) can't confirm the
+      // match lives in the expected folder (kindToFolder(DEFAULT_LAYOUT, 'person')
+      // is 'wiki/entities', but the file is under 'Curated/wiki/entities') — so it
+      // falls through to step 4's cross-folder fallback, which still finds the
+      // entity but reports the lower cross-folder confidence (0.85) rather than
+      // the exact-match confidence (1.0). This is the real, correct behavior:
+      // resolveEntity's layout parameter affects match confidence/precision, not
+      // match/no-match status, because step 4 is deliberately lenient about which
+      // folder a match lives in.
       const withoutLayout = resolveEntity({ name: 'Jordan Ellis', kind: 'person' }, index);
-      expect(withoutLayout.status).not.toBe('matched');
+      expect(withoutLayout.status).toBe('matched');
+      expect(withoutLayout.confidence).toBe(0.85);
 
       const withLayout = resolveEntity({ name: 'Jordan Ellis', kind: 'person' }, index, customLayout);
       expect(withLayout.status).toBe('matched');
       expect(withLayout.matchedPath).toBe('Curated/wiki/entities/jordan-ellis.md');
+      expect(withLayout.confidence).toBe(1.0);
     });
 
     it('matches by canonical name', async () => {
