@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createFsAdapter } from '../../src/vault/fs-adapter.js';
+import { DEFAULT_LAYOUT, type VaultLayout } from '../../src/vault/paths.js';
 import { serializeNote } from '../../src/vault/frontmatter.js';
 import {
   buildEntityIndex,
@@ -134,6 +135,38 @@ describe('entity-resolver', () => {
       expect(result.status).toBe('matched');
       expect(result.matchedPath).toBe('wiki/entities/john-smith.md');
       expect(result.confidence).toBe(1.0);
+    });
+
+    it('does NOT match under a non-default layout unless the layout is passed through', async () => {
+      // Same vault, but the entity lives under a custom `Curated/wiki` root,
+      // not the DEFAULT_LAYOUT `wiki` root the beforeEach folders assume.
+      await vault.ensureFolder('Curated/wiki/entities');
+      await vault.create(
+        'Curated/wiki/entities/jordan-ellis.md',
+        serializeNote(
+          {
+            id: '1',
+            type: 'entity',
+            title: 'Jordan Ellis',
+            canonical_name: 'Jordan Ellis',
+            entity_kind: 'person',
+            aliases: [],
+            created_at: '2025-01-01T00:00:00Z',
+            updated_at: '2025-01-01T00:00:00Z',
+          },
+          '\n# Jordan Ellis\n\nContent.\n',
+        ),
+      );
+
+      const customLayout: VaultLayout = { ...DEFAULT_LAYOUT, wiki: 'Curated/wiki' };
+      const index = await buildEntityIndex(vault, customLayout);
+
+      const withoutLayout = resolveEntity({ name: 'Jordan Ellis', kind: 'person' }, index);
+      expect(withoutLayout.status).not.toBe('matched');
+
+      const withLayout = resolveEntity({ name: 'Jordan Ellis', kind: 'person' }, index, customLayout);
+      expect(withLayout.status).toBe('matched');
+      expect(withLayout.matchedPath).toBe('Curated/wiki/entities/jordan-ellis.md');
     });
 
     it('matches by canonical name', async () => {

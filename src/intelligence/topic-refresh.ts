@@ -225,7 +225,7 @@ Output ONLY a single fenced \`\`\`json block.`;
       const newRegion = synthesis.current_understanding;
       const linkedNames = extractOutlinks(newRegion);
       if (linkedNames.length > 0) {
-        const index = await buildEntityIndex(deps.vault);
+        const index = await buildEntityIndex(deps.vault, deps.config.layout);
         const seen = new Set<string>();
         for (const name of linkedNames) {
           // Resolve via slug match — same logic as resolveEntity. We accept

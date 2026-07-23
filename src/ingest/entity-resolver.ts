@@ -115,8 +115,9 @@ export function resolveEntity(
   }
 
   // 4. Cross-folder matches (slug, name, alias match but in a different folder)
+  // Only allow cross-folder matches if they're in a valid folder for the current layout.
   const crossSlug = slugMatch ?? index.byCanonicalName.get(normalized) ?? index.byAlias.get(normalized);
-  if (crossSlug) {
+  if (crossSlug && crossSlug.startsWith(folder)) {
     return { entityName: name, entityKind: kind, status: 'matched', matchedPath: crossSlug, confidence: 0.85 };
   }
 

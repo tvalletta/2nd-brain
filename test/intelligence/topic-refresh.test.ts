@@ -222,6 +222,65 @@ Initial framing.
     expect(pending[0].reason).toBe('cascade-from-refresh');
   });
 
+  it('Phase 1: cascades to a neighbor resolved under a non-default vault layout', async () => {
+    const customConfig = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp',
+      layout: { wiki: 'Curated/wiki' },
+    });
+    const topicPath = 'Curated/wiki/topics/recency-aware-rag.md';
+    await vault.ensureFolder('Curated/wiki/concepts');
+    await vault.create(
+      'Curated/wiki/concepts/cross-encoder.md',
+      `---
+id: c3
+type: concept
+title: Cross Encoder
+status: active
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+# Cross Encoder
+`,
+    );
+    await vault.create(
+      topicPath,
+      `---
+id: t6
+type: topic
+title: Recency-aware RAG
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+stability: 30
+pending_evidence:
+  - ref: wiki/sources/2026-04-15.md
+    at: 2026-04-15T00:00:00Z
+pending_evidence_count: 1
+---
+# Recency-aware RAG
+%% begin:current-understanding %%
+Initial framing.
+%% end:current-understanding %%
+`,
+    );
+    await store.upsert([
+      { doc_id: 'wiki/sources/2026-04-15.md', chunk_index: 0, chunk_hash: 'h1', text: 'cross encoder reranking helps' },
+    ]);
+
+    const llm = fakeLLM({
+      current_understanding: 'Two-stage retrieval pairs a bi-encoder with a [[Cross Encoder]] reranker [1].',
+      contradictions: [],
+      new_sources: ['wiki/sources/2026-04-15.md'],
+    });
+
+    const result = await refreshTopic({ vault, llm, store, config: customConfig }, topicPath, {
+      nowMs: Date.parse('2026-05-01T00:00:00Z'),
+    });
+
+    expect(result.neighborsCascaded).toBe(1);
+    const { data: neighborFm } = parseNote(await vault.read('Curated/wiki/concepts/cross-encoder.md'));
+    expect(neighborFm.pending_evidence_count).toBe(1);
+  });
+
   it('Phase 1: cascadeDepth=0 disables the neighbor cascade', async () => {
     const topicPath = 'wiki/topics/x2.md';
     await vault.ensureFolder('wiki/concepts');
