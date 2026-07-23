@@ -137,7 +137,7 @@ describe('entity-resolver', () => {
       expect(result.confidence).toBe(1.0);
     });
 
-    it('does NOT match under a non-default layout unless the layout is passed through', async () => {
+    it('matches with lower cross-folder confidence unless the real layout is passed through', async () => {
       // Same vault, but the entity lives under a custom `Curated/wiki` root,
       // not the DEFAULT_LAYOUT `wiki` root the beforeEach folders assume.
       await vault.ensureFolder('Curated/wiki/entities');
