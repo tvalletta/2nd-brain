@@ -300,6 +300,14 @@ async function drainQueueCommand(): Promise<void> {
   } finally {
     if (release) await release();
   }
+  // Same fix as intel tick (src/bin/intel-command.ts's 'tick' case): without
+  // an explicit exit, this process can sit alive indefinitely after finishing
+  // its work (an open handle from job execution — e.g. the LLM client —
+  // keeps the event loop alive). Since spawnBackgroundDrain() (src/hooks/
+  // background-drain.ts) spawns one of these on every PostToolUse hook, this
+  // previously left one zombie process behind per tool call in every Claude
+  // Code session.
+  process.exit(0);
 }
 
 async function ingestCommand(args: string[]): Promise<void> {
