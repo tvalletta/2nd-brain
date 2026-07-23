@@ -60,32 +60,57 @@ Use these to answer: *Is the system finding the right things? Are the tool descr
 
 | Command | Description |
 |---|---|
+| `karpathy init [vault-path]` | Initialize a new vault |
 | `karpathy status` | Vault stats: wiki pages, sessions, sources, review queue |
 | `karpathy maintain` | Run deterministic maintenance (backlinks + indexes) |
-| `karpathy drain-queue` | Drain all pending jobs in the background |
-| `karpathy ingest <file>` | Ingest a raw source file into the pipeline |
-| `karpathy reingest` | Re-ingest all raw files through the pipeline |
+| `karpathy maintenance <flags>` | Hybrid-search maintenance: `--populate-fts`, `--re-embed`, `--prune-provider <id>`, `--rebuild-fts-tokenizer [--confirm]` |
+| `karpathy drain-queue` | Drain pending jobs (used by background hooks) |
+| `karpathy ingest <file> [--enrich]` | Ingest a raw source file (`--enrich` for LLM enrichment) |
+| `karpathy reingest [--no-enrich]` | Re-ingest all raw files through the pipeline |
+| `karpathy reprocess-agent` | Run agent pipeline on unprocessed AI conversations |
+| `karpathy import-sessions [--all] [--enrich]` | Import Claude Code session history |
+| `karpathy import-cursor-sessions [--enrich]` | Import Cursor IDE session history |
+| `karpathy clean` | Delete all generated content (`wiki/`, `outputs/`, etc.), keep `raw/` |
 | `karpathy review` | List items in the review queue |
+| `karpathy merge <src> <tgt>` | Merge one entity into another |
 | `karpathy merge --detect` | Detect potential duplicate entities |
 | `karpathy merge --auto` | Auto-merge high-confidence duplicates |
+| `karpathy migrate` | Migrate vault (delete old summaries, backfill frontmatter) |
+| `karpathy migrate-hubs` | Migrate legacy single-page projects to hub model |
+| `karpathy migrate-markers` | Migrate `<!-- PROTECTED -->` markers to `%%` syntax |
 | `karpathy install-hooks` | Install Claude Code hooks into `~/.claude/settings.json` |
 | `karpathy install-mcp` | Register MCP server in Claude Code + Cursor |
 | `karpathy mcp` | Start MCP server (stdio transport) |
 | `karpathy hook <event>` | Handle a Claude Code hook event (called by hooks, not directly) |
-| `karpathy import-sessions` | Import Claude Code session history into the vault |
-| `karpathy migrate` | Migrate vault frontmatter and protected region syntax |
+| `karpathy synthesize <slug>` | Run full re-synthesis for a project (Opus model) |
+| `karpathy check-decay` | Check for stale project specs and trigger re-synthesis |
+| `karpathy cross-project` | Detect cross-project patterns and shared entities |
+| `karpathy skills` / `skills seed` / `skills generate` | List / seed / generate synthesis skills |
+| `karpathy spec-versions [archive]` | List or archive superseded spec versions |
+| `karpathy curator` | Interactive entity reconciliation queue walkthrough |
+| `karpathy touch <note-path>` | Re-run entity extraction on a wiki note you edited |
+| `karpathy entity-aliases` | Interactive walkthrough to fill in aliases for every entity note |
 
 ### Intelligence pipeline (`karpathy intel <subcommand>`)
 
 | Subcommand | Description |
 |---|---|
+| `intel backfill` | Backfill time-aware frontmatter (`last_verified`, `stability`, `tldr`, ...) |
+| `intel reindex [folder]` | Re-embed all notes under `folder` (default: wiki). Use after upgrading. |
 | `intel digest` | Run weekly hot-topics digest (clusters recent chunks by topic) |
+| `intel decay` | Run decay scan now (enqueues topic refreshes) |
+| `intel rot` | Run vault rot diagnostic (writes `wiki/_system/vault-health.md`) |
 | `intel propose` | Propose research candidates from high-mention entities |
-| `intel approve "<reply>"` | Approve research candidates ("1 heavy, 2 medium, skip 3") |
+| `intel refresh <path>` | Refresh a single topic note by path |
+| `intel research <slug> <depth>` | Execute approved research at depth (`light`\|`medium`\|`heavy`) |
 | `intel queue` | Print the current research queue |
-| `intel tick` | Run scheduled intelligence jobs that are due |
+| `intel index` | Rebuild vault root `index.md` |
+| `intel tick` | Self-pacing scheduler — fires whichever scheduled jobs are due |
+| `intel schedule` | Print scheduler state (last fire per job type) |
+| `intel approve "<reply>"` | Approve research candidates ("1 heavy, 2 medium, skip 3") |
 | `intel status` | Pipeline health: counts, latest digest, scheduler state |
-| `intel health` | Structured health check (exit 0 OK, 1 critical, 2 warn) |
+| `intel health [--json]` | Structured health check (exit 0 OK, 1 critical, 2 warn) |
+| `intel serve [--port N]` | Long-running HTTP server exposing `/health` (default port 9123) |
 
 ---
 
@@ -126,27 +151,29 @@ All automation flows through a JSON-backed job queue at `.karpathy/state/job-que
 
 ## MCP Server
 
-The Carpathi MCP server exposes 20 tools to Claude Code, Cursor, and any MCP-compatible host.
+The Carpathi MCP server exposes 23 tools to Claude Code, Cursor, and any MCP-compatible host.
 
 ### Which tool to use
 
 | Goal | Tool |
 |---|---|
 | Orient at session start | `get_hot_cache` |
-| Find notes by keyword | `search_vault` |
+| Find notes about X (any free-text query) | `search` |
 | Find a specific person/tool/project | `get_entity` or `search_entities` |
-| Find semantically related notes | `get_related` (needs AWS creds) |
+| Find notes tagged with X or linked to Y | `search_by_tags` |
 | Surface past decisions | `get_decisions` |
 | Recent session context | `get_recent_sessions` |
-| Read a specific note | `get_note` |
+| Read a specific note | `get_note` or `batch_get_notes` |
+| Find and resolve duplicate entity pages | `reconcile_entities` |
 | Save what was decided or built | `log_session_summary` + `log_insight` |
 | Refresh backlinks and indexes | `run_maintenance` |
 
 ### Search notes
 
-- `search_vault` — keyword search with stemming ("analysis" matches "analyses") across all note types, ranked by title > heading > body frequency. Excludes `_index.md` category files.
-- `search_entities` — keyword search within entity notes, ranked by relevance.
-- `get_related` — semantic similarity via Bedrock-Titan embeddings + recency boost. Falls back gracefully when AWS credentials are expired.
+- `search` — **the primary search tool.** Hybrid FTS5 + BM25 keyword ranking, fused with an optional Ollama semantic layer (Reciprocal Rank Fusion), plus a recency boost. Runs in <100ms against a pre-built SQLite index. Accepts any free-text query or a `path` to find notes similar to an anchor note. Use this for vault-wide queries.
+- `search_vault` — **deprecated.** A sequential file scan (7-11s on a large vault) kept only for backward compatibility. Do not use it for new integrations; use `search` instead.
+- `search_entities` — keyword search scoped to entity notes (people, orgs, tools, projects, concepts), ranked by relevance.
+- `get_related` — semantic similarity via embeddings + recency boost. Falls back gracefully when the embedding provider is unavailable — see `search.semanticFallbackEnabled` in [Configuration](#configuration).
 
 ### Server instructions
 
@@ -215,10 +242,15 @@ Global config at `~/.karpathy/config.json`:
       "refresh": { "enabled": true, "threshold": 3 },
       "budget": { "enabled": true, "llmCallsPerDay": { "fast": 200, "medium": 50, "heavy": 10 } },
       "research": { "enabled": true }
+    },
+    "search": {
+      "semanticFallbackEnabled": true
     }
   }
 }
 ```
+
+`search.semanticFallbackEnabled` gates the hybrid retrieval fallback path (confidence-gated: falls back only when the FTS pass returns too few hits) — see `src/search/hybrid-store.ts`.
 
 ### Critical path rules
 
@@ -250,7 +282,7 @@ Global config at `~/.karpathy/config.json`:
   state/
     job-queue.json     # pending + completed jobs
     budget.json        # daily LLM call budgets
-    embeddings.sqlite  # Bedrock-Titan embedding store
+    embeddings.sqlite  # Vector embedding store (Ollama or Bedrock-Titan, config-driven)
   locks/               # file-based mutexes
   logs/
     *.log              # structured job execution logs
@@ -263,11 +295,27 @@ Global config at `~/.karpathy/config.json`:
 
 ```bash
 pnpm build            # Build with tsup → dist/
-pnpm test             # Vitest — 632 tests across 65 files
+pnpm test             # Vitest — 901 tests across 116 files
 pnpm lint             # tsc --noEmit (strict mode)
 ```
 
 All three must pass before committing.
+
+### Retrieval Eval Harness
+
+`eval/` holds a standalone harness for benchmarking retrieval variants (keyword-only vs. hybrid FTS5+BM25+RRF+semantic) against a hand-curated + usage-mined query dataset, plus a downstream check of whether retrieval differences actually change generated-answer quality (blind pairwise LLM judging), not just a proxy metric like recall@k.
+
+| Script | Description |
+|---|---|
+| `npm run eval:mine` | Mine real usage logs + session history into candidate eval queries |
+| `npm run eval:run` | Run all retrieval variants against the query dataset |
+| `npm run eval:pool` / `eval:judge-full` | Build the judgment pool and run blind LLM relevance judging |
+| `npm run eval:score` | Compute recall/precision/MRR scorecards per category/variant |
+| `npm run eval:bakeoff` | Composite score + verdict across variants — **fails loudly (non-zero exit) if the downstream answer-quality check is missing or stale relative to the current run** |
+| `npm run eval:answer-quality` | Generate real answers from each variant's retrieved context and blind-judge them pairwise |
+| `npm run eval:typecheck` | Typecheck the `eval/` tree separately from the main build |
+
+`eval/pool/judge-full.ts` and `eval/report/main.ts` auto-load `.env` (via `eval/shared/load-env.ts`) so Bedrock credentials are available without sourcing it manually first.
 
 ### Adding a new MCP tool
 
