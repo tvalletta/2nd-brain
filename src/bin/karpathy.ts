@@ -1028,11 +1028,11 @@ async function mergeCommand(args: string[]): Promise<void> {
 
   for (const kind of kinds) {
     if (!sourcePath) {
-      const sr = resolveEntity({ name: sourceName, kind }, index);
+      const sr = resolveEntity({ name: sourceName, kind }, index, config.layout);
       if (sr.status === 'matched') sourcePath = sr.matchedPath!;
     }
     if (!targetPath) {
-      const tr = resolveEntity({ name: targetName, kind }, index);
+      const tr = resolveEntity({ name: targetName, kind }, index, config.layout);
       if (tr.status === 'matched') targetPath = tr.matchedPath!;
     }
   }
