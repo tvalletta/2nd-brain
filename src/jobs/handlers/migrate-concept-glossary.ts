@@ -16,7 +16,7 @@ import type { KarpathyConfig } from '../../config/schema.js';
 import { parseNote } from '../../vault/frontmatter.js';
 import { getProtectedRegion } from '../../vault/protected-regions.js';
 import { layoutFromConfig, wikiContentFolders } from '../../vault/paths.js';
-import { upsertConceptMention } from '../../maintenance/concept-glossary.js';
+import { upsertConceptMention, conceptGlossaryPath } from '../../maintenance/concept-glossary.js';
 import { createLogger } from '../../shared/logger.js';
 
 const log = createLogger('migrate-concept-glossary');
@@ -62,6 +62,7 @@ export async function migrateConceptsToGlossary(
     }
 
     let wikilinksRewritten = 0;
+    const glossaryPath = conceptGlossaryPath(layout);
     for (const folder of wikiContentFolders(layout)) {
       let candidateFiles: string[];
       try {
@@ -70,7 +71,7 @@ export async function migrateConceptsToGlossary(
         continue;
       }
       for (const candidatePath of candidateFiles) {
-        if (candidatePath === path) continue;
+        if (candidatePath === path || candidatePath === glossaryPath) continue;
         const candidateContent = await vault.read(candidatePath);
         const pattern = new RegExp(`\\[\\[${escapeRegex(slug)}(\\|[^\\]]+)?\\]\\]`, 'g');
         if (!pattern.test(candidateContent)) continue;

@@ -86,4 +86,38 @@ describe('migrate-concept-glossary handler', () => {
     expect(decisionContent).not.toContain('[[efficiency]]');
     expect(decisionContent).toContain('[[glossary#Efficiency]]');
   });
+
+  it('does not self-corrupt the glossary mention for a concept with no recorded source_refs (regression)', async () => {
+    // Reproduces the bug: source_refs defaults to [] per the Zod schema, so
+    // the handler's `sourceRefs.length > 0 ? sourceRefs : [path]` fallback
+    // fires and upsertConceptMention cites the concept's own former slug
+    // (e.g. "standalone"). Without excluding glossary.md itself from the
+    // wikilink-rewrite scan (which includes the `concepts` folder,
+    // glossary.md's own home), that freshly-written citation gets
+    // immediately "rewritten" to a self-referential [[glossary#Standalone]],
+    // corrupting the very citation the mention was meant to record.
+    await vault.create(
+      'wiki/concepts/standalone.md',
+      serializeNote(
+        {
+          id: 'c2', type: 'concept', title: 'Standalone', created_at: '2026-05-15T00:00:00Z', updated_at: '2026-05-15T00:00:00Z',
+          source_refs: [], aliases: [], links: [],
+          protected_regions: ['definition'],
+        },
+        '\n# Standalone\n\n## Definition\n%% begin:definition %%\nA concept with no recorded sources.\n%% end:definition %%\n',
+      ),
+    );
+
+    const ctx = makeCtx();
+    await migrateConceptGlossaryHandler.execute(makeJob(false), ctx);
+
+    expect(await vault.exists('wiki/concepts/standalone.md')).toBe(false);
+    const glossary = await vault.read('wiki/concepts/glossary.md');
+    expect(glossary).toContain('## Standalone');
+    // The mention must still cite the concept's own former slug...
+    expect(glossary).toContain('[[standalone]]');
+    // ...and must NOT have been rewritten into a self-referential glossary
+    // anchor link (the corruption this regression test guards against).
+    expect(glossary).not.toContain('[[glossary#Standalone]]');
+  });
 });
