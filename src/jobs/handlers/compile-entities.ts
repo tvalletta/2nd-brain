@@ -132,6 +132,7 @@ export const compileEntitiesHandler: JobHandler = {
       vault: context.vault,
       llm: context.llm,
       config: context.config,
+      projectRoot: context.projectRoot,
     });
 
     // 3. Update source summary: set ingest_status to 'linked', update links array
