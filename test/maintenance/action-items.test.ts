@@ -84,8 +84,19 @@ describe('action-items', () => {
     await upsertActionItem(vault, DEFAULT_LAYOUT, {
       task: 'Fix (urgent) bug', sourceRef: 'sources/s3.md', projectSlug: '2nd-brain',
     });
+    // Force a real reparse of the line that was just written, by adding a
+    // second item — this exercises parseChecklist against the ambiguous-
+    // looking line, not just renderChecklist's output.
+    await upsertActionItem(vault, DEFAULT_LAYOUT, {
+      task: 'Second unrelated task', sourceRef: 'sources/s4.md', projectSlug: '2nd-brain',
+    });
+
     const rollupContent = await vault.read('wiki/_system/action-items.md');
     expect(rollupContent).toContain('Fix (urgent) bug');
     expect(rollupContent).toContain('`project:2nd-brain`');
+    expect(rollupContent).toContain('Second unrelated task');
+    // The first task's text must not have been truncated or corrupted by the
+    // second upsert's read-parse-rewrite cycle.
+    expect(rollupContent).not.toContain('urgent) bug (2nd-brain');
   });
 });
