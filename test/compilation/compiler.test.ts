@@ -175,4 +175,33 @@ describe('compileFromSource — significance gate integration', () => {
     expect(called).toBe(false); // budget exhausted -> never reserved -> heuristic path used instead
     expect(result.created).toHaveLength(1); // heuristic keeps non-trivial names
   });
+
+  it('llm mode: a heuristic-dropped entity does not consume a budget slot needed by a later entity', async () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      enrichment: { significanceGate: 'llm' },
+      intelligence: { budget: { enabled: true, llmCallsPerDay: { fast: 1, medium: 50, heavy: 10 } } },
+    });
+    let calls = 0;
+    const llm: LLMClient = {
+      async complete() {
+        return '';
+      },
+      async extractStructured<T>(_p: string, schema: z.ZodType<T>): Promise<T> {
+        calls += 1;
+        return schema.parse({ action: 'keep' });
+      },
+    };
+    const result = await compileFromSource(
+      'sources/s1.md',
+      [
+        makeEntity({ name: 'ai' }), // heuristic drop (< 3 chars) -> must not reserve a budget slot
+        makeEntity({ name: 'Zephyr Protocol' }), // heuristic keep -> should still get the LLM's judgment
+      ],
+      { vault, llm, config, projectRoot: dir },
+    );
+    expect(calls).toBe(1); // only the second entity ever reached the LLM
+    expect(result.skipped).toEqual(['ai']);
+    expect(result.created).toHaveLength(1); // Zephyr Protocol's llm-mode "keep" verdict created its page
+  });
 });

@@ -91,10 +91,13 @@ export async function compileFromSource(
 
       if (config.enrichment.significanceGate !== 'off') {
         const gateInput = { name: entity.name, kind: entity.kind, context: entity.context };
+        const heuristicResult = heuristicGate(gateInput, []);
         const decision =
-          config.enrichment.significanceGate === 'llm' && budget.tryReserve('fast')
+          heuristicResult.action === 'keep' &&
+          config.enrichment.significanceGate === 'llm' &&
+          budget.tryReserve('fast')
             ? await llmGate(llm, gateInput, [])
-            : heuristicGate(gateInput, []);
+            : heuristicResult;
 
         if (decision.action === 'drop') {
           const threshold = config.enrichment.significanceGateDropConfidence;

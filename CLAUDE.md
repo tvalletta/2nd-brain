@@ -119,7 +119,7 @@ Implements [specs/intelligence-plan.md](specs/intelligence-plan.md). Hot paths:
 - **Decay scan** (`src/intelligence/decay-scan.ts`) — computes `R = exp(-Δt / S)` per note, enqueues `topic-refresh` for stale ones, surfaces low-retrievability concept/topic notes as research candidates. Job: `decay-scan`.
 - **Vault-rot diagnostic** (`src/intelligence/rot-scan.ts`) — orphan + stale + low-confidence → `wiki/_system/vault-health.md`. Job: `rot-scan`.
 - **Research handshake** — gap detection (`research-propose.ts`) writes `wiki/_system/research-queue.md`; user decides depth via Slack reply (parsed by `slack-notify.ts`), direct queue edit, or the `approve_research` MCP tool. Tiered executor (`research-execute.ts`) runs `light` / `medium` / `heavy` rounds. Jobs: `research-propose`, `research-execute`.
-- **Significance gate** (`src/intelligence/significance-gate.ts`) — heuristic + optional LLM gate that drops noise entities. Wired into `link-concepts` handler when `config.enrichment.significanceGate !== 'off'`.
+- **Significance gate** (`src/intelligence/significance-gate.ts`) — heuristic + optional LLM gate that drops noise entities. Wired into `link-concepts` handler when `config.enrichment.significanceGate !== 'off'`. Defaults to `'llm'` (was `'heuristic'`) — existing installs that never set this explicitly will start making a Bedrock `fast`-tier call per newly-extracted entity on upgrade; `significanceGateDropConfidence` (default `0.7`) keeps this safe by creating the page anyway (flagged for review) instead of discarding it whenever the LLM's `drop` verdict falls below that confidence. `config.maintenance.reviewEnabled` is no longer dead config either: when `true`, it now schedules `detect-contradictions`/`detect-duplicates`/`detect-entity-dupes` daily (previously these only ran via manual CLI).
 - **Mark-dirty primitive** (`src/maintenance/mark-dirty.ts`) — `markDirty(vault, { notePath, ref, reason? })` appends evidence to a note's `pending_evidence` queue (idempotent, bounded). `clearPendingEvidence(vault, notePath)` flushes the queue and stamps `last_verified`. Foundation for Phase 1 `evaluate-refresh-candidates` cascade.
 - **Refresh threshold gate** (`src/jobs/handlers/evaluate-refresh-candidates.ts`) — Lane 1, deterministic. Reads a note's `pending_evidence_count`; enqueues `topic-refresh` when ≥ `intelligence.refresh.threshold` (default 3) or when retrievability has decayed below the floor and at least one pending entry exists. Wired into `link-concepts` (per merged concept) and via the topic-refresh depth-1 cascade.
 - **Topic refresh cascade** (`src/intelligence/topic-refresh.ts`) — on successful rewrite, clears `pending_evidence` and (when `intelligence.refresh.cascadeDepth >= 1`) calls `markDirty` on each direct neighbor referenced in the new `current-understanding` region. Neighbors are NOT auto-refreshed — the threshold gate decides on the next ingest cycle.
@@ -157,7 +157,10 @@ Implements [specs/intelligence-plan.md](specs/intelligence-plan.md). Hot paths:
     "research": { "enabled": true, "queueCap": 50, "autoExpireDays": 14, "depths": { ... } }
   },
   "notifications": { "slack": { "enabled": false, "webhookUrl": "...", "target": "#channel" } },
-  "enrichment": { "significanceGate": "heuristic" | "off" | "llm" }
+  "enrichment": {
+    "significanceGate": "heuristic" | "off" | "llm",  // default: "llm"
+    "significanceGateDropConfidence": 0.7 // below this, an LLM "drop" verdict still creates the page (flagged for review) instead of discarding it
+  }
 }
 ```
 
