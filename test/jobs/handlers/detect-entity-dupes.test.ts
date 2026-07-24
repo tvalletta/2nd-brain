@@ -114,9 +114,9 @@ describe('detect-entity-dupes handler', () => {
   it('is idempotent — running twice does not duplicate queue entries', async () => {
     const shared = 'outputs/source-summaries/source2.md';
     const fmX = { id: 'x1', type: 'entity', entity_kind: 'person', canonical_name: 'Dave', title: 'Dave', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), source_refs: [shared], aliases: [] };
-    const fmY = { id: 'y1', type: 'entity', entity_kind: 'person', canonical_name: 'Dave S', title: 'Dave S', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), source_refs: [shared], aliases: [] };
+    const fmY = { id: 'y1', type: 'entity', entity_kind: 'person', canonical_name: 'Daev', title: 'Daev', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), source_refs: [shared], aliases: [] };
     await vault.create('wiki/entities/people/dave.md', serializeNote(fmX, ''));
-    await vault.create('wiki/entities/people/dave-s.md', serializeNote(fmY, ''));
+    await vault.create('wiki/entities/people/daev.md', serializeNote(fmY, ''));
 
     const ctx = makeCtx();
     await detectEntityDupesHandler.execute(makeJob(), ctx);
@@ -130,5 +130,86 @@ describe('detect-entity-dupes handler', () => {
       queue.entries.map((e) => [e.sourcePath, e.targetPath].sort().join('||')),
     );
     expect(pairKeys.size).toBe(queue.entries.length);
+  });
+
+  it('auto-merges candidates at or above the 0.85 confidence threshold', async () => {
+    // Alias-overlap match scores confidence 0.95 in entity-merger.ts, well above threshold.
+    const shared = 'outputs/source-summaries/source3.md';
+    const fmA = {
+      id: 'p1',
+      type: 'entity',
+      entity_kind: 'person',
+      canonical_name: 'Patricia Vaughn',
+      title: 'Patricia Vaughn',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      source_refs: [shared],
+      aliases: ['Pat Vaughn'],
+    };
+    const fmB = {
+      id: 'p2',
+      type: 'entity',
+      entity_kind: 'person',
+      canonical_name: 'Pat Vaughn',
+      title: 'Pat Vaughn',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      source_refs: [shared],
+      aliases: [],
+    };
+    await vault.create('wiki/entities/people/patricia-vaughn.md', serializeNote(fmA, ''));
+    await vault.create('wiki/entities/people/pat-vaughn.md', serializeNote(fmB, ''));
+
+    const ctx = makeCtx();
+    await detectEntityDupesHandler.execute(makeJob(), ctx);
+
+    // One of the two pages should have been deleted by the auto-merge.
+    const remaining = await vault.listMarkdownFiles('wiki/entities/people');
+    expect(remaining).toHaveLength(1);
+
+    const layout = KarpathyConfigSchema.parse({ vaultPath: dir }).layout;
+    const queue = await readReconciliationQueue(vault, layout);
+    // The auto-merged pair should NOT also be sitting in the manual-review queue.
+    expect(queue.entries).toHaveLength(0);
+  });
+
+  it('queues candidates below the auto-merge threshold instead of merging them', async () => {
+    // Levenshtein distance 2, 1 shared source -> confidence 0.8, below threshold.
+    const shared = 'outputs/source-summaries/source4.md';
+    const fmA = {
+      id: 'q1',
+      type: 'entity',
+      entity_kind: 'person',
+      canonical_name: 'Dave',
+      title: 'Dave',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      source_refs: [shared],
+      aliases: [],
+    };
+    const fmB = {
+      id: 'q2',
+      type: 'entity',
+      entity_kind: 'person',
+      canonical_name: 'Daev',
+      title: 'Daev',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      source_refs: [shared],
+      aliases: [],
+    };
+    await vault.create('wiki/entities/people/dave.md', serializeNote(fmA, ''));
+    await vault.create('wiki/entities/people/daev.md', serializeNote(fmB, ''));
+
+    const ctx = makeCtx();
+    await detectEntityDupesHandler.execute(makeJob(), ctx);
+
+    // Neither page should have been deleted (below auto-merge threshold).
+    const remaining = await vault.listMarkdownFiles('wiki/entities/people');
+    expect(remaining).toHaveLength(2);
+
+    const layout = KarpathyConfigSchema.parse({ vaultPath: dir }).layout;
+    const queue = await readReconciliationQueue(vault, layout);
+    expect(queue.entries.length).toBeGreaterThan(0);
   });
 });
