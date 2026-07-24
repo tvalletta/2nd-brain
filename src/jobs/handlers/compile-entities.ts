@@ -6,6 +6,8 @@ import type { RichExtractedEntities } from '../../enrichment/entity-extractor-ri
 import { isNoiseEntity } from '../../enrichment/entity-filter.js';
 import { nowISO } from '../../shared/date-utils.js';
 import { createLogger } from '../../shared/logger.js';
+import { upsertConceptMention } from '../../maintenance/concept-glossary.js';
+import { layoutFromConfig } from '../../vault/paths.js';
 
 const log = createLogger('handler:compile-entities');
 
@@ -63,15 +65,13 @@ export const compileEntitiesHandler: JobHandler = {
       });
     }
 
+    const layout = layoutFromConfig(context.config);
     for (const concept of (entities.concepts ?? [])) {
       if (!shouldInclude(concept.name, 'concept', concept.confidence)) { filteredOut++; continue; }
-      compilable.push({
+      await upsertConceptMention(context.vault, layout, {
         name: concept.name,
-        kind: 'concept' as EntityKind,
-        context: '',
-        definition: concept.definition,
-        relationships: concept.relationships ?? [],
-        chunkRefs: concept.chunkRefs ?? [],
+        gloss: concept.definition ?? '',
+        sourceRef: sourceSummaryPath,
       });
     }
 

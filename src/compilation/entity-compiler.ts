@@ -138,7 +138,7 @@ export async function compileEntityPage(
 
   // Web enrichment for thin concept/topic definitions
   if (
-    (entity.kind === 'concept' || entity.kind === 'topic') &&
+    entity.kind === 'topic' &&
     isDefinitionThin(getProtectedRegion(updatedBody, 'definition'))
   ) {
     try {
