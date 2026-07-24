@@ -154,6 +154,10 @@ This bypasses the existing `autoMerge()` wrapper (`entity-merger.ts:341-377`) de
 
 **Files:** `src/intelligence/significance-gate.ts`, `src/compilation/compiler.ts`
 
+### 5.0 Critical precondition: `llmGate()` has zero existing callers
+
+Confirmed via repo-wide grep: `llmGate()` is defined but never called anywhere today. Its internal short-circuit — `if (candidates.length === 0) return heuristic;` (before ever building a prompt or calling the LLM) — combined with the `candidates: []` precedent from §5.2 means that, unmodified, the LLM would never actually be invoked once wired into `compiler.ts`: every call would short-circuit back to the heuristic result, so `confidence` (only ever set inside the LLM-call branch) would always be `undefined`, and the entire "uncertain drop → flag for review" mechanism would silently never trigger. This guard must be removed (or the empty-candidates case handled gracefully in the prompt) as part of this wiring. Since there are no existing callers, this is a safe, unconstrained change — nothing depends on today's short-circuit behavior.
+
 ### 5.1 Schema extension
 
 `GateResultSchema` (`significance-gate.ts:56-60`) and the `GateDecision` union (`:29-32`) currently have no confidence signal on `drop`. Add one:
@@ -196,36 +200,45 @@ Heuristic-originated drops (`heuristicGate()`, name-too-short / stopword matches
 
 ### 5.2 Call-site wiring in `compiler.ts`
 
+**Correction from initial drafting (found while reading the real code, not just the audit's summary of it):** `link-concepts.ts` — the only other caller of the gate today — calls `heuristicGate({name, kind}, [])` with a **hardcoded empty candidates array**. There is no existing "K most-similar entities" lookup to port over; it doesn't exist anywhere in the codebase. Matching this precedent, the new call in `compiler.ts` also passes `[]`. Practical effect: the gate's `merge` branch (which requires a non-empty candidates array to ever trigger) will not fire in this wiring — that's fine, because full duplicate/merge detection across the whole vault is already handled far more thoroughly by Component 2's pairwise scan. The gate's role here is strictly keep-vs-drop for brand-new entities.
+
+**Second correction:** every newly-created entity page already gets `review_state: 'unreviewed'` by default (`entity-writer.ts:buildFrontmatter`, unconditionally), and `get_review_queue` (`src/review/review-queue.ts:listReviewItems`) only lists files inside the `review/` folder — it does not scan the vault for a frontmatter field. Simply setting `review_state` on an uncertain-drop entity page would be invisible to you. Instead, reuse the existing pattern `link-concepts.ts` already has for exactly this situation (ambiguous entity resolution): write a proper review-item note into `review/`. That function (`createAmbiguousReviewItem`, currently private to `link-concepts.ts`) is extracted into a shared helper (Task in §3 below) so both call sites use it.
+
 Insert before `resolveEntity()`/`createEntityPage()` are called for a new entity candidate:
 
 ```typescript
-const DROP_REVIEW_THRESHOLD = 0.7; // new config value, see §6
-
 const decision = config.enrichment.significanceGate === 'off'
   ? { action: 'keep' as const }
   : config.enrichment.significanceGate === 'llm'
-    ? await llmGate(llm, extracted, candidates)
-    : heuristicGate(extracted, candidates);
+    ? await llmGate(llm, { name: entity.name, kind: entity.kind, context: entity.context }, [])
+    : heuristicGate({ name: entity.name, kind: entity.kind, context: entity.context }, []);
 
 if (decision.action === 'drop') {
-  const isUncertain = decision.confidence !== undefined && decision.confidence < DROP_REVIEW_THRESHOLD;
+  const threshold = config.enrichment.significanceGateDropConfidence;
+  const isUncertain = decision.confidence !== undefined && decision.confidence < threshold;
   if (isUncertain) {
-    // Create the page as normal, but flag it — don't silently guess on a
-    // judgment call the LLM itself wasn't confident about.
-    await createEntityPage(vault, extracted, { review_state: 'unreviewed' });
+    // Create the page as normal, then flag it for review — don't silently
+    // guess on a judgment call the LLM itself wasn't confident about.
+    const createdPath = await createEntityPage(vault, resolution, info, sourcePath, layout);
+    await createReviewItem(vault, {
+      conflictType: 'uncertain_entity_drop',
+      title: `Uncertain: ${entity.name} (${entity.kind})`,
+      claimA: `Significance gate suggested dropping this entity: ${decision.reason}`,
+      claimB: `Confidence ${decision.confidence} is below the review threshold (${threshold})`,
+      sourceRefs: [sourcePath],
+      links: [createdPath],
+    });
+    result.created.push(createdPath);
   }
   // else: confident drop (heuristic rule, or high-confidence LLM drop) — skip page creation entirely.
-  continue; // to next extracted candidate
+  result.skipped.push(entity.name);
+  continue; // to next entity
 }
-if (decision.action === 'merge') {
-  await mergeEntityPage(vault, decision.intoSlug, extracted);
-  continue;
-}
-// decision.action === 'keep'
-await resolveEntity(vault, extracted); // existing call, unchanged
+// decision.action === 'merge' is unreachable given candidates=[] (see correction above);
+// decision.action === 'keep' falls through to the existing resolution.status === 'new' branch unchanged.
 ```
 
-`candidates` (the K most-similar existing entities the gate needs) must be resolved before this call — reuse whatever similarity lookup `resolveEntity()`/`heuristicGate()`'s existing callers already use (the audit's grounding pass found `heuristicGate` is already called with a `candidates: ExistingEntity[]` parameter from `link-concepts.ts`, so a compatible lookup already exists to port over).
+This slots into the existing `resolution.status === 'new'` branch of `compileFromSource()` (`src/compilation/compiler.ts:77-98`), before the existing `createEntityPage()` call — the gate decides whether that branch runs at all, rather than replacing its logic.
 
 **Budget interaction:** `llmGate()` invocation should reserve one `fast`-tier call from the existing `BudgetTracker` (`src/shared/budget.ts`) before calling the LLM, consistent with how `topic-refresh` already reserves a `medium`-tier call (per CLAUDE.md's documented pattern). On budget refusal, fall back to `heuristicGate()`'s result for that candidate (same fallback `llmGate()` already uses internally on LLM API failure, `:105-108`) rather than blocking ingestion.
 
