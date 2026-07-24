@@ -171,7 +171,10 @@ tracked as per-project and vault-wide rollup checklists rather than pages.
 Source content that is self-referential — i.e. describes the tool's own
 development, detected by comparing the source's `project_slug` against the
 tool's own project root — MUST be excluded from entity, concept, decision,
-tool, organization, and action-item extraction. It MUST still be ingested
+tool, organization, and action-item compilation (no pages, glossary entries,
+or checklist items get created from it). Extraction itself still runs and
+still populates the source summary's own `entities` protected region; only
+the downstream curation step is skipped. The source MUST still be ingested
 as a raw, searchable note.
 
 ### 7.3 Heuristic review lane
@@ -349,7 +352,7 @@ When a file lands in `raw/`, the system MUST:
 2. classify it by supported source type;
 3. register provenance to the raw file path;
 4. create or update a source summary artifact;
-5. extract candidate entities, concepts, decisions, action items, and open questions (except from self-referential source content, per §7.2, which is still ingested but excluded from extraction);
+5. extract candidate entities, concepts, decisions, action items, and open questions (self-referential source content, per §7.2, is still ingested and still extracted, but its results are excluded from compilation — no pages/glossary/checklist entries get created from it);
 6. update related deterministic graph structures where confidence permits;
 7. append an audit log entry.
 
