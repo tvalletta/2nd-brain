@@ -7,6 +7,7 @@ import { isNoiseEntity } from '../../enrichment/entity-filter.js';
 import { nowISO } from '../../shared/date-utils.js';
 import { createLogger } from '../../shared/logger.js';
 import { upsertConceptMention } from '../../maintenance/concept-glossary.js';
+import { upsertActionItem } from '../../maintenance/action-items.js';
 import { layoutFromConfig } from '../../vault/paths.js';
 
 const log = createLogger('handler:compile-entities');
@@ -121,6 +122,25 @@ export const compileEntitiesHandler: JobHandler = {
       });
     }
 
+    // summaryContent is read once here and reused below for the
+    // data.links = ... update — don't add a second read of the same file.
+    const summaryContent = await context.vault.read(sourceSummaryPath);
+
+    // NOTE: Task 4 introduces a shared `projectSlug` read at the top of this
+    // handler and will replace this temporary inline read with a reference
+    // to that shared variable — this inline version exists so Task 3 builds
+    // and passes its own tests standalone, without depending on Task 4 having
+    // landed yet.
+    const actionItemsProjectSlug = (parseNote(summaryContent).data.project_slug as string | undefined) ?? '_general';
+    for (const item of (entities.actionItems ?? [])) {
+      if (!shouldInclude(item.task, 'action_item', item.confidence)) { filteredOut++; continue; }
+      await upsertActionItem(context.vault, layout, {
+        task: item.task,
+        sourceRef: sourceSummaryPath,
+        projectSlug: actionItemsProjectSlug,
+      });
+    }
+
     log.info('Compiling entities', {
       sourcePath: sourceSummaryPath,
       entityCount: compilable.length,
@@ -136,7 +156,6 @@ export const compileEntitiesHandler: JobHandler = {
     });
 
     // 3. Update source summary: set ingest_status to 'linked', update links array
-    const summaryContent = await context.vault.read(sourceSummaryPath);
     const { data, body } = parseNote(summaryContent);
     const allPages = [...result.created, ...result.updated];
     data.links = [...new Set([...(data.links as string[] ?? []), ...allPages])];
