@@ -20,7 +20,7 @@ import {
   writeResearchQueue,
   RESEARCH_QUEUE_PATH,
 } from '../maintenance/research-queue.js';
-import { tickScheduler, readSchedulerState } from '../intelligence/scheduler.js';
+import { tickScheduler, readSchedulerState, defaultSchedule } from '../intelligence/scheduler.js';
 import { maybeRunAutoBackfill } from '../intelligence/auto-backfill.js';
 import { importNewCursorSessions } from '../session/import-cursor-sessions.js';
 import {
@@ -281,6 +281,7 @@ export async function intelCommand(args: string[]): Promise<void> {
       const tickResult = await tickScheduler({
         stateDir,
         enqueue: async (i) => queue.enqueue(i),
+        schedule: defaultSchedule({ reviewEnabled: config.maintenance.reviewEnabled }),
       });
       // Drain whatever was just enqueued.
       const vault = createFsAdapter(config.vaultPath);

@@ -223,6 +223,9 @@ async function rewriteWikilinks(
 
 // --- Auto-merge detection ---
 
+/** Confidence at or above which a detected duplicate is merged without human review. */
+export const AUTO_MERGE_THRESHOLD = 0.85;
+
 export interface MergeCandidate {
   sourcePath: string;
   targetPath: string;
@@ -340,7 +343,7 @@ export async function detectMergeCandidates(
  */
 export async function autoMerge(
   vault: VaultAdapter,
-  threshold = 0.85,
+  threshold = AUTO_MERGE_THRESHOLD,
   layout: VaultLayout = DEFAULT_LAYOUT,
 ): Promise<MergeResult[]> {
   const candidates = await detectMergeCandidates(vault, layout);

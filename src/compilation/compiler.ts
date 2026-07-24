@@ -7,6 +7,10 @@ import { createEntityPage } from '../ingest/entity-writer.js';
 import { compileEntityPage } from './entity-compiler.js';
 import { layoutFromConfig } from '../vault/paths.js';
 import { createLogger } from '../shared/logger.js';
+import { heuristicGate, llmGate } from '../intelligence/significance-gate.js';
+import { createReviewItem } from '../review/create-review-item.js';
+import { createBudgetTrackerFromConfig } from '../shared/budget.js';
+import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
 
 const log = createLogger('compiler');
 
@@ -34,10 +38,11 @@ export interface CompilableEntity {
 export async function compileFromSource(
   sourcePath: string,
   entities: CompilableEntity[],
-  context: { vault: VaultAdapter; llm: LLMClient; config: KarpathyConfig },
+  context: { vault: VaultAdapter; llm: LLMClient; config: KarpathyConfig; projectRoot: string },
 ): Promise<CompilationResult> {
-  const { vault, llm, config } = context;
+  const { vault, llm, config, projectRoot } = context;
   const layout = layoutFromConfig(config);
+  const budget = createBudgetTrackerFromConfig(config, projectRoot);
   const result: CompilationResult = {
     created: [],
     updated: [],
@@ -75,6 +80,42 @@ export async function compileFromSource(
     let existingPagePath: string | null = null;
 
     if (resolution.status === 'new') {
+      // D4 significance gate: decide whether this brand-new entity deserves
+      // a page before creating one. `candidates` is always [] here — no
+      // similarity lookup is built for this call site; full duplicate/merge
+      // detection across the vault is handled separately by the scheduled
+      // detect-entity-dupes job. See
+      // docs/superpowers/specs/2026-07-23-quality-layer-activation-design.md
+      // §5.2 for why.
+      let flaggedForReview: { reason: string; confidence?: number } | undefined;
+
+      if (config.enrichment.significanceGate !== 'off') {
+        const gateInput = { name: entity.name, kind: entity.kind, context: entity.context };
+        const heuristicResult = heuristicGate(gateInput, []);
+        const decision =
+          heuristicResult.action === 'keep' &&
+          config.enrichment.significanceGate === 'llm' &&
+          budget.tryReserve('fast')
+            ? await llmGate(llm, gateInput, [])
+            : heuristicResult;
+
+        if (decision.action === 'drop') {
+          const threshold = config.enrichment.significanceGateDropConfidence;
+          const isUncertain = decision.confidence !== undefined && decision.confidence < threshold;
+          if (!isUncertain) {
+            log.debug('Significance gate dropped entity', { name: entity.name, reason: decision.reason });
+            result.skipped.push(entity.name);
+            continue;
+          }
+          flaggedForReview = { reason: decision.reason, confidence: decision.confidence };
+          log.debug('Significance gate uncertain, creating and flagging for review', {
+            name: entity.name,
+            reason: decision.reason,
+            confidence: decision.confidence,
+          });
+        }
+      }
+
       // Create a new page using entity-writer, then compile on top
       const createdPath = await createEntityPage(vault, resolution, {
         name: entity.name,
@@ -96,6 +137,38 @@ export async function compileFromSource(
       entityIndex.byCanonicalName.set(entity.name.toLowerCase(), createdPath);
 
       result.created.push(createdPath);
+
+      if (flaggedForReview) {
+        try {
+          await createReviewItem(vault, {
+            slug: `uncertain-drop-${slug}`,
+            title: `Uncertain: ${entity.name} (${entity.kind})`,
+            claimA: `Significance gate suggested dropping this entity: ${flaggedForReview.reason}`,
+            claimB: `Confidence ${flaggedForReview.confidence} is below the review threshold (${config.enrichment.significanceGateDropConfidence})`,
+            sourceRefs: [sourcePath],
+            links: [createdPath],
+            conflictType: 'uncertain_entity_drop',
+            body: `
+# Uncertain: ${entity.name}
+
+**Kind:** ${entity.kind}
+**Page created:** [[${slug}]]
+**Source:** [[${sourcePath.split('/').pop()?.replace(/\.md$/, '')}]]
+
+## Analysis
+${OPEN_TAG('analysis')}
+The significance gate suggested dropping "${entity.name}" (${flaggedForReview.reason}), but confidence ${flaggedForReview.confidence} was below the review threshold, so the page was created rather than silently discarded. Review [[${slug}]] and decide whether it deserves to exist — approve to keep it, reject to remove it.
+${CLOSE_TAG('analysis')}
+`,
+          });
+        } catch (err) {
+          log.error('Failed to create review item for uncertain drop; entity page was created but is unflagged', {
+            name: entity.name,
+            path: createdPath,
+            error: (err as Error).message,
+          });
+        }
+      }
     } else {
       // Matched existing page
       existingPagePath = resolution.matchedPath!;

@@ -217,7 +217,9 @@ export const EnrichmentConfigSchema = z.object({
   entityBlocklist: z.array(z.string()).default([]),
   minEntityConfidence: z.number().min(0).max(1).default(0.3),
   /** D4: Significance gate — `off` legacy behaviour, `heuristic` (cheap), or `llm` (Bedrock-backed). */
-  significanceGate: z.enum(['off', 'heuristic', 'llm']).default('heuristic'),
+  significanceGate: z.enum(['off', 'heuristic', 'llm']).default('llm'),
+  /** Below this confidence, an LLM "drop" verdict creates the page anyway and flags it for review instead of silently discarding it. */
+  significanceGateDropConfidence: z.number().min(0).max(1).default(0.7),
 });
 
 /**
