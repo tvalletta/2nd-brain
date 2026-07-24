@@ -329,5 +329,9 @@ function serializeRichEntitiesForPayload(entities: RichExtractedEntities): Recor
     open_questions: entities.open_questions.map((q) => ({
       question: q.question, context: q.context, chunkRefs: q.chunkRefs,
     })),
+    actionItems: entities.actionItems.map((a) => ({
+      task: a.task, owner: a.owner, dueDate: a.dueDate, status: a.status,
+      chunkRefs: a.chunkRefs,
+    })),
   };
 }
