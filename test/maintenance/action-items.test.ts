@@ -35,7 +35,7 @@ describe('action-items', () => {
 
     const rollupContent = await vault.read(rollupPath);
     expect(rollupContent).toContain('- [ ] Investigate root cause');
-    expect(rollupContent).toContain('(2nd-brain)');
+    expect(rollupContent).toContain('`project:2nd-brain`');
   });
 
   it('routes _general and _discovery project slugs to the rollup only', async () => {
@@ -78,5 +78,14 @@ describe('action-items', () => {
     const content = await vault.read('wiki/projects/2nd-brain/action-items.md');
     const matches = content.split('\n').filter((l) => l.includes('Repeat task'));
     expect(matches).toHaveLength(1);
+  });
+
+  it('round-trips a task containing parentheses in the rollup without corrupting the project slug', async () => {
+    await upsertActionItem(vault, DEFAULT_LAYOUT, {
+      task: 'Fix (urgent) bug', sourceRef: 'sources/s3.md', projectSlug: '2nd-brain',
+    });
+    const rollupContent = await vault.read('wiki/_system/action-items.md');
+    expect(rollupContent).toContain('Fix (urgent) bug');
+    expect(rollupContent).toContain('`project:2nd-brain`');
   });
 });

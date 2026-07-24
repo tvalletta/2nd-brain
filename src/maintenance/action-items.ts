@@ -30,9 +30,15 @@ function extractSlug(path: string): string {
   return path.split('/').pop()?.replace(/\.md$/, '') ?? path;
 }
 
-// Render order is: checkbox, task, optional "(projectSlug)", then the
-// source/id suffix — the parse regex below must mirror this exact order.
-const ITEM_RE = /^- \[( |x)\] (.+?)(?: \((.+?)\))? — from \[\[(.+?)\]\] `id:([a-zA-Z0-9_-]+)`$/;
+// Render order is: checkbox, task, source/id suffix, then an optional
+// trailing `project:slug` backtick token — the parse regex below must
+// mirror this exact order. The project slug is deliberately NOT rendered
+// as a "(projectSlug)" parenthetical: task text can itself contain
+// parentheses (e.g. "Fix (urgent) bug"), which would make that suffix
+// ambiguous with arbitrary task prose. Backtick-delimited tokens at the
+// very end of the line (matching the existing `id:` convention) don't
+// collide with prose the way parentheses do.
+const ITEM_RE = /^- \[( |x)\] (.+?) — from \[\[(.+?)\]\] `id:([a-zA-Z0-9_-]+)`(?: `project:(.+?)`)?$/;
 
 function parseChecklist(inner: string): ActionItem[] {
   const items: ActionItem[] = [];
@@ -42,9 +48,9 @@ function parseChecklist(inner: string): ActionItem[] {
     items.push({
       status: m[1] === 'x' ? 'done' : 'open',
       task: m[2],
-      projectSlug: m[3] || undefined,
-      sourceRef: m[4],
-      id: m[5],
+      sourceRef: m[3],
+      id: m[4],
+      projectSlug: m[5] || undefined,
     });
   }
   return items;
@@ -54,8 +60,8 @@ function renderChecklist(items: ActionItem[], includeProject: boolean): string {
   return items
     .map((item) => {
       const box = item.status === 'done' ? 'x' : ' ';
-      const projectPart = includeProject && item.projectSlug ? ` (${item.projectSlug})` : '';
-      return `- [${box}] ${item.task}${projectPart} — from [[${extractSlug(item.sourceRef)}]] \`id:${item.id}\``;
+      const projectSuffix = includeProject && item.projectSlug ? ` \`project:${item.projectSlug}\`` : '';
+      return `- [${box}] ${item.task} — from [[${extractSlug(item.sourceRef)}]] \`id:${item.id}\`${projectSuffix}`;
     })
     .join('\n');
 }
