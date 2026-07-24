@@ -38,6 +38,7 @@ import { listReviewItems, approveReviewItem, rejectReviewItem } from '../review/
 import { migrateVault } from '../migration/migrate-vault.js';
 import { migrateProjectsToHubs } from '../migration/migrate-project-hubs.js';
 import { migrateMarkers } from '../migration/migrate-markers.js';
+import { migrateConceptsToGlossary } from '../jobs/handlers/migrate-concept-glossary.js';
 import { exportSessionToRaw } from '../session/export-session.js';
 import { mergeEntities, detectMergeCandidates, autoMerge } from '../compilation/entity-merger.js';
 import {
@@ -1077,6 +1078,20 @@ async function mergeCommand(args: string[]): Promise<void> {
   process.stdout.write('Done.\n');
 }
 
+async function migrateConceptsCommand(args: string[]): Promise<void> {
+  const config = await loadConfig();
+  const vault = createFsAdapter(config.vaultPath);
+  const dryRun = args.includes('--dry-run');
+
+  await migrateConceptsToGlossary(vault, config, dryRun);
+
+  process.stdout.write(
+    dryRun
+      ? 'Dry run complete — see logs above for what would change.\n'
+      : 'Migration complete.\n',
+  );
+}
+
 async function synthesizeCommand(args: string[]): Promise<void> {
   const slug = args[0];
   if (!slug) {
@@ -1790,6 +1805,9 @@ async function main(): Promise<void> {
     case 'merge':
       await mergeCommand(args.slice(1));
       break;
+    case 'migrate-concepts-to-glossary':
+      await migrateConceptsCommand(args.slice(1));
+      break;
     case 'synthesize':
       await synthesizeCommand(args.slice(1));
       break;
@@ -1845,6 +1863,7 @@ async function main(): Promise<void> {
           '  migrate             Migrate vault (delete old summaries, backfill frontmatter)',
           '  migrate-hubs        Migrate legacy single-page projects to hub model',
           '  migrate-markers     Migrate <!-- PROTECTED --> markers to %% syntax',
+          '  migrate-concepts-to-glossary [--dry-run]  Consolidate concept pages into wiki/concepts/glossary.md',
           '  hook <event>        Handle a Claude Code hook event',
           '  install-mcp         Register MCP server in Claude Code + Cursor',
           '  mcp                 Start MCP server (stdio transport)',
