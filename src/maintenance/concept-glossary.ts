@@ -105,17 +105,23 @@ export async function upsertConceptMention(
   const key = normalizeName(concept.name);
   const sourceRefSlug = extractSlug(concept.sourceRef);
   const today = new Date().toISOString().slice(0, 10);
+  // The mention format is strictly single-line (parsed by a regex anchored
+  // per line), but glosses can come from LLM-generated multi-paragraph prose
+  // (e.g. entity-compiler.ts's "definition" region). A newline would break
+  // the rendered line across multiple unparseable lines, silently dropping
+  // the mention on the next read-parse-rewrite cycle. Normalize up front.
+  const normalizedGloss = concept.gloss.replace(/\s*\n+\s*/g, ' ').trim();
 
   const existing = entries.get(key);
   const alreadyMentioned = existing?.mentions.some((m) => m.sourceRef === sourceRefSlug) ?? false;
   if (alreadyMentioned) return;
 
   if (existing) {
-    existing.mentions.push({ gloss: concept.gloss, sourceRef: sourceRefSlug, date: today });
+    existing.mentions.push({ gloss: normalizedGloss, sourceRef: sourceRefSlug, date: today });
   } else {
     entries.set(key, {
       name: concept.name,
-      mentions: [{ gloss: concept.gloss, sourceRef: sourceRefSlug, date: today }],
+      mentions: [{ gloss: normalizedGloss, sourceRef: sourceRefSlug, date: today }],
     });
   }
 

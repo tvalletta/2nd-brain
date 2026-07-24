@@ -74,4 +74,28 @@ describe('concept-glossary', () => {
     const headingCount = (content.match(/^## Efficiency$/gim) ?? []).length;
     expect(headingCount).toBe(1);
   });
+
+  it('survives a multi-line gloss across a real reparse cycle without dropping the mention', async () => {
+    const multiLineGloss = 'First paragraph of a definition.\n\nSecond paragraph with more detail.';
+    await upsertConceptMention(vault, DEFAULT_LAYOUT, {
+      name: 'Cascading Curation', gloss: multiLineGloss, sourceRef: 'wiki/topics/a.md',
+    });
+    // Force a real reparse of the file that was just written, by upserting a
+    // *different* concept — this exercises parseGlossary against the line
+    // the first call rendered, not just that call's raw output. Mirrors the
+    // "force a real reparse" pattern in test/maintenance/action-items.test.ts's
+    // parentheses regression test.
+    await upsertConceptMention(vault, DEFAULT_LAYOUT, {
+      name: 'Unrelated Concept', gloss: 'Some other gloss.', sourceRef: 'wiki/topics/b.md',
+    });
+
+    const content = await vault.read('wiki/concepts/glossary.md');
+    expect(content).toContain('## Cascading Curation');
+    // The gloss must have been collapsed to a single line — no embedded
+    // newlines that would break the per-line mention regex.
+    expect(content).toContain('First paragraph of a definition. Second paragraph with more detail.');
+    expect(content).not.toMatch(/First paragraph of a definition\.\n\n/);
+    expect(content).toContain('## Unrelated Concept');
+    expect(content).toContain('Some other gloss.');
+  });
 });
