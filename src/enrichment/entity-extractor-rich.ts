@@ -16,67 +16,84 @@ const RelationshipSchema = z.object({
   relationship: z.string(),
 });
 
-const RichExtractedEntitiesSchema = z.object({
-  people: z.array(z.object({
-    name: z.string(),
-    role: optStr,
-    context: optStr,
-    confidence: z.number().min(0).max(1).default(0.5),
-    relationships: z.array(RelationshipSchema).default([]),
-    chunkRefs: z.array(z.string()).default([]),
-  })).default([]),
-  projects: z.array(z.object({
-    name: z.string(),
-    status: optStr,
-    context: optStr,
-    confidence: z.number().min(0).max(1).default(0.5),
-    relationships: z.array(RelationshipSchema).default([]),
-    chunkRefs: z.array(z.string()).default([]),
-  })).default([]),
-  concepts: z.array(z.object({
-    name: z.string(),
-    definition: optStr,
-    confidence: z.number().min(0).max(1).default(0.5),
-    relationships: z.array(RelationshipSchema).default([]),
-    chunkRefs: z.array(z.string()).default([]),
-  })).default([]),
-  topics: z.array(z.object({
-    name: z.string(),
-    definition: optStr,
-    confidence: z.number().min(0).max(1).default(0.5),
-    relationships: z.array(RelationshipSchema).default([]),
-    chunkRefs: z.array(z.string()).default([]),
-  })).default([]),
-  decisions: z.array(z.object({
-    title: z.string(),
-    status: optStr,
-    date: optStr,
-    context: optStr,
-    confidence: z.number().min(0).max(1).default(0.5),
-    relationships: z.array(RelationshipSchema).default([]),
-    chunkRefs: z.array(z.string()).default([]),
-  })).default([]),
-  tools: z.array(z.object({
-    name: z.string(),
-    context: optStr,
-    confidence: z.number().min(0).max(1).default(0.5),
-    relationships: z.array(RelationshipSchema).default([]),
-    chunkRefs: z.array(z.string()).default([]),
-  })).default([]),
-  organizations: z.array(z.object({
-    name: z.string(),
-    context: optStr,
-    confidence: z.number().min(0).max(1).default(0.5),
-    relationships: z.array(RelationshipSchema).default([]),
-    chunkRefs: z.array(z.string()).default([]),
-  })).default([]),
-  open_questions: z.array(z.object({
-    question: z.string(),
-    context: optStr,
-    confidence: z.number().min(0).max(1).default(0.5),
-    chunkRefs: z.array(z.string()).default([]),
-  })).default([]),
-});
+const RichExtractedEntitiesSchema = z.preprocess(
+  (raw) => {
+    if (raw && typeof raw === 'object' && 'action_items' in raw && !('actionItems' in raw)) {
+      const { action_items, ...rest } = raw as Record<string, unknown>;
+      return { ...rest, actionItems: action_items };
+    }
+    return raw;
+  },
+  z.object({
+    people: z.array(z.object({
+      name: z.string(),
+      role: optStr,
+      context: optStr,
+      confidence: z.number().min(0).max(1).default(0.5),
+      relationships: z.array(RelationshipSchema).default([]),
+      chunkRefs: z.array(z.string()).default([]),
+    })).default([]),
+    projects: z.array(z.object({
+      name: z.string(),
+      status: optStr,
+      context: optStr,
+      confidence: z.number().min(0).max(1).default(0.5),
+      relationships: z.array(RelationshipSchema).default([]),
+      chunkRefs: z.array(z.string()).default([]),
+    })).default([]),
+    concepts: z.array(z.object({
+      name: z.string(),
+      definition: optStr,
+      confidence: z.number().min(0).max(1).default(0.5),
+      relationships: z.array(RelationshipSchema).default([]),
+      chunkRefs: z.array(z.string()).default([]),
+    })).default([]),
+    topics: z.array(z.object({
+      name: z.string(),
+      definition: optStr,
+      confidence: z.number().min(0).max(1).default(0.5),
+      relationships: z.array(RelationshipSchema).default([]),
+      chunkRefs: z.array(z.string()).default([]),
+    })).default([]),
+    decisions: z.array(z.object({
+      title: z.string(),
+      status: optStr,
+      date: optStr,
+      context: optStr,
+      confidence: z.number().min(0).max(1).default(0.5),
+      relationships: z.array(RelationshipSchema).default([]),
+      chunkRefs: z.array(z.string()).default([]),
+    })).default([]),
+    tools: z.array(z.object({
+      name: z.string(),
+      context: optStr,
+      confidence: z.number().min(0).max(1).default(0.5),
+      relationships: z.array(RelationshipSchema).default([]),
+      chunkRefs: z.array(z.string()).default([]),
+    })).default([]),
+    organizations: z.array(z.object({
+      name: z.string(),
+      context: optStr,
+      confidence: z.number().min(0).max(1).default(0.5),
+      relationships: z.array(RelationshipSchema).default([]),
+      chunkRefs: z.array(z.string()).default([]),
+    })).default([]),
+    actionItems: z.array(z.object({
+      task: z.string(),
+      owner: optStr,
+      dueDate: optStr,
+      status: z.enum(['open', 'done']).default('open'),
+      confidence: z.number().min(0).max(1).default(0.5),
+      chunkRefs: z.array(z.string()).default([]),
+    })).default([]),
+    open_questions: z.array(z.object({
+      question: z.string(),
+      context: optStr,
+      confidence: z.number().min(0).max(1).default(0.5),
+      chunkRefs: z.array(z.string()).default([]),
+    })).default([]),
+  }),
+);
 
 export type RichExtractedEntities = z.output<typeof RichExtractedEntitiesSchema>;
 
@@ -88,6 +105,7 @@ const EMPTY_ENTITIES: RichExtractedEntities = {
   decisions: [],
   tools: [],
   organizations: [],
+  actionItems: [],
   open_questions: [],
 };
 
@@ -152,6 +170,7 @@ function tagChunkRefs(entities: RichExtractedEntities, chunkId: string): RichExt
     decisions: entities.decisions.map((d) => ({ ...d, chunkRefs: d.chunkRefs.length ? d.chunkRefs : [chunkId] })),
     tools: entities.tools.map((t) => ({ ...t, chunkRefs: t.chunkRefs.length ? t.chunkRefs : [chunkId] })),
     organizations: entities.organizations.map((o) => ({ ...o, chunkRefs: o.chunkRefs.length ? o.chunkRefs : [chunkId] })),
+    actionItems: entities.actionItems.map((a) => ({ ...a, chunkRefs: a.chunkRefs.length ? a.chunkRefs : [chunkId] })),
     open_questions: entities.open_questions.map((q) => ({ ...q, chunkRefs: q.chunkRefs.length ? q.chunkRefs : [chunkId] })),
   };
 }
@@ -168,6 +187,7 @@ export function mergeRichExtractedEntities(results: RichExtractedEntities[]): Ri
     decisions: mergeByKey(results.flatMap((r) => r.decisions), 'title'),
     tools: mergeByKey(results.flatMap((r) => r.tools), 'name'),
     organizations: mergeByKey(results.flatMap((r) => r.organizations), 'name'),
+    actionItems: mergeByKey(results.flatMap((r) => r.actionItems), 'task'),
     open_questions: mergeByKey(results.flatMap((r) => r.open_questions), 'question'),
   };
 }

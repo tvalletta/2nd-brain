@@ -164,9 +164,9 @@ Return a JSON object with these arrays:
 - "projects": [{name, status, context, confidence, relationships: [{target, targetKind, relationship}]}]
 - "concepts": [{name, definition, confidence, relationships: [{target, targetKind, relationship}]}]
 - "topics": [{name, definition, confidence, relationships: [{target, targetKind, relationship}]}]
-- "decisions": [{title, status, date, context, confidence, relationships: [{target, targetKind, relationship}]}]
+- "decisions": [{title, status, date, context, confidence, relationships: [{target, targetKind, relationship}]}] — a decision is a choice that was actually committed to, not a stated preference, an observed fact, or a task still to be done. If the text describes a task someone needs to do, extract it under "action_items" instead. If it's just background/context/preference with no choice being made, don't extract it as either.
 - "tools": [{name, context, confidence, relationships: [{target, targetKind, relationship}]}]
-- "organizations": [{name, context, confidence, relationships: [{target, targetKind, relationship}]}]
+- "organizations": [{name, context, confidence, relationships: [{target, targetKind, relationship}]}] — only genuine organizations (companies, teams, departments), not products, services, or subscription tiers (e.g. "Workfront" is a product, not an organization; skip it or extract its parent company instead).
 - "action_items": [{task, owner, due_date, status, confidence}]
 - "open_questions": [{question, context, confidence}]
 
@@ -208,9 +208,9 @@ Return a JSON object with these arrays:
 - "projects": [{name, status, context, confidence, relationships: [{target, targetKind, relationship}]}]
 - "concepts": [{name, definition, confidence, relationships: [{target, targetKind, relationship}]}]
 - "topics": [{name, definition, confidence, relationships: [{target, targetKind, relationship}]}]
-- "decisions": [{title, status, date, context, confidence, relationships: [{target, targetKind, relationship}]}]
+- "decisions": [{title, status, date, context, confidence, relationships: [{target, targetKind, relationship}]}] — a decision is a choice that was actually committed to, not a stated preference, an observed fact, or a task still to be done. If the text describes a task someone needs to do, extract it under "action_items" instead. If it's just background/context/preference with no choice being made, don't extract it as either.
 - "tools": [{name, context, confidence, relationships: [{target, targetKind, relationship}]}]
-- "organizations": [{name, context, confidence, relationships: [{target, targetKind, relationship}]}]
+- "organizations": [{name, context, confidence, relationships: [{target, targetKind, relationship}]}] — only genuine organizations (companies, teams, departments), not products, services, or subscription tiers (e.g. "Workfront" is a product, not an organization; skip it or extract its parent company instead).
 - "action_items": [{task, owner, due_date, status, confidence}]
 - "open_questions": [{question, context, confidence}]
 
@@ -321,17 +321,14 @@ SOURCES:
     case 'decision':
       sectionInstructions = `Output the following sections in exactly this format:
 
-SUMMARY:
-(A comprehensive paragraph about this decision — what was decided, why, and implications)
+CONTEXT:
+(The situation and reasoning that led to this decision, synthesized from all sources so far)
+
+OUTCOME:
+(What actually happened as a result, if known. Write "(pending)" if the outcome isn't yet known.)
 
 PEOPLE:
 (Bulleted list of people involved as [[wikilinks]] with their role)
-
-PROJECTS:
-(Bulleted list of related projects as [[wikilinks]] with brief context)
-
-TOPICS:
-(Bulleted list of related concepts/topics as [[wikilinks]] with brief context)
 
 SOURCES:
 (Bulleted list citing every source reference by name)`;
