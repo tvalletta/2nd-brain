@@ -8,7 +8,8 @@ import { nowISO } from '../../shared/date-utils.js';
 import { createLogger } from '../../shared/logger.js';
 import { upsertConceptMention } from '../../maintenance/concept-glossary.js';
 import { upsertActionItem } from '../../maintenance/action-items.js';
-import { layoutFromConfig } from '../../vault/paths.js';
+import { layoutFromConfig, slugify } from '../../vault/paths.js';
+import { basename } from 'node:path';
 
 const log = createLogger('handler:compile-entities');
 
@@ -16,6 +17,18 @@ export const compileEntitiesHandler: JobHandler = {
   async execute(job: Job, context: JobContext): Promise<void> {
     const sourceSummaryPath = job.targetPath;
     if (!sourceSummaryPath) throw new Error('compile-entities: no targetPath');
+
+    const summaryContentEarly = await context.vault.read(sourceSummaryPath);
+    const { data: summaryDataEarly } = parseNote(summaryContentEarly);
+    const projectSlug = (summaryDataEarly.project_slug as string | undefined) ?? '_general';
+    const selfSlug = slugify(basename(context.projectRoot));
+
+    if (projectSlug === selfSlug) {
+      log.debug('Skipping entity creation for self-referential source', { sourceSummaryPath, projectSlug });
+      const updated = { ...summaryDataEarly, ingest_status: 'linked', updated_at: nowISO() };
+      await context.vault.atomicWrite(sourceSummaryPath, serializeNote(updated, parseNote(summaryContentEarly).body));
+      return;
+    }
 
     const entitiesPayload = job.payload.entities as Record<string, unknown> | undefined;
     if (!entitiesPayload) throw new Error('compile-entities: no entities in payload');
@@ -122,22 +135,12 @@ export const compileEntitiesHandler: JobHandler = {
       });
     }
 
-    // summaryContent is read once here and reused below for the
-    // data.links = ... update — don't add a second read of the same file.
-    const summaryContent = await context.vault.read(sourceSummaryPath);
-
-    // NOTE: Task 4 introduces a shared `projectSlug` read at the top of this
-    // handler and will replace this temporary inline read with a reference
-    // to that shared variable — this inline version exists so Task 3 builds
-    // and passes its own tests standalone, without depending on Task 4 having
-    // landed yet.
-    const actionItemsProjectSlug = (parseNote(summaryContent).data.project_slug as string | undefined) ?? '_general';
     for (const item of (entities.actionItems ?? [])) {
       if (!shouldInclude(item.task, 'action_item', item.confidence)) { filteredOut++; continue; }
       await upsertActionItem(context.vault, layout, {
         task: item.task,
         sourceRef: sourceSummaryPath,
-        projectSlug: actionItemsProjectSlug,
+        projectSlug,
       });
     }
 
@@ -156,7 +159,7 @@ export const compileEntitiesHandler: JobHandler = {
     });
 
     // 3. Update source summary: set ingest_status to 'linked', update links array
-    const { data, body } = parseNote(summaryContent);
+    const { data, body } = parseNote(summaryContentEarly);
     const allPages = [...result.created, ...result.updated];
     data.links = [...new Set([...(data.links as string[] ?? []), ...allPages])];
     data.ingest_status = 'linked';
