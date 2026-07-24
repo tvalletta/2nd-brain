@@ -29,7 +29,7 @@ export interface ExistingEntity {
 export type GateDecision =
   | { action: 'keep' }
   | { action: 'merge'; intoSlug: string }
-  | { action: 'drop'; reason: string };
+  | { action: 'drop'; reason: string; confidence?: number };
 
 const STOPWORDS = new Set([
   'thing', 'stuff', 'work', 'project', 'this', 'that',
@@ -57,6 +57,7 @@ const GateResultSchema = z.object({
   action: z.enum(['keep', 'merge', 'drop']),
   into_slug: z.string().nullable().optional(),
   reason: z.string().optional(),
+  confidence: z.number().min(0).max(1).optional(),
 });
 
 export async function llmGate(
@@ -67,12 +68,20 @@ export async function llmGate(
   // Always run the heuristic first to short-circuit obvious cases.
   const heuristic = heuristicGate(extracted, candidates);
   if (heuristic.action !== 'keep') return heuristic;
-  if (candidates.length === 0) return heuristic;
+  // NOTE: this used to also `return heuristic` whenever candidates.length
+  // === 0. That made the LLM unreachable for brand-new entities judged in
+  // isolation (no similar existing entities to compare against) — exactly
+  // the case the caller needs this for. The LLM can still judge keep/drop
+  // from name+kind+context alone; only the "merge" suggestion needs
+  // candidates, so an empty list just means merge is off the table.
 
-  const candidatesBlock = candidates
-    .slice(0, 5)
-    .map((c, i) => `[${i + 1}] slug=${c.slug} name=${c.name} kind=${c.kind} sim=${c.similarity.toFixed(2)}`)
-    .join('\n');
+  const candidatesBlock =
+    candidates.length > 0
+      ? candidates
+          .slice(0, 5)
+          .map((c, i) => `[${i + 1}] slug=${c.slug} name=${c.name} kind=${c.kind} sim=${c.similarity.toFixed(2)}`)
+          .join('\n')
+      : '(none — judge this entity on its own merits)';
   const prompt = `Decide whether the extracted entity below deserves its own page in our knowledge base.
 
 Extracted:
@@ -87,7 +96,8 @@ Return JSON:
 {
   "action": "keep" | "merge" | "drop",
   "into_slug": "<slug from above if action=merge>",
-  "reason": "<brief why>"
+  "reason": "<brief why>",
+  "confidence": <0.0-1.0, how certain you are in this judgment — especially important for "drop": a low-confidence drop means you're not sure this isn't a real, worth-keeping entity>
 }
 
 Use "merge" when the extracted name is the same entity under a slightly different spelling (alias). Use "drop" when the name is generic, ambiguous, or low-signal. Use "keep" otherwise.
@@ -99,7 +109,7 @@ Output ONLY a single fenced \`\`\`json block.`;
       return { action: 'merge', intoSlug: result.into_slug };
     }
     if (result.action === 'drop') {
-      return { action: 'drop', reason: result.reason ?? 'LLM-judged low signal' };
+      return { action: 'drop', reason: result.reason ?? 'LLM-judged low signal', confidence: result.confidence };
     }
     return { action: 'keep' };
   } catch {
