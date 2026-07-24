@@ -71,3 +71,27 @@ describe('isNoiseEntity', () => {
     expect(isNoiseEntity('  Alice  ', 'person')).toBe(false);
   });
 });
+
+describe('isNoiseEntity — broadened tool/state-file filtering', () => {
+  it('filters Claude Code built-in tool names', () => {
+    for (const name of ['Read', 'Glob', 'Grep', 'Bash', 'WebFetch', 'WebSearch', 'TodoWrite', 'NotebookEdit']) {
+      expect(isNoiseEntity(name, 'tool')).toBe(true);
+    }
+  });
+
+  it('filters common system state-file names', () => {
+    for (const name of ['config.json', 'job-queue.json', 'ingest-tracker.json', 'budget.json']) {
+      expect(isNoiseEntity(name, 'tool')).toBe(true);
+    }
+  });
+
+  it('filters any name ending in -json', () => {
+    expect(isNoiseEntity('some-random-file-json', 'tool')).toBe(true);
+  });
+
+  it('still allows genuine tools through', () => {
+    for (const name of ['AWS Bedrock', 'Slack', 'Obsidian', 'TypeScript']) {
+      expect(isNoiseEntity(name, 'tool')).toBe(false);
+    }
+  });
+});

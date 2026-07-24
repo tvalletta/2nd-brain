@@ -29,6 +29,17 @@ const AGENT_TOOL_NAMES = new Set([
   'update_protected_region',
 ]);
 
+/** Claude Code's own built-in tool names — never legitimate wiki-worthy tools. */
+const CLAUDE_CODE_TOOL_NAMES = new Set([
+  'read', 'write', 'edit', 'glob', 'grep', 'bash', 'task', 'webfetch', 'websearch',
+  'todowrite', 'notebookedit', 'askuserquestion', 'exitplanmode',
+]);
+
+/** Known system state/config filenames that sometimes get extracted as "tools". */
+const KNOWN_STATE_FILES = new Set([
+  'config.json', 'job-queue.json', 'ingest-tracker.json', 'budget.json',
+]);
+
 /**
  * Check if an entity name is noise and should not become a wiki page.
  *
@@ -64,6 +75,18 @@ export function isNoiseEntity(
   // Agent tool names
   if (AGENT_TOOL_NAMES.has(normalized)) {
     log.debug('Filtered noise entity (agent tool)', { name, kind });
+    return true;
+  }
+
+  // Claude Code's own built-in tools
+  if (CLAUDE_CODE_TOOL_NAMES.has(normalized)) {
+    log.debug('Filtered noise entity (Claude Code built-in tool)', { name, kind });
+    return true;
+  }
+
+  // System state/config files
+  if (KNOWN_STATE_FILES.has(normalized) || normalized.endsWith('-json')) {
+    log.debug('Filtered noise entity (system state file)', { name, kind });
     return true;
   }
 
