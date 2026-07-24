@@ -136,15 +136,16 @@ export async function compileFromSource(
       result.created.push(createdPath);
 
       if (flaggedForReview) {
-        await createReviewItem(vault, {
-          slug: `uncertain-drop-${slug}`,
-          title: `Uncertain: ${entity.name} (${entity.kind})`,
-          claimA: `Significance gate suggested dropping this entity: ${flaggedForReview.reason}`,
-          claimB: `Confidence ${flaggedForReview.confidence} is below the review threshold (${config.enrichment.significanceGateDropConfidence})`,
-          sourceRefs: [sourcePath],
-          links: [createdPath],
-          conflictType: 'uncertain_entity_drop',
-          body: `
+        try {
+          await createReviewItem(vault, {
+            slug: `uncertain-drop-${slug}`,
+            title: `Uncertain: ${entity.name} (${entity.kind})`,
+            claimA: `Significance gate suggested dropping this entity: ${flaggedForReview.reason}`,
+            claimB: `Confidence ${flaggedForReview.confidence} is below the review threshold (${config.enrichment.significanceGateDropConfidence})`,
+            sourceRefs: [sourcePath],
+            links: [createdPath],
+            conflictType: 'uncertain_entity_drop',
+            body: `
 # Uncertain: ${entity.name}
 
 **Kind:** ${entity.kind}
@@ -156,7 +157,14 @@ ${OPEN_TAG('analysis')}
 The significance gate suggested dropping "${entity.name}" (${flaggedForReview.reason}), but confidence ${flaggedForReview.confidence} was below the review threshold, so the page was created rather than silently discarded. Review [[${slug}]] and decide whether it deserves to exist — approve to keep it, reject to remove it.
 ${CLOSE_TAG('analysis')}
 `,
-        });
+          });
+        } catch (err) {
+          log.error('Failed to create review item for uncertain drop; entity page was created but is unflagged', {
+            name: entity.name,
+            path: createdPath,
+            error: (err as Error).message,
+          });
+        }
       }
     } else {
       // Matched existing page

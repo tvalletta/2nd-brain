@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { z } from 'zod';
@@ -110,6 +110,29 @@ describe('compileFromSource — significance gate integration', () => {
     const { data } = parseNote(await vault.read(reviewFiles[0]));
     expect(data.conflict_type).toBe('uncertain_entity_drop');
     expect(data.links).toEqual(result.created);
+  });
+
+  it('llm mode: uncertain drop whose review-item write fails does not crash — entity still ends up in result.created', async () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      enrichment: { significanceGate: 'llm', significanceGateDropConfidence: 0.7 },
+    });
+    // Pre-create a real directory at the exact path createReviewItem will try
+    // to write the review note to, so the vault's genuine fs write throws
+    // (EISDIR) instead of mocking createReviewItem itself — this exercises
+    // the real error-containment path, not just a manual mock.
+    await mkdir(join(dir, 'review', 'uncertain-drop-zephyr-protocol.md'), { recursive: true });
+
+    const llm = makeLLM({ action: 'drop', reason: 'maybe jargon', confidence: 0.4 });
+    const result = await compileFromSource('sources/s1.md', [makeEntity()], {
+      vault,
+      llm,
+      config,
+      projectRoot: dir,
+    });
+
+    expect(result.created).toHaveLength(1);
+    expect(result.skipped).toHaveLength(0);
   });
 
   it('llm mode: keep verdict creates the page normally with no review item', async () => {
