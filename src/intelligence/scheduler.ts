@@ -39,8 +39,13 @@ export interface TickResult {
 
 const STATE_FILENAME = 'intel-scheduler.json';
 
-export function defaultSchedule(): ScheduledJob[] {
-  return [
+export interface ScheduleOptions {
+  /** When true, adds the daily review-detection and entity-dedup jobs. */
+  reviewEnabled?: boolean;
+}
+
+export function defaultSchedule(opts: ScheduleOptions = {}): ScheduledJob[] {
+  const schedule: ScheduledJob[] = [
     {
       // Hybrid-search FTS5 keyword index sync. Cheap (~56ms stat walk for 22k
       // files + ~8ms per changed file), so it runs on a 5-minute cadence —
@@ -88,6 +93,34 @@ export function defaultSchedule(): ScheduledJob[] {
       dedupeKey: 'rebuild-vault-artifacts',
     },
   ];
+
+  if (opts.reviewEnabled) {
+    schedule.push(
+      {
+        type: 'detect-contradictions',
+        cadence: 'daily',
+        intervalSec: 86_400,
+        priority: 80,
+        dedupeKey: 'detect-contradictions',
+      },
+      {
+        type: 'detect-duplicates',
+        cadence: 'daily',
+        intervalSec: 86_400,
+        priority: 80,
+        dedupeKey: 'detect-duplicates',
+      },
+      {
+        type: 'detect-entity-dupes',
+        cadence: 'daily',
+        intervalSec: 86_400,
+        priority: 80,
+        dedupeKey: 'detect-entity-dupes',
+      },
+    );
+  }
+
+  return schedule;
 }
 
 export function readSchedulerState(stateDir: string): SchedulerState {
