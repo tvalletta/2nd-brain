@@ -8,10 +8,42 @@ import { compileEntityPage } from '../../src/compilation/entity-compiler.js';
 import type { CompilableEntity } from '../../src/compilation/compiler.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
 
-function makeLLM(response: string): LLMClient {
+function makeLLM(): LLMClient {
   return {
-    async complete() {
-      return response;
+    async complete(prompt: string) {
+      if (prompt.includes('CONTEXT:') && prompt.includes('OUTCOME:')) {
+        // Prompt is asking for the fixed section shape.
+        return `CONTEXT:
+We decided to use Bedrock because it integrates with existing AWS infra.
+
+OUTCOME:
+Deployed successfully in Q2.
+
+PEOPLE:
+(none)
+
+SOURCES:
+- source1.md`;
+      }
+      // Prompt is still asking for the old/buggy section shape
+      // (SUMMARY/PROJECTS/TOPICS) — respond in that shape too. Since
+      // KIND_SECTIONS.decision is ['context','outcome','people','sources'],
+      // "SUMMARY" won't match either 'context' or 'outcome', reproducing
+      // the pre-fix bug where those two regions never get populated.
+      return `SUMMARY:
+We decided to use Bedrock because it integrates with existing AWS infra.
+
+PEOPLE:
+(none)
+
+PROJECTS:
+(none)
+
+TOPICS:
+(none)
+
+SOURCES:
+- source1.md`;
     },
     async extractStructured<T>(_p: string, schema: import('zod').ZodType<T>): Promise<T> {
       return schema.parse({});
@@ -67,18 +99,6 @@ Pending enrichment.
       ),
     );
 
-    const llmResponse = `CONTEXT:
-We decided to use Bedrock because it integrates with existing AWS infra.
-
-OUTCOME:
-Deployed successfully in Q2.
-
-PEOPLE:
-(none)
-
-SOURCES:
-- source1.md`;
-
     const entity: CompilableEntity = {
       name: 'Some Decision',
       kind: 'decision',
@@ -87,7 +107,7 @@ SOURCES:
       chunkRefs: [],
     };
 
-    await compileEntityPage(entity, path, 'sources/source1.md', { vault, llm: makeLLM(llmResponse) });
+    await compileEntityPage(entity, path, 'sources/source1.md', { vault, llm: makeLLM() });
 
     const { body } = parseNote(await vault.read(path));
     expect(body).toContain('We decided to use Bedrock because it integrates with existing AWS infra.');
