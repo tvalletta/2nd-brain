@@ -5,11 +5,11 @@ import { createEntityPage, mergeEntityPage, type ExtractedEntityInfo } from '../
 import { heuristicGate } from '../../intelligence/significance-gate.js';
 import { isNoiseEntity } from '../../enrichment/entity-filter.js';
 import { nowISO } from '../../shared/date-utils.js';
-import { nanoid } from 'nanoid';
 import { OPEN_TAG, CLOSE_TAG } from '../../vault/protected-regions.js';
 import { slugify } from '../../vault/paths.js';
 import { createLogger } from '../../shared/logger.js';
 import { markDirty } from '../../maintenance/mark-dirty.js';
+import { createReviewItem } from '../../review/create-review-item.js';
 
 const log = createLogger('handler:link-concepts');
 
@@ -115,9 +115,37 @@ export const linkConceptsHandler: JobHandler = {
           }
           linkedPaths.push(resolution.matchedPath);
         } else if (resolution.status === 'ambiguous') {
-          // Create review item for ambiguous resolution
-          await createAmbiguousReviewItem(context, entity.name, kind, resolution.candidates ?? [], summaryPath);
-          log.warn('Ambiguous entity resolution', { name: entity.name, kind, candidates: resolution.candidates?.length });
+          const candidates = resolution.candidates ?? [];
+          const candidateList = candidates
+            .map((c) => `- [[${c.path.split('/').pop()?.replace(/\.md$/, '')}]] (confidence: ${c.confidence.toFixed(2)})`)
+            .join('\n');
+          await createReviewItem(context.vault, {
+            slug: slugify(`ambiguous-${entity.name}`),
+            title: `Ambiguous: ${entity.name} (${kind})`,
+            claimA: `Entity "${entity.name}" found in ${summaryPath}`,
+            claimB: `Multiple matching pages: ${candidates.map((c) => c.path).join(', ')}`,
+            sourceRefs: [summaryPath],
+            links: candidates.map((c) => c.path),
+            conflictType: 'ambiguous_entity',
+            body: `
+# Ambiguous Entity: ${entity.name}
+
+**Kind:** ${kind}
+**Source:** [[${summaryPath.split('/').pop()?.replace(/\.md$/, '')}]]
+
+## Candidates
+${candidateList}
+
+## Analysis
+${OPEN_TAG('analysis')}
+Multiple pages match the entity "${entity.name}". Please review and resolve by:
+1. Merging duplicate pages
+2. Adding an alias to the correct page
+3. Dismissing incorrect candidates
+${CLOSE_TAG('analysis')}
+`,
+          });
+          log.warn('Ambiguous entity resolution', { name: entity.name, kind, candidates: candidates.length });
         }
       } catch (err) {
         log.error('Failed to link entity', { name: entity.name, kind, error: (err as Error).message });
@@ -194,67 +222,3 @@ export const linkConceptsHandler: JobHandler = {
     }
   },
 };
-
-async function createAmbiguousReviewItem(
-  context: JobContext,
-  entityName: string,
-  kind: EntityKind,
-  candidates: Array<{ path: string; confidence: number }>,
-  sourcePath: string,
-): Promise<void> {
-  await context.vault.ensureFolder('review');
-
-  const slug = slugify(`ambiguous-${entityName}`);
-  const reviewPath = `review/${slug}.md`;
-
-  const candidateList = candidates
-    .map((c) => `- [[${c.path.split('/').pop()?.replace(/\.md$/, '')}]] (confidence: ${c.confidence.toFixed(2)})`)
-    .join('\n');
-
-  const frontmatter = {
-    id: nanoid(),
-    type: 'contradiction',
-    title: `Ambiguous: ${entityName} (${kind})`,
-    status: 'draft',
-    confidence: 'low',
-    review_state: 'unreviewed',
-    created_at: nowISO(),
-    updated_at: nowISO(),
-    conflict_type: 'ambiguous_entity',
-    claim_a: `Entity "${entityName}" found in ${sourcePath}`,
-    claim_b: `Multiple matching pages: ${candidates.map((c) => c.path).join(', ')}`,
-    resolution_state: 'open',
-    source_refs: [sourcePath],
-    derived_from: [],
-    aliases: [],
-    links: candidates.map((c) => c.path),
-    change_origin: 'heuristic_review',
-    protected_regions: ['analysis'],
-  };
-
-  const body = `
-# Ambiguous Entity: ${entityName}
-
-**Kind:** ${kind}
-**Source:** [[${sourcePath.split('/').pop()?.replace(/\.md$/, '')}]]
-
-## Candidates
-${candidateList}
-
-## Analysis
-${OPEN_TAG('analysis')}
-Multiple pages match the entity "${entityName}". Please review and resolve by:
-1. Merging duplicate pages
-2. Adding an alias to the correct page
-3. Dismissing incorrect candidates
-${CLOSE_TAG('analysis')}
-`;
-
-  const content = `---\n${Object.entries(frontmatter).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join('\n')}\n---\n${body}`;
-
-  if (await context.vault.exists(reviewPath)) {
-    await context.vault.write(reviewPath, content);
-  } else {
-    await context.vault.create(reviewPath, content);
-  }
-}
