@@ -156,8 +156,23 @@ Examples:
 - entity extraction;
 - concept extraction;
 - decision extraction;
+- action-item extraction;
 - open-question extraction;
 - session summaries.
+
+Concept extraction MUST NOT materialize individual wiki pages per concept.
+Instead, every concept mention consolidates into a single glossary file
+(`{layout.wiki}/concepts/glossary.md`), one section per concept, each
+section listing every source that mentioned it. Action-item extraction is
+a distinct category from decision extraction (a decision is a choice
+already committed to; an action item is a task still to be done) and is
+tracked as per-project and vault-wide rollup checklists rather than pages.
+
+Source content that is self-referential — i.e. describes the tool's own
+development, detected by comparing the source's `project_slug` against the
+tool's own project root — MUST be excluded from entity, concept, decision,
+tool, organization, and action-item extraction. It MUST still be ingested
+as a raw, searchable note.
 
 ### 7.3 Heuristic review lane
 
@@ -334,7 +349,7 @@ When a file lands in `raw/`, the system MUST:
 2. classify it by supported source type;
 3. register provenance to the raw file path;
 4. create or update a source summary artifact;
-5. extract candidate entities, concepts, decisions, and open questions;
+5. extract candidate entities, concepts, decisions, action items, and open questions (except from self-referential source content, per §7.2, which is still ingested but excluded from extraction);
 6. update related deterministic graph structures where confidence permits;
 7. append an audit log entry.
 
@@ -488,6 +503,10 @@ Required fields:
 
 - `entity_kind`
 - `canonical_name`
+
+Note: `concept` is no longer a page-producing `entity_kind` (§7.2) — concept
+mentions are consolidated into the glossary file instead of individual
+`entity` pages.
 
 #### `project`
 

@@ -63,6 +63,13 @@ export async function migrateConceptsToGlossary(
 
     let wikilinksRewritten = 0;
     const glossaryPath = conceptGlossaryPath(layout);
+    // Scope is deliberately limited to wikiContentFolders(layout) — session
+    // summaries, digests, and system files are NOT scanned. A concept
+    // reference living in one of those becomes a dangling link once the
+    // source concept page is deleted below. This is an accepted tradeoff
+    // (Obsidian shows an unresolved link; no data is lost — the citation
+    // still lives in the glossary), not a bug: expanding scope here raises
+    // risk/cost right before a real-vault migration run.
     for (const folder of wikiContentFolders(layout)) {
       let candidateFiles: string[];
       try {
