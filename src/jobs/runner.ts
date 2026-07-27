@@ -127,9 +127,12 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
         backoffCeilingMs: options.config.jobs.transientRetry.backoffCeilingMs,
       });
       if (transient) {
-        const all = await queue.list();
-        const current = all.find((j) => j.id === job.id);
-        if (current) await checkStuckJobAlert(current, options.config, queue);
+        // queue.fail() above mutates the job in place — the in-memory
+        // JobQueue's dequeue()/fail() operate on live references into its
+        // internal array, so the local `job` already reflects the updated
+        // transientRetryCount/status. No re-fetch needed; revisit if a
+        // future JobQueue implementation stops returning live references.
+        await checkStuckJobAlert(job, options.config, queue);
       }
     } finally {
       if (release) await release();

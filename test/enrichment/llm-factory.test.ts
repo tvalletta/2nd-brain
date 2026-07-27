@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -22,6 +22,10 @@ describe('createLLMFromConfig', () => {
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'karpathy-factory-'));
     vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
   });
 
   it('builds a LiteLLM client and forwards baseUrl/apiKey/model', () => {
@@ -52,11 +56,11 @@ describe('createLLMFromConfig', () => {
     });
   });
 
-  it('returns a noop client when no provider matches', () => {
+  it('returns a noop client when no provider matches', async () => {
     const config = KarpathyConfigSchema.parse({ vaultPath: dir, llm: { provider: 'bedrock' as const } });
     // Force an unrecognized provider via a cast, simulating defensive fallback behavior.
     (config.llm as { provider: string }).provider = 'unknown';
     const client = createLLMFromConfig(config, dir);
-    expect(client.complete('hi')).resolves.toBe('');
+    await expect(client.complete('hi')).resolves.toBe('');
   });
 });

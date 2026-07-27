@@ -36,21 +36,6 @@ export async function createMCPContext(projectRoot?: string): Promise<MCPContext
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
   const queue = createJobQueue(join(stateDir, 'job-queue.json'));
-  const lock = createFileLock(lockDir);
-  const handlers = createHandlerRegistry();
-
-  const llm = createLLMFromConfig(config, stateDir);
-
-  const runner = createJobRunner({
-    queue,
-    lock,
-    handlers,
-    vaultPath: config.vaultPath,
-    projectRoot: config.projectRoot!,
-    llm,
-    vault,
-    config,
-  });
 
   const usageLogPath = join(resolveLogDir(config), 'mcp-usage.jsonl');
 
@@ -65,6 +50,22 @@ export async function createMCPContext(projectRoot?: string): Promise<MCPContext
       await queue.enqueue(input);
     },
     async runDeterministicJobs() {
+      // Lazy-init: only create heavy infrastructure (including the LLM
+      // client, which can throw synchronously on a litellm misconfiguration)
+      // when a job actually needs to run — not at server-startup time.
+      const lock = createFileLock(lockDir);
+      const handlers = createHandlerRegistry();
+      const llm = createLLMFromConfig(config, stateDir);
+      const runner = createJobRunner({
+        queue,
+        lock,
+        handlers,
+        vaultPath: config.vaultPath,
+        projectRoot: config.projectRoot!,
+        llm,
+        vault,
+        config,
+      });
       await queue.load();
       return runner.runAll();
     },
