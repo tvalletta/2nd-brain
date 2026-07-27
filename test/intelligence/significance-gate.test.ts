@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { heuristicGate, llmGate } from '../../src/intelligence/significance-gate.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
+import { TransientLLMError } from '../../src/shared/errors.js';
 
 function makeLLM(response: unknown): LLMClient {
   return {
@@ -82,6 +83,28 @@ describe('significance-gate', () => {
       };
       const decision = await llmGate(llm, { name: 'Zephyr Protocol', kind: 'concept' }, []);
       expect(decision).toEqual({ action: 'keep' });
+    });
+
+    it('propagates TransientLLMError instead of falling back to keep', async () => {
+      const transientError = new TransientLLMError('VPN down');
+      const llm: LLMClient = {
+        async complete() {
+          return '';
+        },
+        async extractStructured() {
+          throw transientError;
+        },
+      };
+
+      let caught: unknown;
+      try {
+        await llmGate(llm, { name: 'Zephyr Protocol', kind: 'concept' }, []);
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBe(transientError);
+      expect(caught).toBeInstanceOf(TransientLLMError);
     });
   });
 });

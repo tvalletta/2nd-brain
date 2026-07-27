@@ -6,6 +6,7 @@ import { parseNote, serializeNote } from '../vault/frontmatter.js';
 import { updateProtectedRegion, getProtectedRegion } from '../vault/protected-regions.js';
 import { nowISO } from '../shared/date-utils.js';
 import { createLogger } from '../shared/logger.js';
+import { TransientLLMError } from '../shared/errors.js';
 import { compileEntityPrompt } from '../enrichment/prompts.js';
 import { enrichConceptFromWeb, isDefinitionThin } from '../enrichment/web-enricher.js';
 
@@ -151,6 +152,7 @@ export async function compileEntityPage(
         });
       }
     } catch (err) {
+      if (err instanceof TransientLLMError) throw err;
       log.warn('Web enrichment failed for concept', {
         name: entity.name,
         error: (err as Error).message,

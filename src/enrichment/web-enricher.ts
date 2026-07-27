@@ -1,5 +1,6 @@
 import type { LLMClient } from './llm-client.js';
 import { createLogger } from '../shared/logger.js';
+import { TransientLLMError } from '../shared/errors.js';
 
 const log = createLogger('web-enricher');
 
@@ -48,6 +49,7 @@ export async function enrichConceptFromWeb(
       sources: ['LLM knowledge base'],
     };
   } catch (err) {
+    if (err instanceof TransientLLMError) throw err;
     log.warn('Web enrichment failed', {
       concept: conceptName,
       error: (err as Error).message,

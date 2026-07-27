@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import type { LLMClient } from '../enrichment/llm-client.js';
+import { TransientLLMError } from '../shared/errors.js';
 
 export type EntityKind = 'person' | 'project' | 'concept' | 'tool' | 'organization' | 'topic' | 'decision';
 
@@ -112,7 +113,8 @@ Output ONLY a single fenced \`\`\`json block.`;
       return { action: 'drop', reason: result.reason ?? 'LLM-judged low signal', confidence: result.confidence };
     }
     return { action: 'keep' };
-  } catch {
+  } catch (err) {
+    if (err instanceof TransientLLMError) throw err;
     // On LLM failure, fall back to keep — the legacy behaviour.
     return { action: 'keep' };
   }
