@@ -222,6 +222,16 @@ export const EnrichmentConfigSchema = z.object({
   significanceGateDropConfidence: z.number().min(0).max(1).default(0.7),
 });
 
+export const JobsConfigSchema = z.object({
+  transientRetry: z
+    .object({
+      backoffCeilingMs: z.number().int().positive().default(1_800_000), // 30 min
+      alertAfterMs: z.number().int().nonnegative().default(3_600_000), // 1 hour
+      probeTrustWindowMs: z.number().int().positive().default(120_000), // 2 min
+    })
+    .default({}),
+});
+
 /**
  * Vault layout — physical paths for each logical folder. Every karpathy-managed
  * path is computed from this map at runtime, so an alternative vault layout
@@ -295,6 +305,7 @@ export const KarpathyConfigSchema = z.object({
   embeddings: EmbeddingsConfigSchema.default({}),
   intelligence: IntelligenceConfigSchema.default({}),
   notifications: NotificationsConfigSchema.default({}),
+  jobs: JobsConfigSchema.default({}),
   layout: LayoutConfigSchema.default({}),
   search: SearchConfigSchema.default({}),
 });
@@ -309,6 +320,7 @@ const PartialAgentConfigSchema = AgentConfigSchema.partial();
 const PartialEmbeddingsConfigSchema = EmbeddingsConfigSchema.partial();
 const PartialIntelligenceConfigSchema = IntelligenceConfigSchema.partial();
 const PartialNotificationsConfigSchema = NotificationsConfigSchema.partial();
+const PartialJobsConfigSchema = JobsConfigSchema.partial();
 const PartialLayoutConfigSchema = LayoutConfigSchema.partial();
 const PartialSearchConfigSchema = SearchConfigSchema.partial();
 
@@ -327,6 +339,7 @@ export const ProjectOverrideSchema = z.object({
   embeddings: PartialEmbeddingsConfigSchema.optional(),
   intelligence: PartialIntelligenceConfigSchema.optional(),
   notifications: PartialNotificationsConfigSchema.optional(),
+  jobs: PartialJobsConfigSchema.optional(),
   layout: PartialLayoutConfigSchema.optional(),
   search: PartialSearchConfigSchema.optional(),
 });
@@ -346,6 +359,7 @@ export const GlobalDefaultsSchema = z.object({
   embeddings: PartialEmbeddingsConfigSchema.optional(),
   intelligence: PartialIntelligenceConfigSchema.optional(),
   notifications: PartialNotificationsConfigSchema.optional(),
+  jobs: PartialJobsConfigSchema.optional(),
   layout: PartialLayoutConfigSchema.optional(),
   search: PartialSearchConfigSchema.optional(),
 });
