@@ -8,12 +8,15 @@ import { dirname } from 'node:path';
 
 const log = createLogger('queue');
 
+const DEFAULT_TRANSIENT_BACKOFF_CEILING_MS = 1_800_000; // 30 min — matches config default (see config/schema.ts)
+
 export interface JobQueue {
   enqueue(input: JobCreateInput): Promise<Job>;
   dequeue(): Promise<Job | null>;
   peek(): Promise<Job | null>;
   complete(jobId: string): Promise<void>;
-  fail(jobId: string, error: string): Promise<void>;
+  fail(jobId: string, error: string, opts?: { transient?: boolean; backoffCeilingMs?: number }): Promise<void>;
+  markAlerted(jobId: string): Promise<void>;
   cancel(jobId: string): Promise<void>;
   list(filter?: { status?: JobStatus; type?: JobType }): Promise<Job[]>;
   size(): number;
@@ -92,11 +95,26 @@ export function createJobQueue(filePath: string): JobQueue {
       jobs[idx].completedAt = nowISO();
     },
 
-    async fail(jobId, error) {
+    async fail(jobId, error, opts) {
       const idx = findIndex(jobId);
       if (idx === -1) return;
       const job = jobs[idx];
       job.error = error;
+
+      if (opts?.transient) {
+        job.transientRetryCount += 1;
+        if (!job.transientSince) job.transientSince = nowISO();
+        job.status = 'pending';
+        job.startedAt = undefined;
+        const ceiling = opts.backoffCeilingMs ?? DEFAULT_TRANSIENT_BACKOFF_CEILING_MS;
+        const baseDelay = Math.min(1000 * Math.pow(2, job.transientRetryCount - 1), ceiling);
+        const jitter = Math.random() * baseDelay * 0.25;
+        job.retryAfter = Date.now() + baseDelay + jitter;
+        log.warn('Job failed transiently, retrying indefinitely', {
+          id: jobId, transientRetry: job.transientRetryCount, retryAfter: job.retryAfter,
+        });
+        return;
+      }
 
       if (job.retryCount < job.maxRetries) {
         job.retryCount += 1;
@@ -112,6 +130,12 @@ export function createJobQueue(filePath: string): JobQueue {
         job.completedAt = nowISO();
         log.error('Job failed permanently', { id: jobId, error });
       }
+    },
+
+    async markAlerted(jobId) {
+      const idx = findIndex(jobId);
+      if (idx === -1) return;
+      jobs[idx].transientAlertSentAt = nowISO();
     },
 
     async cancel(jobId) {

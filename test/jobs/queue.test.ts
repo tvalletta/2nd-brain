@@ -117,3 +117,71 @@ describe('JobQueue', () => {
     expect(queue2.size()).toBe(2);
   });
 });
+
+describe('JobQueue — transient retry lane', () => {
+  let tempDir: string;
+  let queuePath: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'karpathy-queue-'));
+    queuePath = join(tempDir, 'queue.json');
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('never marks a transiently-failing job as failed, and leaves retryCount untouched', async () => {
+    const queue = createJobQueue(queuePath);
+    const job = await queue.enqueue({ type: 'rebuild-index', maxRetries: 3 });
+
+    for (let i = 0; i < 10; i++) {
+      await queue.fail(job.id, 'simulated outage', { transient: true });
+    }
+
+    const [stored] = await queue.list();
+    expect(stored.status).toBe('pending');
+    expect(stored.retryCount).toBe(0);
+    expect(stored.transientRetryCount).toBe(10);
+    expect(stored.transientSince).toBeTruthy();
+  });
+
+  it('caps backoff at backoffCeilingMs', async () => {
+    const queue = createJobQueue(queuePath);
+    const job = await queue.enqueue({ type: 'rebuild-index' });
+
+    for (let i = 0; i < 20; i++) {
+      await queue.fail(job.id, 'simulated outage', { transient: true, backoffCeilingMs: 5000 });
+    }
+
+    const [stored] = await queue.list();
+    // 20 doublings would be enormous uncapped; confirm it's pinned at the 5s ceiling (+ up to 25% jitter).
+    const delay = stored.retryAfter! - Date.now();
+    expect(delay).toBeGreaterThanOrEqual(5000);
+    expect(delay).toBeLessThanOrEqual(5000 * 1.25 + 50);
+  });
+
+  it('keeps the existing bounded path unchanged for non-transient failures', async () => {
+    const queue = createJobQueue(queuePath);
+    const job = await queue.enqueue({ type: 'rebuild-index', maxRetries: 2 });
+
+    await queue.fail(job.id, 'bad request');
+    await queue.fail(job.id, 'bad request');
+    await queue.fail(job.id, 'bad request');
+
+    const [stored] = await queue.list();
+    expect(stored.status).toBe('failed');
+    expect(stored.transientRetryCount).toBe(0);
+  });
+
+  it('markAlerted stamps transientAlertSentAt', async () => {
+    const queue = createJobQueue(queuePath);
+    const job = await queue.enqueue({ type: 'rebuild-index' });
+    expect(job.transientAlertSentAt).toBeUndefined();
+
+    await queue.markAlerted(job.id);
+
+    const [stored] = await queue.list();
+    expect(stored.transientAlertSentAt).toBeTruthy();
+  });
+});

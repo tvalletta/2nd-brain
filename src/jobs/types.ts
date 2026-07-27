@@ -68,6 +68,9 @@ export const JobSchema = z.object({
   timeoutMs: z.number().int().optional(),
   dedupeKey: z.string().optional(),
   debounceMs: z.number().int().default(0),
+  transientRetryCount: z.number().int().default(0),
+  transientSince: z.string().optional(),
+  transientAlertSentAt: z.string().optional(),
 });
 export type Job = z.infer<typeof JobSchema>;
 
