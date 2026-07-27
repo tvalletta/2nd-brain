@@ -9,6 +9,12 @@ import { createNoopClient } from '../../src/enrichment/llm-client.js';
 import { createFsAdapter } from '../../src/vault/fs-adapter.js';
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
 import type { JobHandler, JobType } from '../../src/jobs/types.js';
+import { TransientLLMError } from '../../src/shared/errors.js';
+
+vi.mock('../../src/intelligence/slack-notify.js', () => ({
+  sendSlackNotification: vi.fn(async () => true),
+}));
+import { sendSlackNotification } from '../../src/intelligence/slack-notify.js';
 
 describe('JobRunner', () => {
   let tempDir: string;
@@ -122,5 +128,51 @@ describe('JobRunner', () => {
 
     const count = await runner.runAll();
     expect(count).toBe(0);
+  });
+
+  it('retries a TransientLLMError job indefinitely instead of marking it failed, and sends exactly one stuck-job alert', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.clearAllMocks();
+      const queue = createJobQueue(join(tempDir, 'queue.json'));
+      const lock = createFileLock(join(tempDir, 'locks'));
+
+      const outageHandler: JobHandler = {
+        async execute() {
+          throw new TransientLLMError('simulated outage');
+        },
+      };
+      const handlers = new Map<JobType, JobHandler>();
+      handlers.set('rebuild-index', outageHandler);
+
+      await queue.enqueue({ type: 'rebuild-index', maxRetries: 3 }); // old bounded ceiling — must not apply here
+
+      const config = KarpathyConfigSchema.parse({
+        vaultPath: tempDir,
+        projectRoot: tempDir,
+        notifications: { slack: { enabled: true, webhookUrl: 'https://example.com/webhook' } },
+        jobs: { transientRetry: { alertAfterMs: 0, backoffCeilingMs: 60_000 } },
+      });
+
+      const runner = createJobRunner({
+        queue, lock, handlers, vaultPath: tempDir, projectRoot: tempDir,
+        llm: createNoopClient(), vault: createFsAdapter(tempDir), config,
+      });
+
+      // Fail 5 times in a row — well past the job's own maxRetries: 3.
+      for (let i = 0; i < 5; i++) {
+        await runner.runAll();
+        vi.advanceTimersByTime(120_000);
+      }
+
+      const jobs = await queue.list();
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0].status).toBe('pending'); // never 'failed', unlike the bounded path
+      expect(jobs[0].transientRetryCount).toBe(5);
+      expect(jobs[0].retryCount).toBe(0); // untouched
+      expect(sendSlackNotification).toHaveBeenCalledTimes(1); // one alert, not five
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

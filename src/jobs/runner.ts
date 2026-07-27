@@ -5,6 +5,8 @@ import type { LLMClient } from '../enrichment/llm-client.js';
 import type { VaultAdapter } from '../vault/adapter.js';
 import type { KarpathyConfig } from '../config/schema.js';
 import { createLogger } from '../shared/logger.js';
+import { TransientLLMError } from '../shared/errors.js';
+import { checkStuckJobAlert } from './stuck-alert.js';
 
 const log = createLogger('runner');
 
@@ -118,8 +120,17 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       log.info('Job completed', { id: job.id, type: job.type });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      log.error('Job failed', { id: job.id, type: job.type, error: message });
-      await queue.fail(job.id, message);
+      const transient = err instanceof TransientLLMError;
+      log.error('Job failed', { id: job.id, type: job.type, error: message, transient });
+      await queue.fail(job.id, message, {
+        transient,
+        backoffCeilingMs: options.config.jobs.transientRetry.backoffCeilingMs,
+      });
+      if (transient) {
+        const all = await queue.list();
+        const current = all.find((j) => j.id === job.id);
+        if (current) await checkStuckJobAlert(current, options.config, queue);
+      }
     } finally {
       if (release) await release();
     }
