@@ -1419,3 +1419,104 @@ Regression requirement across every file above: existing tests for the non-trans
 ### Manual verification
 
 Not required beyond the automated tests above — this task has no new configuration surface or state file; its only externally-observable effect is that `runner.ts`'s existing `instanceof TransientLLMError` check (already covered by Task 7's end-to-end test) now actually receives a `TransientLLMError` from real job handlers instead of always seeing a plain `Error`.
+
+---
+
+## Addendum: Task 9 — Two more swallow-and-degrade sites found by Task 8's re-review
+
+Task 8's re-review ran an exhaustive `grep` for the swallow-and-continue pattern across `src/jobs/handlers/`, `src/intelligence/`, `src/compilation/`, `src/enrichment/` and found two more spots where a `TransientLLMError` is caught and silently degraded to a default value, distinct from the 12 files already fixed (those all caused a whole *job* to complete having done zero work; these two instead degrade one *sub-decision* within an otherwise-successful job). Explicit product decision: fix both anyway, same pattern.
+
+### Task 9: Propagate `TransientLLMError` through the significance gate and web enrichment
+
+**Files:**
+- Modify: `src/intelligence/significance-gate.ts`
+- Modify: `src/enrichment/web-enricher.ts`
+- Modify: `src/compilation/entity-compiler.ts`
+- Test: `test/intelligence/significance-gate.test.ts`, `test/enrichment/web-enricher.test.ts` (create if it doesn't exist), `test/compilation/entity-compiler.test.ts`
+
+**Interfaces:**
+- Consumes: `TransientLLMError` from `src/shared/errors.ts` (Task 2, already merged); `compiler.ts`'s per-entity catch (already fixed in Task 8) is the eventual destination both fixes below propagate into — no change needed in `compiler.ts` itself, since it already rethrows on `instanceof TransientLLMError` and neither of these two call sites has any *other* try/catch between them and that already-fixed catch, once their own local swallowing is removed.
+
+#### `src/intelligence/significance-gate.ts` — `llmGate`
+
+Add the import: `import { TransientLLMError } from '../shared/errors.js';`
+
+Change the catch block (currently, exact code confirmed):
+```typescript
+  } catch {
+    // On LLM failure, fall back to keep — the legacy behaviour.
+    return { action: 'keep' };
+  }
+```
+to:
+```typescript
+  } catch (err) {
+    if (err instanceof TransientLLMError) throw err;
+    // On LLM failure, fall back to keep — the legacy behaviour.
+    return { action: 'keep' };
+  }
+```
+`llmGate`'s only call site, `src/compilation/compiler.ts:100` (`await llmGate(llm, gateInput, [])`), is not wrapped in any try/catch of its own — a rethrown `TransientLLMError` here propagates straight out of `compileFromSource`, exactly like every other per-entity failure Task 8 already fixed at that function's `compileEntityPage` catch (`compiler.ts:188-197`). No change needed in `compiler.ts`.
+
+#### `src/enrichment/web-enricher.ts` — `enrichConceptFromWeb`
+
+Add the import: `import { TransientLLMError } from '../shared/errors.js';`
+
+Change the catch block (currently, exact code confirmed):
+```typescript
+  } catch (err) {
+    log.warn('Web enrichment failed', {
+      concept: conceptName,
+      error: (err as Error).message,
+    });
+    return null;
+  }
+```
+to:
+```typescript
+  } catch (err) {
+    if (err instanceof TransientLLMError) throw err;
+    log.warn('Web enrichment failed', {
+      concept: conceptName,
+      error: (err as Error).message,
+    });
+    return null;
+  }
+```
+
+#### `src/compilation/entity-compiler.ts` — the call site that wraps `enrichConceptFromWeb`
+
+Add the import: `import { TransientLLMError } from '../shared/errors.js';` (check the file's existing relative import depth to `src/shared/` first).
+
+Change (currently, exact code confirmed, inside `compileEntityPage`):
+```typescript
+    } catch (err) {
+      log.warn('Web enrichment failed for concept', {
+        name: entity.name,
+        error: (err as Error).message,
+      });
+    }
+```
+to:
+```typescript
+    } catch (err) {
+      if (err instanceof TransientLLMError) throw err;
+      log.warn('Web enrichment failed for concept', {
+        name: entity.name,
+        error: (err as Error).message,
+      });
+    }
+```
+`compileEntityPage`'s only caller is `compiler.ts`'s already-fixed per-entity catch (confirmed via `grep -rln "compileEntityPage" src/` — exactly `compiler.ts` and the definition file itself) — a rethrow here propagates straight into that existing, already-tested `instanceof TransientLLMError` rethrow.
+
+### Testing plan
+
+- `significance-gate.ts`: a test where `llm.extractStructured` throws `TransientLLMError` inside `llmGate`, asserting the promise rejects with that same error (`instanceof`), not a `{action:'keep'}` resolution. A regression test with a plain `Error` (or any other thrown value) confirms the existing "fall back to keep" behavior is unchanged.
+- `web-enricher.ts`: a test where `llm.complete` throws `TransientLLMError` inside `enrichConceptFromWeb`, asserting the promise rejects with that same error, not a resolved `null`. A regression test with a plain `Error` confirms the existing "return null" fallback is unchanged.
+- `entity-compiler.ts`: a test where `enrichConceptFromWeb` (or the underlying `llm.complete` it wraps, whichever is easier to mock at this test's existing boundary) throws `TransientLLMError` during `compileEntityPage`'s web-enrichment step, asserting `compileEntityPage` rejects with that error rather than completing normally with the page written sans enrichment. A regression test with a plain `Error` confirms the page still gets written normally (existing behavior unchanged).
+
+Regression requirement, same as Task 8: every existing non-transient/plain-`Error` path in these three files must behave exactly as before.
+
+### Manual verification
+
+None beyond the automated tests — same reasoning as Task 8's manual-verification note.
