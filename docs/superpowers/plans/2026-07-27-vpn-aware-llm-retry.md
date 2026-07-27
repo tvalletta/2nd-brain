@@ -1162,3 +1162,260 @@ With a real `~/.karpathy/config.json` set to `llm.provider: 'litellm'`:
 5. If left disconnected past an hour with `notifications.slack.enabled: true`, confirm exactly one Slack message arrives.
 
 This step is manual because it requires a real VPN and a real LiteLLM endpoint — it cannot be part of the automated test suite, and is the acceptance criterion the whole design spec was written to satisfy.
+
+---
+
+## Addendum: Task 8 — Propagate `TransientLLMError` through the real job handlers
+
+**Added after the final whole-branch review of Tasks 1-7** (which were approved and merged into this branch as designed). That review found a Critical gap invisible to any single task's diff: none of Tasks 1-7 touch the pre-existing enrichment/handler layer, and every real LLM-calling job handler catches the LLM error and converts or swallows it before `runner.ts`'s `err instanceof TransientLLMError` check (`src/jobs/runner.ts:123`) ever sees it. Concretely, of the job types that call an LLM, only `research-execute` and `tldr-update` propagate a raw thrown error today — `summarize-source`, `summarize-meeting`, `extract-entities`, `extract-entities-rich`, `compile-entities`, `topic-refresh`, and `generate-synthesis-skills` all still behave as if Tasks 1-7 don't exist during an outage. `compile-entities` and `generate-synthesis-skills` are the worst cases: they swallow the failure and return/complete normally, so the job is marked `completed` having silently done nothing, with no retry at all.
+
+This addendum fixes that, without changing any of Tasks 1-7's already-reviewed code.
+
+### Task 8: Propagate transient-error identity through `EnrichmentResult` and every real handler
+
+**Files:**
+- Modify: `src/enrichment/types.ts`
+- Modify: `src/enrichment/summarizer.ts`
+- Modify: `src/enrichment/entity-extractor.ts`
+- Modify: `src/enrichment/entity-extractor-rich.ts`
+- Modify: `src/enrichment/concept-linker.ts`
+- Modify: `src/jobs/handlers/summarize-source.ts`
+- Modify: `src/jobs/handlers/summarize-meeting.ts`
+- Modify: `src/jobs/handlers/extract-entities.ts`
+- Modify: `src/intelligence/topic-refresh.ts`
+- Modify: `src/compilation/compiler.ts`
+- Modify: `src/jobs/handlers/generate-synthesis-skills.ts`
+- Test: `test/enrichment/summarizer.test.ts`, `test/enrichment/entity-extractor.test.ts`, `test/enrichment/entity-extractor-rich.test.ts`, `test/jobs/handlers/summarize-source.test.ts`, `test/jobs/handlers/summarize-meeting.test.ts`, `test/jobs/handlers/extract-entities.test.ts`, `test/intelligence/topic-refresh.test.ts`, `test/compilation/compiler.test.ts`, `test/jobs/handlers/generate-synthesis-skills.test.ts` (extend whichever of these already exist; create only if a file genuinely has none today — check first)
+
+**Interfaces:**
+- Consumes: `TransientLLMError` from `src/shared/errors.ts` (Task 2, already merged).
+- Produces: nothing new consumed by other tasks — this is the last task in the plan. The observable contract change: every one of the seven handlers named above now throws the *original* `TransientLLMError` instance (not a re-wrapped plain `Error`) when the underlying LLM call failed transiently, so `runner.ts`'s existing `err instanceof TransientLLMError` check (already correct, untouched) actually fires for real production jobs.
+
+**Design, one paragraph:** `EnrichmentResult<T>`'s error variant gains an optional `transient?: boolean` flag. Every function that currently does `return { status: 'error', error: (err as Error).message }` inside a `catch (err)` block changes to also set `transient: err instanceof TransientLLMError`. Callers that currently do `if (result.status === 'error') throw new Error(...)` change to check that flag and, when true, throw the *original* `err` object (not a new one) — every one of these call sites already has `err` in scope from its own `catch`, OR needs a small restructure to keep the original error in scope through to the throw (shown per-file below). Two files (`compiler.ts`'s per-entity loop, `generate-synthesis-skills.ts`) don't go through `EnrichmentResult` at all — they catch directly around an `llm.complete`/pipeline call and swallow-and-continue; those get a direct `if (err instanceof TransientLLMError) throw err;` guard before their existing swallow logic, so a real outage aborts the whole job (to be retried in full by the indefinite-retry lane) instead of silently skipping every remaining entity/skill one by one.
+
+**Per-file changes:**
+
+#### `src/enrichment/types.ts`
+
+```typescript
+/** Discriminated union for enrichment function results.
+ *  Allows callers to distinguish "no data found" from "extraction failed". */
+export type EnrichmentResult<T> =
+  | { status: 'success'; data: T }
+  | { status: 'error'; error: string; transient?: boolean };
+```
+
+#### `src/enrichment/summarizer.ts`
+
+Add the import: `import { TransientLLMError } from '../shared/errors.js';`
+
+All four outer `catch (err)` blocks (in `summarizeSource`, `summarizeMeetingSource`, `summarizeMeetingChunks`, `summarizeChunks`) change from:
+```typescript
+  } catch (err) {
+    log.error('Summarization failed', { error: (err as Error).message });
+    return { status: 'error', error: (err as Error).message };
+  }
+```
+to (same pattern, all four functions, only the log message text differs per function — keep each function's existing log message text unchanged):
+```typescript
+  } catch (err) {
+    log.error('Summarization failed', { error: (err as Error).message });
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
+  }
+```
+The **inner per-chunk** `catch` blocks in `summarizeMeetingChunks`/`summarizeChunks` (the ones that push a placeholder brief/summary and continue the loop) are **unchanged** — during a real outage the subsequent synthesis call (`synthesizeSummariesPrompt`/`synthesizeMeetingSummariesPrompt`) will itself throw transiently and be caught by the outer catch above, so the transient signal still surfaces correctly without touching the resilient per-chunk fallback.
+
+#### `src/enrichment/entity-extractor.ts` and `src/enrichment/entity-extractor-rich.ts` (identical shape, apply to both)
+
+Add the import: `import { TransientLLMError } from '../shared/errors.js';`
+
+The single-text functions (`extractEntities`/`extractEntitiesRich`) get the same one-line addition as summarizer.ts's pattern:
+```typescript
+  } catch (err) {
+    log.error('Entity extraction failed', { error: (err as Error).message });
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
+  }
+```
+
+The chunked functions (`extractEntitiesFromChunks`/`extractEntitiesRichFromChunks`) need more than the outer-catch fix: unlike summarizer.ts, there is **no LLM call after the per-chunk loop** (the loop is followed only by a local, non-LLM merge), so if every chunk fails transiently, the per-chunk catch swallows all of them and the function returns a hollow `{ status: 'success', data: <empty-merged-entities> }` — silently reporting success with no data during an outage. Fix by tracking transient failures across the loop and escalating:
+
+```typescript
+  try {
+    // Extract from each chunk
+    const perChunk: Array<{ chunkId: string; entities: ExtractedEntities }> = [];
+    let anyTransientFailure = false;
+
+    for (const chunk of chunks) {
+      try {
+        const parsed = await llm.extractStructured(
+          extractEntitiesChunkPrompt(chunk.content, chunk.chunkId, chunk.headingContext),
+          ExtractedEntitiesSchema,
+        );
+        perChunk.push({ chunkId: chunk.chunkId, entities: tagChunkRefs(parsed, chunk.chunkId) });
+      } catch (err) {
+        if (err instanceof TransientLLMError) anyTransientFailure = true;
+        log.warn('Chunk entity extraction failed', { chunkId: chunk.chunkId, error: (err as Error).message });
+      }
+    }
+
+    if (anyTransientFailure) {
+      return { status: 'error', error: 'One or more chunks failed with a transient (network/outage) error', transient: true };
+    }
+
+    // Merge results across chunks
+    return { status: 'success', data: mergeExtractedEntities(perChunk.map((pc) => pc.entities)) };
+  } catch (err) {
+    log.error('Chunked entity extraction failed', { error: (err as Error).message });
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
+  }
+```
+(For `entity-extractor-rich.ts`, apply the identical structure with its own type names — `RichExtractedEntities`, `mergeRichExtractedEntities`, `tagChunkRefs`, `extractEntitiesRichChunkPrompt`, `RichExtractedEntitiesSchema` — and its own existing log message text.)
+
+Any per-chunk failure that is NOT transient (a genuine bad-output/extraction problem on one chunk) still falls back to the existing placeholder-and-continue behavior — only network/outage-classified chunk failures escalate to aborting the whole extraction with `transient: true`.
+
+#### `src/enrichment/concept-linker.ts`
+
+`findConceptLinks` currently has **zero callers anywhere in the codebase** (confirmed via `grep -rln "findConceptLinks" src/` — only the definition file itself matches). No handler needs fixing for this one. For consistency with the shared `EnrichmentResult` type (so a future caller doesn't inherit a silently-incomplete pattern), add the same one-line change to its catch:
+```typescript
+import { TransientLLMError } from '../shared/errors.js';
+// ...
+  } catch (err) {
+    log.error('Concept linking failed', { error: (err as Error).message });
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
+  }
+```
+
+#### `src/jobs/handlers/summarize-source.ts`
+
+Add the import: `import { TransientLLMError } from '../../shared/errors.js';`
+
+Change:
+```typescript
+    if (summaryResult.status === 'error') throw new Error(`Summarization failed: ${summaryResult.error}`);
+```
+to:
+```typescript
+    if (summaryResult.status === 'error') {
+      if (summaryResult.transient) throw new TransientLLMError(`Summarization failed: ${summaryResult.error}`);
+      throw new Error(`Summarization failed: ${summaryResult.error}`);
+    }
+```
+
+#### `src/jobs/handlers/summarize-meeting.ts`
+
+Same pattern, applied to its own error line:
+```typescript
+    if (briefResult.status === 'error') {
+      if (briefResult.transient) throw new TransientLLMError(`Meeting summarization failed: ${briefResult.error}`);
+      throw new Error(`Meeting summarization failed: ${briefResult.error}`);
+    }
+```
+Add the same import (adjust the relative path to `../../shared/errors.js` if this file lives at the same directory depth as `summarize-source.ts` — verify by checking the file's existing import paths for sibling modules).
+
+#### `src/jobs/handlers/extract-entities.ts`
+
+Add the import: `import { TransientLLMError } from '../../shared/errors.js';`
+
+Both error sites (non-rich around line 42, rich around line 177) get the same pattern:
+```typescript
+    if (extractResult.status === 'error') {
+      if (extractResult.transient) throw new TransientLLMError(`Entity extraction failed: ${extractResult.error}`);
+      throw new Error(`Entity extraction failed: ${extractResult.error}`);
+    }
+```
+```typescript
+    if (richResult.status === 'error') {
+      if (richResult.transient) throw new TransientLLMError(`Rich entity extraction failed: ${richResult.error}`);
+      throw new Error(`Rich entity extraction failed: ${richResult.error}`);
+    }
+```
+
+#### `src/intelligence/topic-refresh.ts`
+
+Add the import (check the file's existing imports for the correct relative path to `src/shared/errors.js` from `src/intelligence/`): `import { TransientLLMError } from '../shared/errors.js';`
+
+Change the synthesis catch (currently, confirmed exact location, line 159):
+```typescript
+  let synthesis;
+  try {
+    synthesis = await deps.llm.extractStructured(prompt, SynthesisSchema);
+  } catch (err) {
+    // Bail without modifying the note.
+    throw new Error(`topic synthesis failed for ${notePath}: ${(err as Error).message}`);
+  }
+```
+to:
+```typescript
+  let synthesis;
+  try {
+    synthesis = await deps.llm.extractStructured(prompt, SynthesisSchema);
+  } catch (err) {
+    // Bail without modifying the note. Preserve TransientLLMError identity so
+    // the job runner's indefinite-retry lane actually sees it (see Task 8).
+    if (err instanceof TransientLLMError) throw err;
+    throw new Error(`topic synthesis failed for ${notePath}: ${(err as Error).message}`);
+  }
+```
+
+#### `src/compilation/compiler.ts`
+
+Add the import (check existing import paths from `src/compilation/` to `src/shared/`): `import { TransientLLMError } from '../shared/errors.js';`
+
+Change the per-entity catch inside `compileFromSource`'s loop (currently swallows unconditionally):
+```typescript
+    } catch (err) {
+      log.error('Failed to compile entity page', {
+        name: entity.name,
+        path: existingPagePath,
+        error: (err as Error).message,
+      });
+      result.skipped.push(entity.name);
+    }
+```
+to:
+```typescript
+    } catch (err) {
+      if (err instanceof TransientLLMError) throw err; // abort the whole job — every remaining entity would fail the same way during a real outage; the runner retries the full job.
+      log.error('Failed to compile entity page', {
+        name: entity.name,
+        path: existingPagePath,
+        error: (err as Error).message,
+      });
+      result.skipped.push(entity.name);
+    }
+```
+This means `compileFromSource` can now throw for the first time (previously it never did). Its caller, `src/jobs/handlers/compile-entities.ts:154`, already calls it as `const result = await compileFromSource(...)` with no surrounding try/catch of its own — an uncaught throw here propagates naturally up through the handler's `execute()` to `runner.ts`'s existing catch block, exactly as intended. No change needed in `compile-entities.ts` itself.
+
+#### `src/jobs/handlers/generate-synthesis-skills.ts`
+
+Add the import: `import { TransientLLMError } from '../../shared/errors.js';`
+
+Change the outer catch (currently swallows unconditionally, logs, and falls off the end of `execute`):
+```typescript
+    } catch (err) {
+      log.error('Failed to generate skills', { error: (err as Error).message });
+    }
+```
+to:
+```typescript
+    } catch (err) {
+      if (err instanceof TransientLLMError) throw err;
+      log.error('Failed to generate skills', { error: (err as Error).message });
+    }
+```
+
+### Testing plan
+
+For each modified `EnrichmentResult`-returning function (`summarizer.ts`'s four functions, `entity-extractor.ts`/`entity-extractor-rich.ts`'s four functions, `concept-linker.ts`'s one function): a test that makes the mocked/fake `LLMClient` throw a `TransientLLMError` and asserts the returned `EnrichmentResult` has `transient: true`; and a test that throws a plain `Error` and asserts `transient` is `false`/`undefined`. For the two chunked entity-extractor functions specifically: a test where one chunk throws `TransientLLMError` and the rest succeed, asserting the whole function returns `{ status: 'error', transient: true }` rather than a partial success.
+
+For each modified handler (`summarize-source.ts`, `summarize-meeting.ts`, `extract-entities.ts` both branches, `generate-synthesis-skills.ts`): a test where the underlying enrichment call is mocked to return/throw a `TransientLLMError`-flagged result, asserting the handler's `execute()` rejects with an error that is `instanceof TransientLLMError` (not a plain `Error`).
+
+For `topic-refresh.ts`: a test where `deps.llm.extractStructured` throws `TransientLLMError`, asserting `refreshTopic` rejects with that same `TransientLLMError` (identity-preserving, not just message-similar — assert `instanceof`), and a separate test with a plain `Error` asserting the existing wrapped-message behavior (`topic synthesis failed for ...`) is unchanged.
+
+For `compiler.ts`: a test where `compileEntityPage` throws `TransientLLMError` for one entity, asserting `compileFromSource` rejects (propagates the `TransientLLMError`) instead of returning normally with that entity in `result.skipped`; and a regression test that a plain `Error` on one entity still results in that entity being skipped and the function returning normally (existing behavior, must be unchanged).
+
+Regression requirement across every file above: existing tests for the non-transient/plain-`Error` paths must continue to pass unmodified in behavior — this task only adds a new branch, it does not change what happens for errors that were never network/outage-related.
+
+### Manual verification
+
+Not required beyond the automated tests above — this task has no new configuration surface or state file; its only externally-observable effect is that `runner.ts`'s existing `instanceof TransientLLMError` check (already covered by Task 7's end-to-end test) now actually receives a `TransientLLMError` from real job handlers instead of always seeing a plain `Error`.
