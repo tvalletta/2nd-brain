@@ -11,7 +11,7 @@ import { createFileLock } from '../jobs/lock.js';
 import { createJobRunner } from '../jobs/runner.js';
 import { createHandlerRegistry } from '../jobs/handlers/index.js';
 import { resolveStateDir, resolveLockDir } from '../config/defaults.js';
-import { createBedrockClient, createNoopClient } from '../enrichment/llm-client.js';
+import { createLLMFromConfig } from '../enrichment/llm-factory.js';
 import { backfillTimeAwareFields } from '../maintenance/backfill-time-aware.js';
 import { rebuildVaultIndex } from '../maintenance/vault-index.js';
 import { runRotScan } from '../intelligence/rot-scan.js';
@@ -62,17 +62,6 @@ Subcommands:
   help                      Show this message.
 `;
 
-function llmFor(config: KarpathyConfig) {
-  if (config.llm.provider === 'bedrock') {
-    return createBedrockClient({
-      region: config.llm.region,
-      model: config.llm.model,
-      maxTokens: config.llm.maxTokens,
-    });
-  }
-  return createNoopClient();
-}
-
 interface Drained {
   enqueued: number;
   processed: number;
@@ -94,7 +83,7 @@ async function enqueueAndDrain(
     handlers: createHandlerRegistry(),
     vaultPath: config.vaultPath,
     projectRoot: config.projectRoot!,
-    llm: llmFor(config),
+    llm: createLLMFromConfig(config, stateDir),
     vault,
     config,
   });
@@ -291,7 +280,7 @@ export async function intelCommand(args: string[]): Promise<void> {
         handlers: createHandlerRegistry(),
         vaultPath: config.vaultPath,
         projectRoot: config.projectRoot!,
-        llm: llmFor(config),
+        llm: createLLMFromConfig(config, stateDir),
         vault,
         config,
       });

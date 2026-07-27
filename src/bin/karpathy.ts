@@ -29,7 +29,7 @@ import { createFileLock } from '../jobs/lock.js';
 import { createJobRunner } from '../jobs/runner.js';
 import { createHandlerRegistry } from '../jobs/handlers/index.js';
 import { resolveStateDir, resolveLockDir } from '../config/defaults.js';
-import { createBedrockClient, createLiteLLMClient, createNoopClient } from '../enrichment/llm-client.js';
+import { createLLMFromConfig } from '../enrichment/llm-factory.js';
 import { dispatchHook } from '../hooks/dispatch.js';
 import { ingestFile } from '../ingest/pipeline.js';
 import { detectContradictions, writeContradictionReview } from '../review/contradiction-detector.js';
@@ -56,33 +56,9 @@ import { archiveCurrentSpec, listSupersededVersions } from '../specs/versioner.j
 import { intelCommand } from './intel-command.js';
 import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
 import { createLogger } from '../shared/logger.js';
-import type { KarpathyConfig } from '../config/schema.js';
 import { LLMConfigSchema, IngestConfigSchema, MaintenanceConfigSchema } from '../config/schema.js';
 
 const log = createLogger('cli');
-
-function createLLMFromConfig(config: KarpathyConfig) {
-  if (config.llm.provider === 'litellm') {
-    const baseUrl = config.llm.baseUrl;
-    const apiKey = config.llm.apiKey;
-    if (!baseUrl || !apiKey) throw new Error('LiteLLM provider requires llm.baseUrl and llm.apiKey in config');
-    return createLiteLLMClient({
-      baseUrl,
-      apiKey,
-      model: config.llm.model,
-      maxTokens: config.llm.maxTokens,
-    });
-  }
-  if (config.llm.provider === 'bedrock') {
-    return createBedrockClient({
-      region: config.llm.region,
-      model: config.llm.model,
-      maxTokens: config.llm.maxTokens,
-      bearerToken: config.llm.bearerToken,
-    });
-  }
-  return createNoopClient();
-}
 
 const CLAUDE_MD_TEMPLATE = `# Karpathy Second Memory
 
@@ -242,7 +218,7 @@ async function maintainCommand(): Promise<void> {
   }
 
   const vault = createFsAdapter(config.vaultPath);
-  const llm = createLLMFromConfig(config);
+  const llm = createLLMFromConfig(config, stateDir);
   const lock = createFileLock(lockDir);
   const handlers = createHandlerRegistry();
   const runner = createJobRunner({
@@ -283,7 +259,7 @@ async function drainQueueCommand(): Promise<void> {
     if (queue.size() === 0) return;
 
     const vault = createFsAdapter(config.vaultPath);
-    const llm = createLLMFromConfig(config);
+    const llm = createLLMFromConfig(config, stateDir);
     const handlers = createHandlerRegistry();
     const runner = createJobRunner({
       queue,
@@ -349,7 +325,7 @@ async function ingestCommand(args: string[]): Promise<void> {
       priority: 30,
     });
 
-    const llm = createLLMFromConfig(config);
+    const llm = createLLMFromConfig(config, stateDir);
     const lock = createFileLock(lockDir);
     const handlers = createHandlerRegistry();
     const runner = createJobRunner({
@@ -590,7 +566,7 @@ async function reingestCommand(args: string[]): Promise<void> {
 
   if (enrich && ingested > 0) {
     process.stdout.write('Running enrichment pipeline...\n');
-    const llm = createLLMFromConfig(config);
+    const llm = createLLMFromConfig(config, stateDir);
     const lock = createFileLock(lockDir);
     const handlers = createHandlerRegistry();
     const runner = createJobRunner({
@@ -856,7 +832,7 @@ async function importSessionsCommand(args: string[]): Promise<void> {
     }
 
     const vault = createFsAdapter(config.vaultPath);
-    const llm = createLLMFromConfig(config);
+    const llm = createLLMFromConfig(config, stateDir);
     const lock = createFileLock(lockDir);
     const handlers = createHandlerRegistry();
     const runner = createJobRunner({
@@ -905,7 +881,7 @@ async function importCursorSessionsCommand(args: string[]): Promise<void> {
     }
 
     const vault = createFsAdapter(config.vaultPath);
-    const llm = createLLMFromConfig(config);
+    const llm = createLLMFromConfig(config, stateDir);
     const lock = createFileLock(lockDir);
     const handlers = createHandlerRegistry();
     const runner = createJobRunner({
@@ -1123,7 +1099,7 @@ async function synthesizeCommand(args: string[]): Promise<void> {
     dedupeKey: `synthesize:${slug}`,
   });
 
-  const llm = createLLMFromConfig(config);
+  const llm = createLLMFromConfig(config, stateDir);
   const lock = createFileLock(lockDir);
   const handlers = createHandlerRegistry();
   const runner = createJobRunner({
@@ -1158,7 +1134,7 @@ async function checkDecayCommand(): Promise<void> {
     dedupeKey: 'confidence-decay',
   });
 
-  const llm = createLLMFromConfig(config);
+  const llm = createLLMFromConfig(config, stateDir);
   const lock = createFileLock(lockDir);
   const handlers = createHandlerRegistry();
   const runner = createJobRunner({
@@ -1193,7 +1169,7 @@ async function crossProjectCommand(): Promise<void> {
     dedupeKey: 'cross-project',
   });
 
-  const llm = createLLMFromConfig(config);
+  const llm = createLLMFromConfig(config, stateDir);
   const lock = createFileLock(lockDir);
   const handlers = createHandlerRegistry();
   const runner = createJobRunner({
@@ -1300,7 +1276,7 @@ async function reprocessAgentCommand(): Promise<void> {
 
   process.stdout.write(`\nRunning agent pipeline (this may take a while)...\n`);
 
-  const llm = createLLMFromConfig(config);
+  const llm = createLLMFromConfig(config, stateDir);
   const lock = createFileLock(lockDir);
   const handlers = createHandlerRegistry();
   const runner = createJobRunner({
@@ -1337,7 +1313,7 @@ async function skillsCommand(args: string[]): Promise<void> {
       dedupeKey: 'generate-skills',
     });
 
-    const llm = createLLMFromConfig(config);
+    const llm = createLLMFromConfig(config, stateDir);
     const lock = createFileLock(lockDir);
     const handlers = createHandlerRegistry();
     const runner = createJobRunner({
@@ -1504,7 +1480,7 @@ async function touchCommand(args: string[]): Promise<void> {
     dedupeKey: `re-enrich:${notePath}`,
   });
 
-  const llm = createLLMFromConfig(config);
+  const llm = createLLMFromConfig(config, stateDir);
   const lock = createFileLock(lockDir);
   const handlers = createHandlerRegistry();
   const runner = createJobRunner({
@@ -1590,7 +1566,7 @@ async function maintenanceCommand(args: string[]): Promise<void> {
       dedupeKey: `embedding-index:${folderArg ?? 'wiki'}`,
     });
     const vault = createFsAdapter(config.vaultPath);
-    const llm = createLLMFromConfig(config);
+    const llm = createLLMFromConfig(config, stateDir);
     const lock = createFileLock(lockDir);
     const handlers = createHandlerRegistry();
     const runner = createJobRunner({

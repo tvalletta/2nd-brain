@@ -13,7 +13,7 @@ import { createFileLock } from '../jobs/lock.js';
 import { createJobRunner } from '../jobs/runner.js';
 import { createHandlerRegistry } from '../jobs/handlers/index.js';
 import { resolveStateDir, resolveLockDir, resolveLogDir } from '../config/defaults.js';
-import { createBedrockClient, createNoopClient } from '../enrichment/llm-client.js';
+import { createLLMFromConfig } from '../enrichment/llm-factory.js';
 
 export interface MCPContext {
   config: KarpathyConfig;
@@ -39,13 +39,7 @@ export async function createMCPContext(projectRoot?: string): Promise<MCPContext
   const lock = createFileLock(lockDir);
   const handlers = createHandlerRegistry();
 
-  const llm = config.llm.provider === 'bedrock'
-    ? createBedrockClient({
-        region: config.llm.region,
-        model: config.llm.model,
-        maxTokens: config.llm.maxTokens,
-      })
-    : createNoopClient();
+  const llm = createLLMFromConfig(config, stateDir);
 
   const runner = createJobRunner({
     queue,

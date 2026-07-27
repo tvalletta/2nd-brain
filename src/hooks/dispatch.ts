@@ -15,7 +15,7 @@ import { createFileLock } from '../jobs/lock.js';
 import { createJobRunner } from '../jobs/runner.js';
 import { createHandlerRegistry } from '../jobs/handlers/index.js';
 import { resolveStateDir, resolveLockDir } from '../config/defaults.js';
-import { createBedrockClient, createNoopClient } from '../enrichment/llm-client.js';
+import { createLLMFromConfig } from '../enrichment/llm-factory.js';
 import { spawnBackgroundDrain } from './background-drain.js';
 import { createLogger } from '../shared/logger.js';
 
@@ -51,13 +51,7 @@ function buildContext(config: KarpathyConfig): HookContext {
       // Lazy-init: only create heavy infrastructure when actually draining
       const lock = createFileLock(lockDir);
       const handlers = createHandlerRegistry();
-      const llm = config.llm.provider === 'bedrock'
-        ? createBedrockClient({
-            region: config.llm.region,
-            model: config.llm.model,
-            maxTokens: config.llm.maxTokens,
-          })
-        : createNoopClient();
+      const llm = createLLMFromConfig(config, stateDir);
       const runner = createJobRunner({
         queue,
         lock,
