@@ -11,6 +11,7 @@ import { heuristicGate, llmGate } from '../intelligence/significance-gate.js';
 import { createReviewItem } from '../review/create-review-item.js';
 import { createBudgetTrackerFromConfig } from '../shared/budget.js';
 import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
+import { TransientLLMError } from '../shared/errors.js';
 
 const log = createLogger('compiler');
 
@@ -186,6 +187,7 @@ ${CLOSE_TAG('analysis')}
         result.updated.push(compiledPath);
       }
     } catch (err) {
+      if (err instanceof TransientLLMError) throw err; // abort the whole job — every remaining entity would fail the same way during a real outage; the runner retries the full job.
       log.error('Failed to compile entity page', {
         name: entity.name,
         path: existingPagePath,

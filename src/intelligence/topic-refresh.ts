@@ -27,6 +27,7 @@ import { buildEntityIndex } from '../ingest/entity-resolver.js';
 import { markDirty } from '../maintenance/mark-dirty.js';
 import { slugify } from '../vault/paths.js';
 import { createLogger } from '../shared/logger.js';
+import { TransientLLMError } from '../shared/errors.js';
 
 const log = createLogger('topic-refresh');
 
@@ -155,7 +156,9 @@ Output ONLY a single fenced \`\`\`json block.`;
   try {
     synthesis = await deps.llm.extractStructured(prompt, SynthesisSchema);
   } catch (err) {
-    // Bail without modifying the note.
+    // Bail without modifying the note. Preserve TransientLLMError identity so
+    // the job runner's indefinite-retry lane actually sees it (see Task 8).
+    if (err instanceof TransientLLMError) throw err;
     throw new Error(`topic synthesis failed for ${notePath}: ${(err as Error).message}`);
   }
 

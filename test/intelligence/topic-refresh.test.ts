@@ -12,6 +12,7 @@ import { refreshTopic } from '../../src/intelligence/topic-refresh.js';
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
 import { parseNote } from '../../src/vault/frontmatter.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
+import { TransientLLMError } from '../../src/shared/errors.js';
 
 interface FakeResponse {
   current_understanding: string;
@@ -359,5 +360,77 @@ stability: 60
     });
     expect(result.retrievedCount).toBe(0);
     expect(result.lastVerified.startsWith('2026-05-01')).toBe(true);
+  });
+
+  describe('synthesis failure', () => {
+    async function setUpTopicWithEvidence(topicPath: string) {
+      await vault.create(
+        topicPath,
+        `---
+id: t-synth
+type: topic
+title: Synthesis Failure Topic
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+stability: 30
+---
+# Synthesis Failure Topic
+%% begin:current-understanding %%
+old understanding
+%% end:current-understanding %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sessions/s.md', chunk_index: 0, chunk_hash: 'h', text: 'some new evidence', metadata: { type: 'session_summary' } },
+      ]);
+    }
+
+    it('rejects with the original TransientLLMError when the synthesis call fails transiently (identity-preserving)', async () => {
+      const topicPath = 'wiki/topics/synth-transient.md';
+      await setUpTopicWithEvidence(topicPath);
+
+      const transientError = new TransientLLMError('VPN down');
+      const llm: LLMClient = {
+        async complete() { throw transientError; },
+        async extractStructured() { throw transientError; },
+      };
+
+      let caught: unknown;
+      try {
+        await refreshTopic({ vault, llm, store, config }, topicPath, {
+          nowMs: Date.parse('2026-05-01T00:00:00Z'),
+        });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBe(transientError);
+      expect(caught).toBeInstanceOf(TransientLLMError);
+
+      // The note must be left unmodified — refreshTopic bails before writing.
+      const { data } = parseNote(await vault.read(topicPath));
+      expect(data.last_verified).toBeUndefined();
+    });
+
+    it('wraps a plain Error with the existing message (unchanged behavior)', async () => {
+      const topicPath = 'wiki/topics/synth-plain.md';
+      await setUpTopicWithEvidence(topicPath);
+
+      const llm: LLMClient = {
+        async complete() { throw new Error('model exploded'); },
+        async extractStructured() { throw new Error('model exploded'); },
+      };
+
+      let caught: unknown;
+      try {
+        await refreshTopic({ vault, llm, store, config }, topicPath, {
+          nowMs: Date.parse('2026-05-01T00:00:00Z'),
+        });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(TransientLLMError);
+      expect((caught as Error).message).toBe(`topic synthesis failed for ${topicPath}: model exploded`);
+    });
   });
 });

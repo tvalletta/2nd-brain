@@ -4,6 +4,7 @@ import { loadSkills, matchSkill, writeSkill } from '../../agent/skills/registry.
 import type { SynthesisSkill } from '../../agent/skills/types.js';
 import { nowISO } from '../../shared/date-utils.js';
 import { createLogger } from '../../shared/logger.js';
+import { TransientLLMError } from '../../shared/errors.js';
 
 const log = createLogger('handler:generate-synthesis-skills');
 
@@ -142,6 +143,7 @@ Respond in JSON format:
         proposed: created,
       });
     } catch (err) {
+      if (err instanceof TransientLLMError) throw err;
       log.error('Failed to generate skills', { error: (err as Error).message });
     }
   },

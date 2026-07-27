@@ -8,6 +8,7 @@ import { parseNote } from '../../src/vault/frontmatter.js';
 import { compileFromSource, type CompilableEntity } from '../../src/compilation/compiler.js';
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
+import { TransientLLMError } from '../../src/shared/errors.js';
 
 function makeEntity(overrides: Partial<CompilableEntity> = {}): CompilableEntity {
   return {
@@ -203,5 +204,86 @@ describe('compileFromSource — significance gate integration', () => {
     expect(calls).toBe(1); // only the second entity ever reached the LLM
     expect(result.skipped).toEqual(['ai']);
     expect(result.created).toHaveLength(1); // Zephyr Protocol's llm-mode "keep" verdict created its page
+  });
+});
+
+describe('compileFromSource — transient error propagation', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-compiler-transient-'));
+    vault = createFsAdapter(dir);
+    await vault.ensureFolder('wiki/concepts');
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('propagates the original TransientLLMError from compileEntityPage instead of swallowing it into result.skipped', async () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      enrichment: { significanceGate: 'off' },
+    });
+    let calls = 0;
+    const transientError = new TransientLLMError('VPN down');
+    const llm: LLMClient = {
+      async complete() {
+        calls++;
+        throw transientError;
+      },
+      async extractStructured<T>(_p: string, schema: z.ZodType<T>): Promise<T> {
+        return schema.parse({});
+      },
+    };
+
+    let caught: unknown;
+    let result;
+    try {
+      result = await compileFromSource(
+        'sources/s1.md',
+        [makeEntity({ name: 'Entity One' }), makeEntity({ name: 'Entity Two' })],
+        { vault, llm, config, projectRoot: dir },
+      );
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(result).toBeUndefined();
+    expect(caught).toBe(transientError);
+    expect(caught).toBeInstanceOf(TransientLLMError);
+    // Aborted after the first entity's transient failure — the second
+    // entity's compileEntityPage call (which would also call llm.complete)
+    // never happened.
+    expect(calls).toBe(1);
+  });
+
+  it('regression: a plain Error on one entity still results in that entity being skipped and the function returning normally', async () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      enrichment: { significanceGate: 'off' },
+    });
+    let calls = 0;
+    const llm: LLMClient = {
+      async complete() {
+        calls++;
+        if (calls === 1) throw new Error('bad model output');
+        return '';
+      },
+      async extractStructured<T>(_p: string, schema: z.ZodType<T>): Promise<T> {
+        return schema.parse({});
+      },
+    };
+
+    const result = await compileFromSource(
+      'sources/s1.md',
+      [makeEntity({ name: 'Entity One' }), makeEntity({ name: 'Entity Two' })],
+      { vault, llm, config, projectRoot: dir },
+    );
+
+    expect(result.skipped).toEqual(['Entity One']);
+    expect(result.created).toHaveLength(2); // both pages get created; only the compile step failed for Entity One
+    expect(calls).toBe(2); // execution continued to the second entity
   });
 });
