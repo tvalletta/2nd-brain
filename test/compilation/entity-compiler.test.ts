@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,23 @@ import { compileEntityPage } from '../../src/compilation/entity-compiler.js';
 import type { CompilableEntity } from '../../src/compilation/compiler.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
 import { TransientLLMError } from '../../src/shared/errors.js';
+
+// Partial-mock web-enricher so the "regression" test below can make
+// enrichConceptFromWeb itself throw a plain Error, bypassing that module's
+// own internal try/catch entirely. This ensures the error lands squarely on
+// entity-compiler.ts's own catch block rather than being swallowed one layer
+// too early. The transient-error test relies on the real implementation
+// (the default call-through set up here) to exercise the double-rethrow
+// chain across both modules.
+vi.mock('../../src/enrichment/web-enricher.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/enrichment/web-enricher.js')>();
+  return {
+    ...actual,
+    enrichConceptFromWeb: vi.fn(actual.enrichConceptFromWeb),
+  };
+});
+
+import { enrichConceptFromWeb } from '../../src/enrichment/web-enricher.js';
 
 function makeLLM(): LLMClient {
   return {
@@ -218,12 +235,18 @@ Pending enrichment.
     expect(raw).toContain("updated_at: '2025-01-01T00:00:00Z'");
   });
 
-  it('regression: a plain Error inside the web-enrichment step still writes the page normally without enrichment', async () => {
+  it('regression: a non-transient error raised directly by enrichConceptFromWeb still writes the page normally without enrichment', async () => {
+    // enrichConceptFromWeb is mocked to reject with a plain Error directly —
+    // bypassing web-enricher.ts's own internal catch (which would otherwise
+    // swallow it and resolve to null). This makes entity-compiler.ts's own
+    // catch (around compileEntityPage's `enrichConceptFromWeb` call) the only
+    // thing standing between this rejection and an unhandled rejection, so
+    // the assertions below genuinely exercise that catch's log-and-continue
+    // behavior rather than web-enricher's already-tested fallback.
+    vi.mocked(enrichConceptFromWeb).mockRejectedValueOnce(new Error('model unavailable'));
+
     const llm: LLMClient = {
-      async complete(prompt: string) {
-        if (prompt.includes('encyclopedia writer')) {
-          throw new Error('model unavailable');
-        }
+      async complete() {
         return 'NOOP:\n(nothing to see here)';
       },
       async extractStructured<T>(_p: string, schema: import('zod').ZodType<T>): Promise<T> {
@@ -234,6 +257,7 @@ Pending enrichment.
     const result = await compileEntityPage(entity, path, 'sources/source1.md', { vault, llm });
 
     expect(result).toBe(path);
+    expect(enrichConceptFromWeb).toHaveBeenCalledWith(entity.name, llm);
     const { body, data } = parseNote(await vault.read(path));
     // Definition region remains untouched (still thin/pending) — enrichment
     // failed but the page write still completed normally.
