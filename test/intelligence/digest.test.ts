@@ -11,6 +11,7 @@ import {
 import { runWeeklyDigest } from '../../src/intelligence/digest.js';
 import { isoWeek } from '../../src/intelligence/iso-week.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
+import { TransientLLMError } from '../../src/shared/errors.js';
 
 function fakeLLM(label: string, summary: string): LLMClient {
   return {
@@ -112,5 +113,85 @@ describe('weekly digest (B1)', () => {
     );
     expect(result.totalChunks).toBe(0);
     expect(result.clusters).toEqual([]);
+  });
+
+  describe('labelCluster fallback (via runWeeklyDigest)', () => {
+    const FSRS_TEXT = 'fsrs spaced repetition stability difficulty retrievability scheduling';
+
+    async function seedFsrsCluster() {
+      const recent = '2026-05-05T00:00:00Z';
+      for (let i = 0; i < 6; i++) {
+        await store.upsert([
+          {
+            doc_id: `wiki/sessions/fsrs-${i}.md`,
+            chunk_index: 0,
+            chunk_hash: `f${i}`,
+            text: FSRS_TEXT,
+            metadata: { type: 'session_summary', updated_at: recent },
+          },
+        ]);
+      }
+    }
+
+    it('rejects with the original TransientLLMError instead of falling back to a synthesized label', async () => {
+      await seedFsrsCluster();
+      const transientError = new TransientLLMError('VPN down');
+      const llm: LLMClient = {
+        async complete() {
+          return '';
+        },
+        async extractStructured() {
+          throw transientError;
+        },
+      };
+
+      let caught: unknown;
+      try {
+        await runWeeklyDigest(
+          { vault, llm, store },
+          {
+            windowDays: 7,
+            minClusterSize: 3,
+            maxClusters: 5,
+            nowMs: Date.parse('2026-05-06T00:00:00Z'),
+            joinThreshold: 0.5,
+          },
+        );
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBe(transientError);
+      expect(caught).toBeInstanceOf(TransientLLMError);
+    });
+
+    it('falls back to a token-frequency label on a non-transient error (unchanged behavior)', async () => {
+      await seedFsrsCluster();
+      const llm: LLMClient = {
+        async complete() {
+          return '';
+        },
+        async extractStructured() {
+          throw new Error('LLM call failed');
+        },
+      };
+
+      const result = await runWeeklyDigest(
+        { vault, llm, store },
+        {
+          windowDays: 7,
+          minClusterSize: 3,
+          maxClusters: 5,
+          nowMs: Date.parse('2026-05-06T00:00:00Z'),
+          joinThreshold: 0.5,
+        },
+      );
+
+      expect(result.clusters.length).toBe(1);
+      // All seeded chunks share byte-identical text, so the token-frequency
+      // tally and its insertion-order tie-break are independent of which
+      // members `representativeMembers` picks or in what order.
+      expect(result.clusters[0].label).toBe('fsrs / spaced / repetition');
+      expect(result.clusters[0].summary).toBe(FSRS_TEXT);
+    });
   });
 });

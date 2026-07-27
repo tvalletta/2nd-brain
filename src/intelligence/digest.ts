@@ -18,6 +18,7 @@ import { clusterByCosine, representativeMembers } from './clustering.js';
 import { isoWeek } from './iso-week.js';
 import { appendLogEntry } from '../maintenance/vault-log.js';
 import { DEFAULT_LAYOUT, type VaultLayout } from '../vault/paths.js';
+import { TransientLLMError } from '../shared/errors.js';
 
 export interface DigestOptions {
   windowDays: number;
@@ -169,7 +170,8 @@ Output ONLY the JSON object inside a single \`\`\`json code block.`;
   });
   try {
     return await llm.extractStructured(prompt, Schema);
-  } catch {
+  } catch (err) {
+    if (err instanceof TransientLLMError) throw err;
     // Fallback: synthesize a label from the most-frequent tokens.
     return {
       label: synthFallbackLabel(rows),
