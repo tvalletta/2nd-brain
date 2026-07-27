@@ -45,3 +45,13 @@ export class ExtractionError extends KarpathyError {
     this.name = 'ExtractionError';
   }
 }
+
+export class TransientLLMError extends KarpathyError {
+  constructor(
+    message: string,
+    public readonly httpStatus?: number,
+  ) {
+    super(message, 'LLM_TRANSIENT_ERROR');
+    this.name = 'TransientLLMError';
+  }
+}

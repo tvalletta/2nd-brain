@@ -1,8 +1,36 @@
 import { z } from 'zod';
 import { createLogger } from '../shared/logger.js';
-import { ExtractionError } from '../shared/errors.js';
+import { ExtractionError, TransientLLMError } from '../shared/errors.js';
 
 const log = createLogger('llm');
+
+const TRANSIENT_STATUS_CODES = new Set([401, 403, 429, 500, 502, 503, 504]);
+
+/**
+ * Runs `fetch`, classifying failures so callers can decide retry behavior:
+ * network-level failures and the status codes in TRANSIENT_STATUS_CODES
+ * throw TransientLLMError (safe to retry indefinitely); everything else
+ * throws a plain Error (bad request/model — retrying won't help).
+ */
+export async function fetchWithClassification(url: string, init: RequestInit, label: string): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch (err) {
+    throw new TransientLLMError(`${label} network error calling ${url}: ${(err as Error).message}`);
+  }
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText);
+    const message = `${label} request failed (${res.status}): ${errText}`;
+    if (TRANSIENT_STATUS_CODES.has(res.status)) {
+      throw new TransientLLMError(message, res.status);
+    }
+    throw new Error(message);
+  }
+
+  return res;
+}
 
 export interface LLMClient {
   complete(prompt: string, options?: { maxTokens?: number; temperature?: number }): Promise<string>;
@@ -118,7 +146,7 @@ export function createBedrockBearerClient(config: {
   const endpoint = `https://bedrock-runtime.${config.region}.amazonaws.com/model/${encodeURIComponent(config.model)}/invoke`;
 
   async function call(prompt: string, maxTokens: number, _temperature: number): Promise<string> {
-    const res = await fetch(endpoint, {
+    const res = await fetchWithClassification(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -130,12 +158,7 @@ export function createBedrockBearerClient(config: {
         messages: [{ role: 'user', content: prompt }],
       }),
       signal: AbortSignal.timeout(120_000),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => res.statusText);
-      throw new Error(`Bedrock Bearer request failed (${res.status}): ${errText}`);
-    }
+    }, 'Bedrock Bearer');
 
     const data = (await res.json()) as { content?: Array<{ text?: string }> };
     return data.content?.[0]?.text ?? '';
@@ -254,7 +277,7 @@ export function createLiteLLMClient(config: {
 }): LLMClient {
   async function call(prompt: string, maxTokens: number, temperature: number): Promise<string> {
     const url = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
-    const res = await fetch(url, {
+    const res = await fetchWithClassification(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -266,12 +289,7 @@ export function createLiteLLMClient(config: {
         max_tokens: maxTokens,
         temperature,
       }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => res.statusText);
-      throw new Error(`LiteLLM request failed (${res.status}): ${errText}`);
-    }
+    }, 'LiteLLM');
 
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     return data.choices?.[0]?.message?.content ?? '';
