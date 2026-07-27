@@ -10,6 +10,7 @@ import { KarpathyConfigSchema } from '../../../src/config/schema.js';
 import type { Job, JobContext, JobCreateInput } from '../../../src/jobs/types.js';
 import type { LLMClient } from '../../../src/enrichment/llm-client.js';
 import { OPEN_TAG, CLOSE_TAG } from '../../../src/vault/protected-regions.js';
+import { TransientLLMError } from '../../../src/shared/errors.js';
 
 function makeLLM(entities: unknown): LLMClient {
   return {
@@ -172,5 +173,80 @@ describe('re-enrich-note handler', () => {
 
     const updated = await vault.read(notePath);
     expect(updated).toContain(machineContent);
+  });
+});
+
+describe('re-enrich-note handler — transient error propagation', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  let notePath: string;
+
+  function makeCtx(llm: LLMClient): JobContext {
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir });
+    return {
+      vaultPath: dir,
+      projectRoot: dir,
+      vault,
+      enqueue: async (input) => ({
+        ...input,
+        id: 'enq',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        retryCount: 0,
+        maxRetries: 3,
+        debounceMs: 0,
+        priority: input.priority ?? 50,
+        payload: input.payload ?? {},
+        trigger: input.trigger ?? 'cascade',
+      } as Job),
+      llm,
+      config,
+    };
+  }
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-ren-transient-'));
+    vault = createFsAdapter(dir);
+    notePath = 'wiki/entities/people/dave.md';
+    const fm = {
+      id: 'dave',
+      type: 'entity',
+      title: 'Dave',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const body =
+      'Dave works closely with Erin on the distributed caching system and leads the infrastructure team.';
+    await vault.create(notePath, serializeNote(fm, body));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('rejects with the original TransientLLMError on a transient extraction failure', async () => {
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() { throw new TransientLLMError('VPN down'); },
+    };
+    const ctx = makeCtx(llm);
+    await expect(reEnrichNoteHandler.execute(makeJob(notePath), ctx)).rejects.toBeInstanceOf(TransientLLMError);
+  });
+
+  it('rejects with a plain Error (not TransientLLMError) on a non-transient failure', async () => {
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() { throw new Error('bad output'); },
+    };
+    const ctx = makeCtx(llm);
+    let caught: unknown;
+    try {
+      await reEnrichNoteHandler.execute(makeJob(notePath), ctx);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(TransientLLMError);
+    expect((caught as Error).message).toContain('re-enrich-note: extraction failed');
   });
 });

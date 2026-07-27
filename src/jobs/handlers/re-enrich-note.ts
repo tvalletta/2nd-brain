@@ -12,6 +12,7 @@ import { chunkDocument } from '../../ingest/chunker.js';
 import { isNoiseEntity } from '../../enrichment/entity-filter.js';
 import { nowISO } from '../../shared/date-utils.js';
 import { createLogger } from '../../shared/logger.js';
+import { TransientLLMError } from '../../shared/errors.js';
 
 const log = createLogger('handler:re-enrich-note');
 
@@ -72,6 +73,7 @@ export const reEnrichNoteHandler: JobHandler = {
       : await extractEntitiesRichFromChunks(context.llm, chunkResult.chunks);
 
     if (extractResult.status === 'error') {
+      if (extractResult.transient) throw new TransientLLMError(`re-enrich-note: extraction failed: ${extractResult.error}`);
       throw new Error(`re-enrich-note: extraction failed: ${extractResult.error}`);
     }
 
