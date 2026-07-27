@@ -3,6 +3,7 @@ import type { EnrichmentResult } from './types.js';
 import { linkConceptsPrompt } from './prompts.js';
 import { z } from 'zod';
 import { createLogger } from '../shared/logger.js';
+import { TransientLLMError } from '../shared/errors.js';
 
 const log = createLogger('concept-linker');
 
@@ -22,6 +23,6 @@ export async function findConceptLinks(
     return { status: 'success', data };
   } catch (err) {
     log.error('Concept linking failed', { error: (err as Error).message });
-    return { status: 'error', error: (err as Error).message };
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
   }
 }

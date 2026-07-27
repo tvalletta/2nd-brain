@@ -8,6 +8,7 @@ import { slugify, resolveAvailablePath } from '../../vault/paths.js';
 import { nowISO, todayStamp } from '../../shared/date-utils.js';
 import { createLogger } from '../../shared/logger.js';
 import type { SourceType } from '../../ingest/classifier.js';
+import { TransientLLMError } from '../../shared/errors.js';
 
 const log = createLogger('handler:summarize-meeting');
 
@@ -104,7 +105,10 @@ export const summarizeMeetingHandler: JobHandler = {
         ? await summarizeMeetingSource(context.llm, title, chunkResult.chunks[0].content)
         : await summarizeMeetingChunks(context.llm, title, chunkResult.chunks);
 
-    if (briefResult.status === 'error') throw new Error(`Meeting summarization failed: ${briefResult.error}`);
+    if (briefResult.status === 'error') {
+      if (briefResult.transient) throw new TransientLLMError(`Meeting summarization failed: ${briefResult.error}`);
+      throw new Error(`Meeting summarization failed: ${briefResult.error}`);
+    }
     const brief = parseMeetingBrief(briefResult.data);
     const meetingDate = extractMeetingDate(brief, rawPath);
 

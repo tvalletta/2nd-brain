@@ -9,6 +9,7 @@ import { nowISO } from '../../shared/date-utils.js';
 import { createLogger } from '../../shared/logger.js';
 import type { SourceType } from '../../ingest/classifier.js';
 import type { ExtractedEntities } from '../../enrichment/entity-extractor.js';
+import { TransientLLMError } from '../../shared/errors.js';
 
 const log = createLogger('handler:extract-entities');
 
@@ -39,7 +40,10 @@ export const extractEntitiesHandler: JobHandler = {
     const extractResult = chunkResult.chunks.length === 1
       ? await extractEntities(context.llm, chunkResult.chunks[0].content)
       : await extractEntitiesFromChunks(context.llm, chunkResult.chunks);
-    if (extractResult.status === 'error') throw new Error(`Entity extraction failed: ${extractResult.error}`);
+    if (extractResult.status === 'error') {
+      if (extractResult.transient) throw new TransientLLMError(`Entity extraction failed: ${extractResult.error}`);
+      throw new Error(`Entity extraction failed: ${extractResult.error}`);
+    }
     entities = extractResult.data;
 
     // Format entities as wikilinked bullets
@@ -174,7 +178,10 @@ export const extractEntitiesRichHandler: JobHandler = {
     const richResult = chunkResult.chunks.length === 1
       ? await extractEntitiesRich(context.llm, chunkResult.chunks[0].content)
       : await extractEntitiesRichFromChunks(context.llm, chunkResult.chunks);
-    if (richResult.status === 'error') throw new Error(`Rich entity extraction failed: ${richResult.error}`);
+    if (richResult.status === 'error') {
+      if (richResult.transient) throw new TransientLLMError(`Rich entity extraction failed: ${richResult.error}`);
+      throw new Error(`Rich entity extraction failed: ${richResult.error}`);
+    }
     entities = richResult.data;
 
     // Format entities as wikilinked bullets (reuses the same formatting for display)

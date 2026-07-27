@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import type { z } from 'zod';
 import { createFsAdapter } from '../../../src/vault/fs-adapter.js';
 import { serializeNote } from '../../../src/vault/frontmatter.js';
-import { extractEntitiesRichHandler } from '../../../src/jobs/handlers/extract-entities.js';
+import { extractEntitiesHandler, extractEntitiesRichHandler } from '../../../src/jobs/handlers/extract-entities.js';
 import { compileEntitiesHandler } from '../../../src/jobs/handlers/compile-entities.js';
 import { KarpathyConfigSchema } from '../../../src/config/schema.js';
 import { slugify } from '../../../src/vault/paths.js';
+import { TransientLLMError } from '../../../src/shared/errors.js';
 import type { Job, JobContext, JobCreateInput } from '../../../src/jobs/types.js';
 import type { LLMClient } from '../../../src/enrichment/llm-client.js';
 
@@ -157,5 +158,110 @@ describe('extract-entities-rich -> compile-entities integration (action_items)',
     const projectPath = `wiki/projects/${projectSlug}/action-items.md`;
     expect(await vault.exists(projectPath)).toBe(true);
     expect(await vault.read(projectPath)).toContain('Send follow-up email to client');
+  });
+});
+
+describe('extractEntitiesHandler / extractEntitiesRichHandler — transient error propagation', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  let summaryPath: string;
+  let rawPath: string;
+
+  function makeCtx(llm: LLMClient): JobContext {
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir });
+    return {
+      vaultPath: dir,
+      projectRoot: dir,
+      vault,
+      enqueue: async (input: JobCreateInput) => ({
+        ...input, id: 'enq', status: 'pending', createdAt: new Date().toISOString(),
+        retryCount: 0, maxRetries: 3, debounceMs: 0,
+        priority: input.priority ?? 50, payload: input.payload ?? {}, trigger: input.trigger ?? 'cascade',
+      } as Job),
+      llm,
+      config,
+    };
+  }
+
+  function makeJob(type: 'extract-entities' | 'extract-entities-rich'): Job {
+    return {
+      id: `job-${type}`, type, status: 'running', priority: 50,
+      targetPath: summaryPath, payload: { rawPath }, trigger: 'cascade',
+      createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0,
+    };
+  }
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-extract-transient-'));
+    vault = createFsAdapter(dir);
+    rawPath = 'raw/session.txt';
+    await vault.write(rawPath, 'Some raw content to extract entities from.');
+    summaryPath = 'sources/session-summary.md';
+    await vault.write(
+      summaryPath,
+      serializeNote(
+        {
+          id: 'src1', type: 'source_summary', title: 'Session', created_at: '2026-07-01T00:00:00Z',
+          updated_at: '2026-07-01T00:00:00Z', source_type: 'plaintext', source_hash: 'hash1',
+        },
+        '\nBody.\n',
+      ),
+    );
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('extractEntitiesHandler rejects with the original TransientLLMError on a transient extraction failure', async () => {
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() { throw new TransientLLMError('VPN down'); },
+    };
+    const ctx = makeCtx(llm);
+    await expect(extractEntitiesHandler.execute(makeJob('extract-entities'), ctx)).rejects.toBeInstanceOf(TransientLLMError);
+  });
+
+  it('extractEntitiesHandler rejects with a plain Error (not TransientLLMError) on a non-transient failure', async () => {
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() { throw new Error('bad output'); },
+    };
+    const ctx = makeCtx(llm);
+    let caught: unknown;
+    try {
+      await extractEntitiesHandler.execute(makeJob('extract-entities'), ctx);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(TransientLLMError);
+    expect((caught as Error).message).toContain('Entity extraction failed');
+  });
+
+  it('extractEntitiesRichHandler rejects with the original TransientLLMError on a transient extraction failure', async () => {
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() { throw new TransientLLMError('VPN down'); },
+    };
+    const ctx = makeCtx(llm);
+    await expect(extractEntitiesRichHandler.execute(makeJob('extract-entities-rich'), ctx)).rejects.toBeInstanceOf(TransientLLMError);
+  });
+
+  it('extractEntitiesRichHandler rejects with a plain Error (not TransientLLMError) on a non-transient failure', async () => {
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() { throw new Error('bad output'); },
+    };
+    const ctx = makeCtx(llm);
+    let caught: unknown;
+    try {
+      await extractEntitiesRichHandler.execute(makeJob('extract-entities-rich'), ctx);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(TransientLLMError);
+    expect((caught as Error).message).toContain('Rich entity extraction failed');
   });
 });

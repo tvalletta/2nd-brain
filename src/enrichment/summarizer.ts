@@ -3,6 +3,7 @@ import type { EnrichmentResult } from './types.js';
 import { summarizeSourcePrompt, synthesizeSummariesPrompt, meetingSummarizePrompt, synthesizeMeetingSummariesPrompt } from './prompts.js';
 import type { Chunk } from '../ingest/chunker.js';
 import { createLogger } from '../shared/logger.js';
+import { TransientLLMError } from '../shared/errors.js';
 
 const log = createLogger('summarizer');
 
@@ -19,7 +20,7 @@ export async function summarizeSource(
     return { status: 'success', data: summary };
   } catch (err) {
     log.error('Summarization failed', { error: (err as Error).message });
-    return { status: 'error', error: (err as Error).message };
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
   }
 }
 
@@ -36,7 +37,7 @@ export async function summarizeMeetingSource(
     return { status: 'success', data: brief };
   } catch (err) {
     log.error('Meeting summarization failed', { error: (err as Error).message });
-    return { status: 'error', error: (err as Error).message };
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
   }
 }
 
@@ -75,7 +76,7 @@ export async function summarizeMeetingChunks(
     return { status: 'success', data: synthesis };
   } catch (err) {
     log.error('Meeting chunk summarization failed', { error: (err as Error).message });
-    return { status: 'error', error: (err as Error).message };
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
   }
 }
 
@@ -117,6 +118,6 @@ export async function summarizeChunks(
     return { status: 'success', data: synthesis };
   } catch (err) {
     log.error('Chunk summarization failed', { error: (err as Error).message });
-    return { status: 'error', error: (err as Error).message };
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
   }
 }

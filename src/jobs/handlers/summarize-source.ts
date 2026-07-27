@@ -6,6 +6,7 @@ import { summarizeSource, summarizeChunks } from '../../enrichment/summarizer.js
 import { nowISO } from '../../shared/date-utils.js';
 import { createLogger } from '../../shared/logger.js';
 import type { SourceType } from '../../ingest/classifier.js';
+import { TransientLLMError } from '../../shared/errors.js';
 
 const log = createLogger('handler:summarize-source');
 
@@ -37,7 +38,10 @@ export const summarizeSourceHandler: JobHandler = {
     const summaryResult = chunkResult.chunks.length === 1
       ? await summarizeSource(context.llm, title, chunkResult.chunks[0].content)
       : await summarizeChunks(context.llm, title, chunkResult.chunks);
-    if (summaryResult.status === 'error') throw new Error(`Summarization failed: ${summaryResult.error}`);
+    if (summaryResult.status === 'error') {
+      if (summaryResult.transient) throw new TransientLLMError(`Summarization failed: ${summaryResult.error}`);
+      throw new Error(`Summarization failed: ${summaryResult.error}`);
+    }
     const summary = summaryResult.data;
 
     // Update the source summary note

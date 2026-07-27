@@ -4,6 +4,7 @@ import type { EnrichmentResult } from './types.js';
 import { extractEntitiesRichPrompt, extractEntitiesRichChunkPrompt } from './prompts.js';
 import type { Chunk } from '../ingest/chunker.js';
 import { createLogger } from '../shared/logger.js';
+import { TransientLLMError } from '../shared/errors.js';
 
 const log = createLogger('entity-extractor-rich');
 
@@ -120,7 +121,7 @@ export async function extractEntitiesRich(
     return { status: 'success', data };
   } catch (err) {
     log.error('Rich entity extraction failed', { error: (err as Error).message });
-    return { status: 'error', error: (err as Error).message };
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
   }
 }
 
@@ -140,6 +141,7 @@ export async function extractEntitiesRichFromChunks(
   try {
     // Extract from each chunk
     const perChunk: Array<{ chunkId: string; entities: RichExtractedEntities }> = [];
+    let anyTransientFailure = false;
 
     for (const chunk of chunks) {
       try {
@@ -149,15 +151,20 @@ export async function extractEntitiesRichFromChunks(
         );
         perChunk.push({ chunkId: chunk.chunkId, entities: tagChunkRefs(parsed, chunk.chunkId) });
       } catch (err) {
+        if (err instanceof TransientLLMError) anyTransientFailure = true;
         log.warn('Chunk rich entity extraction failed', { chunkId: chunk.chunkId, error: (err as Error).message });
       }
+    }
+
+    if (anyTransientFailure) {
+      return { status: 'error', error: 'One or more chunks failed with a transient (network/outage) error', transient: true };
     }
 
     // Merge results across chunks
     return { status: 'success', data: mergeRichExtractedEntities(perChunk.map((pc) => pc.entities)) };
   } catch (err) {
     log.error('Chunked rich entity extraction failed', { error: (err as Error).message });
-    return { status: 'error', error: (err as Error).message };
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
   }
 }
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { extractEntities, extractEntitiesFromChunks, mergeExtractedEntities } from '../../src/enrichment/entity-extractor.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
 import type { Chunk } from '../../src/ingest/chunker.js';
+import { TransientLLMError } from '../../src/shared/errors.js';
 
 function createMockClient(response: string): LLMClient {
   return {
@@ -73,6 +74,19 @@ describe('extractEntities', () => {
     expect(result.status).toBe('error');
     if (result.status !== 'error') throw new Error('expected error');
     expect(result.error).toContain('LLM down');
+    expect(result.transient).toBeFalsy();
+  });
+
+  it('flags transient: true when the LLM throws a TransientLLMError', async () => {
+    const llm: LLMClient = {
+      async complete() { throw new Error('not implemented'); },
+      async extractStructured() { throw new TransientLLMError('VPN down'); },
+    };
+    const result = await extractEntities(llm, 'some text');
+
+    expect(result.status).toBe('error');
+    if (result.status !== 'error') throw new Error('expected error');
+    expect(result.transient).toBe(true);
   });
 
   it('includes default chunkRefs as empty arrays', async () => {
@@ -162,6 +176,55 @@ describe('extractEntitiesFromChunks', () => {
     expect(result.status).toBe('success');
     if (result.status !== 'success') throw new Error('expected success');
     expect(result.data.people).toHaveLength(0);
+  });
+
+  it('escalates to a transient error when one chunk fails with TransientLLMError, instead of a hollow success', async () => {
+    let callIndex = 0;
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured<T>(_prompt: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): Promise<T> {
+        callIndex++;
+        if (callIndex === 1) throw new TransientLLMError('VPN down');
+        return schema.parse(JSON.parse(SAMPLE_ENTITIES_JSON));
+      },
+    };
+
+    const chunks = [
+      makeChunk('First section', 0, 2, 'chunk-a'),
+      makeChunk('Second section', 1, 2, 'chunk-b'),
+    ];
+
+    const result = await extractEntitiesFromChunks(llm, chunks);
+
+    expect(result.status).toBe('error');
+    if (result.status !== 'error') throw new Error('expected error');
+    expect(result.transient).toBe(true);
+  });
+
+  it('falls back to placeholder-and-continue when a chunk fails with a non-transient error', async () => {
+    let callIndex = 0;
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured<T>(_prompt: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): Promise<T> {
+        callIndex++;
+        if (callIndex === 1) throw new Error('bad output from model');
+        return schema.parse(JSON.parse(SAMPLE_ENTITIES_JSON));
+      },
+    };
+
+    const chunks = [
+      makeChunk('First section', 0, 2, 'chunk-a'),
+      makeChunk('Second section', 1, 2, 'chunk-b'),
+    ];
+
+    const result = await extractEntitiesFromChunks(llm, chunks);
+
+    // Existing resilient behavior: the failed chunk is skipped, the
+    // successful chunk's entities still merge into a normal success.
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') throw new Error('expected success');
+    expect(result.data.people).toHaveLength(1);
+    expect(result.data.people[0].chunkRefs).toEqual(['chunk-b']);
   });
 });
 

@@ -4,6 +4,7 @@ import type { EnrichmentResult } from './types.js';
 import { extractEntitiesPrompt, extractEntitiesChunkPrompt } from './prompts.js';
 import type { Chunk } from '../ingest/chunker.js';
 import { createLogger } from '../shared/logger.js';
+import { TransientLLMError } from '../shared/errors.js';
 
 const log = createLogger('entity-extractor');
 
@@ -68,7 +69,7 @@ export async function extractEntities(
     return { status: 'success', data };
   } catch (err) {
     log.error('Entity extraction failed', { error: (err as Error).message });
-    return { status: 'error', error: (err as Error).message };
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
   }
 }
 
@@ -88,6 +89,7 @@ export async function extractEntitiesFromChunks(
   try {
     // Extract from each chunk
     const perChunk: Array<{ chunkId: string; entities: ExtractedEntities }> = [];
+    let anyTransientFailure = false;
 
     for (const chunk of chunks) {
       try {
@@ -97,15 +99,20 @@ export async function extractEntitiesFromChunks(
         );
         perChunk.push({ chunkId: chunk.chunkId, entities: tagChunkRefs(parsed, chunk.chunkId) });
       } catch (err) {
+        if (err instanceof TransientLLMError) anyTransientFailure = true;
         log.warn('Chunk entity extraction failed', { chunkId: chunk.chunkId, error: (err as Error).message });
       }
+    }
+
+    if (anyTransientFailure) {
+      return { status: 'error', error: 'One or more chunks failed with a transient (network/outage) error', transient: true };
     }
 
     // Merge results across chunks
     return { status: 'success', data: mergeExtractedEntities(perChunk.map((pc) => pc.entities)) };
   } catch (err) {
     log.error('Chunked entity extraction failed', { error: (err as Error).message });
-    return { status: 'error', error: (err as Error).message };
+    return { status: 'error', error: (err as Error).message, transient: err instanceof TransientLLMError };
   }
 }
 
