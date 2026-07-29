@@ -232,6 +232,11 @@ export const JobsConfigSchema = z.object({
     .default({}),
 });
 
+export const ReviewConfigSchema = z.object({
+  analysisEnabled: z.boolean().default(true),
+  confidenceEscalationThreshold: z.number().min(0).max(1).default(0.7),
+});
+
 /**
  * Vault layout — physical paths for each logical folder. Every karpathy-managed
  * path is computed from this map at runtime, so an alternative vault layout
@@ -306,6 +311,7 @@ export const KarpathyConfigSchema = z.object({
   intelligence: IntelligenceConfigSchema.default({}),
   notifications: NotificationsConfigSchema.default({}),
   jobs: JobsConfigSchema.default({}),
+  review: ReviewConfigSchema.default({}),
   layout: LayoutConfigSchema.default({}),
   search: SearchConfigSchema.default({}),
 });
@@ -321,6 +327,7 @@ const PartialEmbeddingsConfigSchema = EmbeddingsConfigSchema.partial();
 const PartialIntelligenceConfigSchema = IntelligenceConfigSchema.partial();
 const PartialNotificationsConfigSchema = NotificationsConfigSchema.partial();
 const PartialJobsConfigSchema = JobsConfigSchema.partial();
+const PartialReviewConfigSchema = ReviewConfigSchema.partial();
 const PartialLayoutConfigSchema = LayoutConfigSchema.partial();
 const PartialSearchConfigSchema = SearchConfigSchema.partial();
 
@@ -340,6 +347,7 @@ export const ProjectOverrideSchema = z.object({
   intelligence: PartialIntelligenceConfigSchema.optional(),
   notifications: PartialNotificationsConfigSchema.optional(),
   jobs: PartialJobsConfigSchema.optional(),
+  review: PartialReviewConfigSchema.optional(),
   layout: PartialLayoutConfigSchema.optional(),
   search: PartialSearchConfigSchema.optional(),
 });
@@ -360,6 +368,7 @@ export const GlobalDefaultsSchema = z.object({
   intelligence: PartialIntelligenceConfigSchema.optional(),
   notifications: PartialNotificationsConfigSchema.optional(),
   jobs: PartialJobsConfigSchema.optional(),
+  review: PartialReviewConfigSchema.optional(),
   layout: PartialLayoutConfigSchema.optional(),
   search: PartialSearchConfigSchema.optional(),
 });

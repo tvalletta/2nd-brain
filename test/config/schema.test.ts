@@ -21,3 +21,22 @@ describe('KarpathyConfigSchema — jobs.transientRetry', () => {
     expect(config.jobs.transientRetry.probeTrustWindowMs).toBe(120_000);
   });
 });
+
+describe('KarpathyConfigSchema — review', () => {
+  it('defaults review section when omitted', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.review).toEqual({
+      analysisEnabled: true,
+      confidenceEscalationThreshold: 0.7,
+    });
+  });
+
+  it('allows overriding analysisEnabled and confidenceEscalationThreshold', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      review: { analysisEnabled: false, confidenceEscalationThreshold: 0.5 },
+    });
+    expect(config.review.analysisEnabled).toBe(false);
+    expect(config.review.confidenceEscalationThreshold).toBe(0.5);
+  });
+});
