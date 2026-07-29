@@ -63,4 +63,43 @@ describe('createLLMFromConfig', () => {
     const client = createLLMFromConfig(config, dir);
     await expect(client.complete('hi')).resolves.toBe('');
   });
+
+  it('uses config.llm.model when no tier is given (regression)', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      llm: { provider: 'litellm', baseUrl: 'https://proxy.example.com', apiKey: 'k', model: 'claude-sonnet-4-6' },
+    });
+    createLLMFromConfig(config, dir);
+    expect(createLiteLLMClient).toHaveBeenCalledWith({
+      baseUrl: 'https://proxy.example.com', apiKey: 'k', model: 'claude-sonnet-4-6', maxTokens: config.llm.maxTokens,
+    });
+  });
+
+  it('uses config.llm.models[tier] when a tier is given', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      llm: {
+        provider: 'litellm', baseUrl: 'https://proxy.example.com', apiKey: 'k', model: 'claude-sonnet-4-6',
+        models: { fast: 'claude-haiku-4.5', medium: 'claude-sonnet-4-6', heavy: 'claude-opus-4-8' },
+      },
+    });
+    createLLMFromConfig(config, dir, 'fast');
+    expect(createLiteLLMClient).toHaveBeenCalledWith({
+      baseUrl: 'https://proxy.example.com', apiKey: 'k', model: 'claude-haiku-4.5', maxTokens: config.llm.maxTokens,
+    });
+  });
+
+  it('uses the medium-tier model for bedrock too', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      llm: {
+        provider: 'bedrock', region: 'us-west-2', model: 'claude-sonnet-4-6', bearerToken: 'tok',
+        models: { fast: 'claude-haiku-4-5-20251001-v1:0', medium: 'claude-sonnet-4-6', heavy: 'claude-opus-4-6-v1' },
+      },
+    });
+    createLLMFromConfig(config, dir, 'medium');
+    expect(createBedrockClient).toHaveBeenCalledWith({
+      region: 'us-west-2', model: 'claude-sonnet-4-6', maxTokens: config.llm.maxTokens, bearerToken: 'tok',
+    });
+  });
 });
