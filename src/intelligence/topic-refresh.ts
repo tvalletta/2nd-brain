@@ -1,14 +1,15 @@
-// B2: Topic-page refresh.
+// B2: Topic-page refresh — generalized (B2b) to cover concept, topic,
+// decision, and project notes via the REFRESH_TARGETS registry, instead of
+// assuming every refreshable note has a `current-understanding` region.
 //
-// Keeps a single topic/concept note thorough and current:
+// Keeps a single note's primary richness region thorough and current:
 // 1. Pull supporting chunks via B4 retrieval (top-K).
-// 2. Rewrite the `current-understanding` protected region with CoD over the
+// 2. Rewrite the note type's primary protected region with CoD over the
 //    retrieved evidence — no contradiction overwrite (Karpathy v2 rule).
 // 3. Append unseen sources to a `sources` list.
 // 4. Bump `last_verified`. If no contradictions surfaced, bump `stability` modestly.
 // 5. Log + return a structured result for the queue.
 
-import { z } from 'zod';
 import type { LLMClient } from '../enrichment/llm-client.js';
 import type { VaultAdapter } from '../vault/adapter.js';
 import type { EmbeddingStore } from '../embeddings/store.js';
@@ -28,9 +29,16 @@ import { markDirty } from '../maintenance/mark-dirty.js';
 import { slugify } from '../vault/paths.js';
 import { createLogger } from '../shared/logger.js';
 import { TransientLLMError } from '../shared/errors.js';
+import { REFRESH_TARGETS, type RefreshTarget, type RefreshSynthesisResult } from './refresh-targets.js';
 
 const log = createLogger('topic-refresh');
 
+/**
+ * Legacy constant, kept exported for backward compatibility. The dispatch
+ * below now resolves the region to rewrite per note `type` via
+ * REFRESH_TARGETS[noteType] instead of assuming this one region name fits
+ * every refreshable type (it still happens to be correct for concept/topic).
+ */
 export const CURRENT_UNDERSTANDING_REGION = 'current-understanding';
 export const SOURCES_REGION = 'sources';
 
@@ -47,14 +55,6 @@ export interface RefreshDeps {
   store: EmbeddingStore;
   config: KarpathyConfig;
 }
-
-const SynthesisSchema = z.object({
-  current_understanding: z.string(),
-  contradictions: z
-    .array(z.object({ ref: z.string(), reason: z.string() }))
-    .default([]),
-  new_sources: z.array(z.string()).default([]),
-});
 
 export interface RefreshResult {
   notePath: string;
@@ -88,21 +88,49 @@ export async function refreshTopic(
   const fm = data as Record<string, unknown>;
   const title = typeof fm.title === 'string' ? fm.title : notePath;
   const tldr = typeof fm.tldr === 'string' ? fm.tldr : '';
+  const noteType = typeof fm.type === 'string' ? fm.type : 'topic';
 
-  const currentUnderstanding =
-    extractRegion(body, CURRENT_UNDERSTANDING_REGION) ?? '(no current understanding yet)';
+  // Phase 1: capture how many pending entries we're about to clear. Computed
+  // up front so every early-return branch below can report it accurately.
+  const pendingCleared = Array.isArray(fm.pending_evidence)
+    ? (fm.pending_evidence as unknown[]).length
+    : 0;
 
-  // Stage 1: retrieve supporting evidence — exclude the topic note itself.
-  const queryText = [title, tldr, currentUnderstanding].filter(Boolean).join('\n');
+  const target: RefreshTarget | undefined = (REFRESH_TARGETS as Record<string, RefreshTarget>)[noteType];
+
+  if (!target) {
+    // Unknown/unsupported type (e.g. project_spec — owned by
+    // agent-synthesize-project instead). Bump last_verified and clear
+    // pending_evidence so the queue doesn't spin forever, but do not touch
+    // the body. Mirrors the "no evidence found" no-op branch below.
+    fm.last_verified = nowIso;
+    fm.pending_evidence = [];
+    fm.pending_evidence_count = 0;
+    await deps.vault.atomicWrite(notePath, serializeNote(fm, body));
+    return {
+      notePath,
+      retrievedCount: 0,
+      contradictionCount: 0,
+      newSourcesAdded: 0,
+      stabilityBefore: typeof fm.stability === 'number' ? fm.stability : undefined,
+      stabilityAfter: typeof fm.stability === 'number' ? fm.stability : 0,
+      lastVerified: nowIso,
+      pendingCleared,
+      neighborsCascaded: 0,
+    };
+  }
+
+  const existingPrimary = extractRegion(body, target.primaryRegion) ?? '';
+  const existingSecondary = target.secondaryRegion
+    ? (extractRegion(body, target.secondaryRegion) ?? '')
+    : undefined;
+
+  // Stage 1: retrieve supporting evidence — exclude the note itself.
+  const queryText = [title, tldr, existingPrimary, existingSecondary].filter(Boolean).join('\n');
   const hits = await retrieve({ store: deps.store, config: deps.config }, queryText, {
     topK,
     filter: (h) => h.doc_id !== notePath,
   });
-
-  // Phase 1: capture how many pending entries we're about to clear.
-  const pendingCleared = Array.isArray(fm.pending_evidence)
-    ? (fm.pending_evidence as unknown[]).length
-    : 0;
 
   if (hits.length === 0) {
     // Nothing new to integrate — still bump last_verified and clear any
@@ -125,46 +153,30 @@ export async function refreshTopic(
     };
   }
 
-  // Stage 2: synthesis prompt.
-  const evidence = hits
-    .map(
-      (h, i) =>
-        `[${i + 1}] (${h.doc_id}, updated ${h.updated_at})\n${h.text.slice(0, 1200)}`,
-    )
+  // Stage 2: synthesis prompt, dispatched per note type.
+  const evidenceBlock = hits
+    .map((h, i) => `[${i + 1}] (${h.doc_id}, updated ${h.updated_at})\n${h.text.slice(0, 1200)}`)
     .join('\n\n');
-  const prompt = `You are refreshing a topic note in a personal knowledge base.
+  const prompt = target.buildPrompt({ title, existingPrimary, existingSecondary, evidenceBlock });
 
-Topic: ${title}
-Current understanding (from existing note):
-"""
-${currentUnderstanding}
-"""
-
-New evidence (most recent retrievals):
-${evidence}
-
-Produce a JSON object with these fields:
-{
-  "current_understanding": "≤8 paragraphs. Chain-of-density rewrite that integrates the new evidence into the topic note. Cite sources inline as [n] matching the evidence numbers above. Do NOT overwrite or hide claims that disagree with new evidence — instead surface them as contradictions.",
-  "contradictions": [{ "ref": "[n]", "reason": "one-sentence why" }],
-  "new_sources": ["doc_id of each piece of evidence not already in the note's sources"]
-}
-
-Output ONLY a single fenced \`\`\`json block.`;
-
-  let synthesis;
+  let synthesis: RefreshSynthesisResult;
   try {
-    synthesis = await deps.llm.extractStructured(prompt, SynthesisSchema);
+    synthesis = await deps.llm.extractStructured(prompt, target.responseSchema);
   } catch (err) {
     // Bail without modifying the note. Preserve TransientLLMError identity so
-    // the job runner's indefinite-retry lane actually sees it (see Task 8).
+    // the job runner's indefinite-retry lane actually sees it. Message text
+    // ("topic synthesis failed for...") is kept exactly as before this
+    // generalization — an existing regression test below asserts it verbatim.
     if (err instanceof TransientLLMError) throw err;
     throw new Error(`topic synthesis failed for ${notePath}: ${(err as Error).message}`);
   }
 
   // Apply update.
   let nextBody = body;
-  nextBody = upsertRegion(nextBody, CURRENT_UNDERSTANDING_REGION, synthesis.current_understanding.trim());
+  nextBody = upsertRegion(nextBody, target.primaryRegion, synthesis.primary.trim());
+  if (target.secondaryRegion && synthesis.secondary) {
+    nextBody = upsertRegion(nextBody, target.secondaryRegion, synthesis.secondary.trim());
+  }
 
   const existingSources = parseSourcesRegion(extractRegion(nextBody, SOURCES_REGION) ?? '');
   const newSources = synthesis.new_sources.filter((s) => !existingSources.has(s));
@@ -174,12 +186,12 @@ Output ONLY a single fenced \`\`\`json block.`;
   // Frontmatter updates.
   fm.last_verified = nowIso;
   const previousStability = typeof fm.stability === 'number' ? fm.stability : undefined;
-  let nextStability = previousStability ?? defaultStability((fm.half_life_domain as string | undefined) ?? 'topic');
+  let nextStability = previousStability ?? defaultStability((fm.half_life_domain as string | undefined) ?? noteType);
   if (synthesis.contradictions.length > 0) {
     // Reset stability to half on contradiction (flag for human review).
     nextStability = Math.max(7, nextStability / 2);
   } else {
-    const ceiling = (defaultStability((fm.half_life_domain as string | undefined) ?? 'topic')) * 4;
+    const ceiling = (defaultStability((fm.half_life_domain as string | undefined) ?? noteType)) * 4;
     nextStability = Math.min(ceiling, nextStability * bumpFactor);
   }
   fm.stability = Math.round(nextStability);
@@ -196,7 +208,8 @@ Output ONLY a single fenced \`\`\`json block.`;
   const regions = new Set<string>(
     Array.isArray(fm.protected_regions) ? (fm.protected_regions as string[]) : [],
   );
-  regions.add(CURRENT_UNDERSTANDING_REGION);
+  regions.add(target.primaryRegion);
+  if (target.secondaryRegion && synthesis.secondary) regions.add(target.secondaryRegion);
   regions.add(SOURCES_REGION);
   fm.protected_regions = [...regions];
 
@@ -217,16 +230,15 @@ Output ONLY a single fenced \`\`\`json block.`;
   );
 
   // Phase 1: cascade depth-1. Mark-dirty the direct neighbors referenced in
-  // the rewritten current-understanding region. We do NOT auto-enqueue
-  // refresh — the threshold gate inside `evaluate-refresh-candidates` will
-  // pull them in only if their evidence (or staleness) accumulates. This
-  // keeps blast radius bounded.
+  // the rewritten primary region. We do NOT auto-enqueue refresh — the
+  // threshold gate inside `evaluate-refresh-candidates` will pull them in
+  // only if their evidence (or staleness) accumulates. This keeps blast
+  // radius bounded.
   let neighborsCascaded = 0;
   const cascadeDepth = deps.config.intelligence.refresh.cascadeDepth;
   if (cascadeDepth >= 1) {
     try {
-      const newRegion = synthesis.current_understanding;
-      const linkedNames = extractOutlinks(newRegion);
+      const linkedNames = extractOutlinks(synthesis.primary);
       if (linkedNames.length > 0) {
         const index = await buildEntityIndex(deps.vault, deps.config.layout);
         const seen = new Set<string>();
