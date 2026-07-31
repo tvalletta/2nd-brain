@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -41,6 +41,10 @@ describe('generateReviewAnalysis', () => {
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'karpathy-review-analysis-'));
     vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
   });
 
   function config(overrides: Record<string, unknown> = {}) {
@@ -121,6 +125,21 @@ describe('generateReviewAnalysis', () => {
     );
     expect(result).toMatchObject({ tier: 'placeholder' });
     expect(createLLMFromConfig).not.toHaveBeenCalled();
+  });
+
+  it('skips straight to medium and returns its result when only the fast budget is pre-exhausted', async () => {
+    vi.mocked(createLLMFromConfig).mockImplementation((_c, _s, tier) => {
+      if (tier === 'fast') throw new Error('fast tier should not be constructed');
+      return fakeClient(() => ({ verdict: 'unclear', reasoning: 'medium used because fast was exhausted', confidence: 0.6 })) as never;
+    });
+    const result = await generateReviewAnalysis(
+      config({ intelligence: { budget: { enabled: true, llmCallsPerDay: { fast: 0, medium: 5, heavy: 0 } } } }),
+      dir,
+      SAMPLE_INPUT,
+    );
+    expect(result).toMatchObject({ tier: 'medium', reasoning: 'medium used because fast was exhausted' });
+    expect(createLLMFromConfig).toHaveBeenCalledTimes(1);
+    expect(createLLMFromConfig).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'medium');
   });
 
   it('returns the placeholder immediately when review.analysisEnabled is false, without constructing any client', async () => {
