@@ -11,7 +11,7 @@ export const detectContradictionsHandler: JobHandler = {
     const candidates = await detectContradictions(context.vault);
 
     for (const candidate of candidates) {
-      await writeContradictionReview(context.vault, candidate);
+      await writeContradictionReview(context.vault, context.config, context.projectRoot, candidate);
     }
 
     await appendLogEntry(

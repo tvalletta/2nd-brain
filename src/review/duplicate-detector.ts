@@ -1,10 +1,11 @@
 import type { VaultAdapter } from '../vault/adapter.js';
-import { parseNote, serializeNote } from '../vault/frontmatter.js';
-import { nanoid } from 'nanoid';
-import { nowISO } from '../shared/date-utils.js';
+import { parseNote } from '../vault/frontmatter.js';
 import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
 import { slugify } from '../vault/paths.js';
 import { createLogger } from '../shared/logger.js';
+import type { KarpathyConfig } from '../config/schema.js';
+import { generateReviewAnalysis, bucketConfidence } from './generate-review-analysis.js';
+import { createReviewItem } from './create-review-item.js';
 
 const log = createLogger('duplicates');
 
@@ -13,6 +14,8 @@ export interface DuplicateCandidate {
   pathB: string;
   titleA: string;
   titleB: string;
+  excerptA: string;
+  excerptB: string;
   similarity: number;
   reviewPath: string;
 }
@@ -21,6 +24,7 @@ interface PageInfo {
   path: string;
   title: string;
   words: Set<string>;
+  excerpt: string;
   entityKind?: string;
   aliases: string[];
   sourceRefs: string[];
@@ -49,6 +53,7 @@ export async function detectDuplicates(
       path,
       title,
       words,
+      excerpt: body.trim().slice(0, 400),
       entityKind: data.entity_kind as string | undefined,
       aliases: (data.aliases as string[] | undefined) ?? [],
       sourceRefs: (data.source_refs as string[] | undefined) ?? [],
@@ -65,6 +70,8 @@ export async function detectDuplicates(
           pathB: pages[j].path,
           titleA: pages[i].title,
           titleB: pages[j].title,
+          excerptA: pages[i].excerpt,
+          excerptB: pages[j].excerpt,
           similarity: Math.round(sim * 100),
           reviewPath: `review/${slug}.md`,
         });
@@ -106,30 +113,18 @@ function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
 
 export async function writeDuplicateReview(
   vault: VaultAdapter,
+  config: KarpathyConfig,
+  projectRoot: string,
   candidate: DuplicateCandidate,
 ): Promise<string> {
-  await vault.ensureFolder('review');
-
-  const frontmatter = {
-    id: nanoid(),
-    type: 'contradiction',
-    title: `Duplicate: ${candidate.titleA} / ${candidate.titleB}`,
-    status: 'draft',
-    confidence: 'low',
-    review_state: 'unreviewed',
-    created_at: nowISO(),
-    updated_at: nowISO(),
-    conflict_type: 'duplicate_candidate',
-    claim_a: `Page: ${candidate.titleA}`,
-    claim_b: `Page: ${candidate.titleB}`,
-    resolution_state: 'open',
-    source_refs: [candidate.pathA, candidate.pathB],
-    derived_from: [],
-    aliases: [],
-    links: [candidate.pathA, candidate.pathB],
-    change_origin: 'heuristic_review',
-    protected_regions: ['analysis'],
-  };
+  const analysis = await generateReviewAnalysis(config, projectRoot, {
+    kind: 'duplicate',
+    titleA: candidate.titleA,
+    titleB: candidate.titleB,
+    excerptA: candidate.excerptA,
+    excerptB: candidate.excerptB,
+    wordOverlapPercent: candidate.similarity,
+  });
 
   const body = `
 # Duplicate Candidate (${candidate.similarity}% similarity)
@@ -142,18 +137,26 @@ export async function writeDuplicateReview(
 
 ## Analysis
 ${OPEN_TAG('analysis')}
-These pages have ${candidate.similarity}% word overlap. Review and merge if appropriate.
+${analysis.reasoning}
+
+**Verdict:** ${analysis.verdict} (confidence: ${analysis.confidence.toFixed(2)})
 ${CLOSE_TAG('analysis')}
 `;
 
-  const content = serializeNote(frontmatter, body);
+  const slug = candidate.reviewPath.replace(/^review\//, '').replace(/\.md$/, '');
 
-  if (await vault.exists(candidate.reviewPath)) {
-    await vault.write(candidate.reviewPath, content);
-  } else {
-    await vault.create(candidate.reviewPath, content);
-  }
+  const path = await createReviewItem(vault, {
+    slug,
+    title: `Duplicate: ${candidate.titleA} / ${candidate.titleB}`,
+    claimA: `Page: ${candidate.titleA}`,
+    claimB: `Page: ${candidate.titleB}`,
+    sourceRefs: [candidate.pathA, candidate.pathB],
+    links: [candidate.pathA, candidate.pathB],
+    conflictType: 'duplicate_candidate',
+    confidence: bucketConfidence(analysis.confidence),
+    body,
+  });
 
-  log.info('Duplicate review created', { path: candidate.reviewPath });
-  return candidate.reviewPath;
+  log.info('Duplicate review created', { path });
+  return path;
 }

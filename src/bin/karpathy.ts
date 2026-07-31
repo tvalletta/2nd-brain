@@ -379,12 +379,12 @@ async function reviewCommand(args: string[]): Promise<void> {
   if (subcommand === 'detect') {
     const contradictions = await detectContradictions(vault);
     for (const c of contradictions) {
-      await writeContradictionReview(vault, c);
+      await writeContradictionReview(vault, config, config.projectRoot!, c);
     }
 
     const duplicates = await detectDuplicates(vault);
     for (const d of duplicates) {
-      await writeDuplicateReview(vault, d);
+      await writeDuplicateReview(vault, config, config.projectRoot!, d);
     }
 
     process.stdout.write(

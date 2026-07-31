@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -6,6 +6,15 @@ import { createFsAdapter } from '../../src/vault/fs-adapter.js';
 import { detectContradictions, writeContradictionReview } from '../../src/review/contradiction-detector.js';
 import { detectDuplicates, writeDuplicateReview } from '../../src/review/duplicate-detector.js';
 import { listReviewItems, approveReviewItem, rejectReviewItem } from '../../src/review/review-queue.js';
+import { KarpathyConfigSchema } from '../../src/config/schema.js';
+import { parseNote } from '../../src/vault/frontmatter.js';
+
+vi.mock('../../src/review/generate-review-analysis.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/review/generate-review-analysis.js')>();
+  return { ...actual, generateReviewAnalysis: vi.fn() };
+});
+
+import { generateReviewAnalysis } from '../../src/review/generate-review-analysis.js';
 
 describe('Contradiction detection', () => {
   let tempDir: string;
@@ -67,7 +76,11 @@ describe('Contradiction detection', () => {
     expect(candidates.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('writes contradiction review note', async () => {
+  it('writes contradiction review note with the generated analysis', async () => {
+    vi.mocked(generateReviewAnalysis).mockResolvedValue({
+      verdict: 'genuine_conflict', reasoning: 'These claims directly conflict on the deadline date.', confidence: 0.85, tier: 'fast',
+    });
+    const config = KarpathyConfigSchema.parse({ vaultPath: tempDir });
     const candidate = {
       pageA: 'wiki/decisions/a.md',
       pageB: 'wiki/decisions/b.md',
@@ -77,13 +90,18 @@ describe('Contradiction detection', () => {
       reviewPath: 'review/test-contradiction.md',
     };
 
-    const path = await writeContradictionReview(vault, candidate);
+    const path = await writeContradictionReview(vault, config, tempDir, candidate);
     expect(await vault.exists(path)).toBe(true);
 
     const content = await vault.read(path);
     expect(content).toContain('Contradiction');
     expect(content).toContain('Deadline is March');
     expect(content).toContain('unreviewed');
+    expect(content).toContain('These claims directly conflict on the deadline date.');
+    expect(content).toContain('genuine_conflict');
+
+    const { data } = parseNote(content);
+    expect(data.confidence).toBe('high');
   });
 });
 
@@ -151,22 +169,32 @@ describe('Duplicate detection', () => {
     expect(candidates).toHaveLength(0);
   });
 
-  it('writes duplicate review note', async () => {
+  it('writes duplicate review note with the generated analysis', async () => {
+    vi.mocked(generateReviewAnalysis).mockResolvedValue({
+      verdict: 'same_entity', reasoning: 'Both describe the same engineer; Alice Smith is more complete.', confidence: 0.3, tier: 'fast',
+    });
+    const config = KarpathyConfigSchema.parse({ vaultPath: tempDir });
     const candidate = {
       pathA: 'wiki/entities/alice.md',
       pathB: 'wiki/entities/alice-smith.md',
       titleA: 'Alice',
       titleB: 'Alice Smith',
+      excerptA: 'Alice is a senior engineer.',
+      excerptB: 'Alice Smith is a senior engineer who leads the team.',
       similarity: 85,
       reviewPath: 'review/duplicate-alice.md',
     };
 
-    const path = await writeDuplicateReview(vault, candidate);
+    const path = await writeDuplicateReview(vault, config, tempDir, candidate);
     expect(await vault.exists(path)).toBe(true);
 
     const content = await vault.read(path);
     expect(content).toContain('85%');
     expect(content).toContain('Alice');
+    expect(content).toContain('Alice Smith is more complete.');
+
+    const { data } = parseNote(content);
+    expect(data.confidence).toBe('low');
   });
 });
 

@@ -11,7 +11,7 @@ export const detectDuplicatesHandler: JobHandler = {
     const candidates = await detectDuplicates(context.vault);
 
     for (const candidate of candidates) {
-      await writeDuplicateReview(context.vault, candidate);
+      await writeDuplicateReview(context.vault, context.config, context.projectRoot, candidate);
     }
 
     await appendLogEntry(

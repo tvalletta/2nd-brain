@@ -1,10 +1,11 @@
 import type { VaultAdapter } from '../vault/adapter.js';
-import { parseNote, serializeNote } from '../vault/frontmatter.js';
-import { nanoid } from 'nanoid';
-import { nowISO } from '../shared/date-utils.js';
+import { parseNote } from '../vault/frontmatter.js';
 import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
 import { slugify } from '../vault/paths.js';
 import { createLogger } from '../shared/logger.js';
+import type { KarpathyConfig } from '../config/schema.js';
+import { generateReviewAnalysis, bucketConfidence } from './generate-review-analysis.js';
+import { createReviewItem } from './create-review-item.js';
 
 const log = createLogger('contradictions');
 
@@ -153,56 +154,54 @@ function extractNumbers(text: string): string[] {
 
 export async function writeContradictionReview(
   vault: VaultAdapter,
+  config: KarpathyConfig,
+  projectRoot: string,
   candidate: ContradictionCandidate,
 ): Promise<string> {
-  await vault.ensureFolder('review');
+  const titleA = candidate.pageA.split('/').pop()?.replace(/\.md$/, '') ?? candidate.pageA;
+  const titleB = candidate.pageB.split('/').pop()?.replace(/\.md$/, '') ?? candidate.pageB;
 
-  const frontmatter = {
-    id: nanoid(),
-    type: 'contradiction',
-    title: `Contradiction: ${candidate.pageA} vs ${candidate.pageB}`,
-    status: 'draft',
-    confidence: 'low',
-    review_state: 'unreviewed',
-    created_at: nowISO(),
-    updated_at: nowISO(),
-    conflict_type: candidate.conflictType,
-    claim_a: candidate.claimA,
-    claim_b: candidate.claimB,
-    resolution_state: 'open',
-    source_refs: [candidate.pageA, candidate.pageB],
-    derived_from: [],
-    aliases: [],
-    links: [candidate.pageA, candidate.pageB],
-    change_origin: 'heuristic_review',
-    protected_regions: ['analysis'],
-  };
+  const analysis = await generateReviewAnalysis(config, projectRoot, {
+    kind: 'contradiction',
+    pageATitle: titleA,
+    pageBTitle: titleB,
+    claimA: candidate.claimA,
+    claimB: candidate.claimB,
+  });
 
   const body = `
 # Contradiction Candidate
 
 ## Page A
-**Source:** [[${candidate.pageA.replace(/\.md$/, '').split('/').pop()}]]
+**Source:** [[${titleA}]]
 > ${candidate.claimA}
 
 ## Page B
-**Source:** [[${candidate.pageB.replace(/\.md$/, '').split('/').pop()}]]
+**Source:** [[${titleB}]]
 > ${candidate.claimB}
 
 ## Analysis
 ${OPEN_TAG('analysis')}
-Pending human review.
+${analysis.reasoning}
+
+**Verdict:** ${analysis.verdict} (confidence: ${analysis.confidence.toFixed(2)})
 ${CLOSE_TAG('analysis')}
 `;
 
-  const content = serializeNote(frontmatter, body);
+  const slug = candidate.reviewPath.replace(/^review\//, '').replace(/\.md$/, '');
 
-  if (await vault.exists(candidate.reviewPath)) {
-    await vault.write(candidate.reviewPath, content);
-  } else {
-    await vault.create(candidate.reviewPath, content);
-  }
+  const path = await createReviewItem(vault, {
+    slug,
+    title: `Contradiction: ${candidate.pageA} vs ${candidate.pageB}`,
+    claimA: candidate.claimA,
+    claimB: candidate.claimB,
+    sourceRefs: [candidate.pageA, candidate.pageB],
+    links: [candidate.pageA, candidate.pageB],
+    conflictType: candidate.conflictType,
+    confidence: bucketConfidence(analysis.confidence),
+    body,
+  });
 
-  log.info('Contradiction review created', { path: candidate.reviewPath });
-  return candidate.reviewPath;
+  log.info('Contradiction review created', { path });
+  return path;
 }
