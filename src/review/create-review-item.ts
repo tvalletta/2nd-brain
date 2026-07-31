@@ -13,6 +13,8 @@ export interface ReviewItemInput {
   conflictType: string;
   /** Full markdown body, including any protected-region tags the caller wants preserved. */
   body: string;
+  /** LLM-assessed confidence bucket. Defaults to 'low' (today's hardcoded value) when omitted. */
+  confidence?: 'low' | 'medium' | 'high';
 }
 
 /**
@@ -31,7 +33,7 @@ export async function createReviewItem(vault: VaultAdapter, input: ReviewItemInp
     type: 'contradiction',
     title: input.title,
     status: 'draft',
-    confidence: 'low',
+    confidence: input.confidence ?? 'low',
     review_state: 'unreviewed',
     created_at: nowISO(),
     updated_at: nowISO(),

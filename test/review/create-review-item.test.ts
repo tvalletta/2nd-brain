@@ -68,4 +68,22 @@ describe('createReviewItem', () => {
     expect(data.title).toBe('Second');
     expect(body).toContain('second body');
   });
+
+  it('defaults confidence to low when omitted (regression)', async () => {
+    const path = await createReviewItem(vault, {
+      slug: 'no-confidence', title: 'T', claimA: 'a', claimB: 'b',
+      sourceRefs: [], links: [], conflictType: 'potential_factual', body: 'body',
+    });
+    const { data } = parseNote(await vault.read(path));
+    expect(data.confidence).toBe('low');
+  });
+
+  it('uses the provided confidence bucket when given', async () => {
+    const path = await createReviewItem(vault, {
+      slug: 'high-confidence', title: 'T', claimA: 'a', claimB: 'b',
+      sourceRefs: [], links: [], conflictType: 'potential_factual', body: 'body', confidence: 'high',
+    });
+    const { data } = parseNote(await vault.read(path));
+    expect(data.confidence).toBe('high');
+  });
 });
