@@ -294,4 +294,59 @@ body.
     expect(report).toContain('Vault health');
     expect(report).toContain('Dead');
   });
+
+  it('flags a note with a placeholder primary region as thin content, in a separate table from rot candidates', async () => {
+    await vault.ensureFolder('wiki/decisions');
+    await vault.create(
+      'wiki/decisions/thin-decision.md',
+      `---
+id: d1
+type: decision
+title: Thin decision
+created_at: 2026-04-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+confidence: high
+---
+## Outcome
+%% begin:outcome %%
+%% end:outcome %%
+
+%% begin:backlinks %%
+- [[wiki/something]]
+%% end:backlinks %%`,
+    );
+
+    const result = await runRotScan(vault, Date.parse('2026-05-06T00:00:00Z'));
+
+    expect(result.thinCandidates.map((c) => c.path)).toContain('wiki/decisions/thin-decision.md');
+    expect(result.thinCandidates.find((c) => c.path === 'wiki/decisions/thin-decision.md')?.region).toBe('outcome');
+    // Fresh + high-confidence + has an inbound marker → NOT a rot candidate.
+    expect(result.candidates.map((c) => c.path)).not.toContain('wiki/decisions/thin-decision.md');
+
+    const report = await vault.read(result.reportPath);
+    expect(report).toContain('Thin content');
+    expect(report).toContain('thin-decision');
+  });
+
+  it('does not flag a note with a substantial outcome as thin', async () => {
+    await vault.ensureFolder('wiki/decisions');
+    await vault.create(
+      'wiki/decisions/resolved-decision.md',
+      `---
+id: d2
+type: decision
+title: Resolved decision
+created_at: 2026-04-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+confidence: high
+---
+## Outcome
+%% begin:outcome %%
+Shipped in v2 and adopted by all downstream consumers.
+%% end:outcome %%`,
+    );
+
+    const result = await runRotScan(vault, Date.parse('2026-05-06T00:00:00Z'));
+    expect(result.thinCandidates.map((c) => c.path)).not.toContain('wiki/decisions/resolved-decision.md');
+  });
 });

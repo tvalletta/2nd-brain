@@ -5,8 +5,9 @@
 
 import type { VaultAdapter } from '../vault/adapter.js';
 import { parseNote } from '../vault/frontmatter.js';
-import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
+import { OPEN_TAG, CLOSE_TAG, getProtectedRegion } from '../vault/protected-regions.js';
 import { DEFAULT_LAYOUT, type VaultLayout } from '../vault/paths.js';
+import { REFRESH_TARGETS, isPlaceholderContent, type RefreshTarget } from './refresh-targets.js';
 
 /** Legacy: the default-layout path. Prefer `vaultHealthPath(layout)`. */
 export const VAULT_HEALTH_PATH = `${DEFAULT_LAYOUT.system}/vault-health.md`;
@@ -15,6 +16,7 @@ export function vaultHealthPath(layout: VaultLayout): string {
   return `${layout.system}/vault-health.md`;
 }
 const REGION_ID = 'vault-health';
+const THIN_REGION_ID = 'vault-health-thin-content';
 
 const STALE_DAYS = 180;
 function scanFolders(layout: VaultLayout): string[] {
@@ -38,9 +40,16 @@ export interface RotEntry {
   retrievability: number | undefined;
 }
 
+export interface ThinContentEntry {
+  path: string;
+  title: string;
+  region: string;
+}
+
 export interface RotScanResult {
   scanned: number;
   candidates: RotEntry[];
+  thinCandidates: ThinContentEntry[];
   reportPath: string;
 }
 
@@ -70,6 +79,7 @@ export async function runRotScan(
   const layout = options.layout ?? DEFAULT_LAYOUT;
   const healthPath = vaultHealthPath(layout);
   const candidates: RotEntry[] = [];
+  const thinCandidates: ThinContentEntry[] = [];
   let scanned = 0;
 
   for (const folder of scanFolders(layout)) {
@@ -104,16 +114,27 @@ export async function runRotScan(
           retrievability: asNumber(fm.retrievability),
         });
       }
+
+      const type = asString(fm.type);
+      const target = (REFRESH_TARGETS as Record<string, RefreshTarget>)[type];
+      if (target && isPlaceholderContent(target, getProtectedRegion(body, target.primaryRegion))) {
+        thinCandidates.push({ path, title: asString(fm.title) || path, region: target.primaryRegion });
+      }
     }
   }
 
   candidates.sort((a, b) => b.ageDays - a.ageDays);
   await vault.ensureFolder(layout.system);
-  await vault.atomicWrite(healthPath, renderReport(scanned, candidates, nowMs));
-  return { scanned, candidates, reportPath: healthPath };
+  await vault.atomicWrite(healthPath, renderReport(scanned, candidates, thinCandidates, nowMs));
+  return { scanned, candidates, thinCandidates, reportPath: healthPath };
 }
 
-function renderReport(scanned: number, candidates: RotEntry[], nowMs: number): string {
+function renderReport(
+  scanned: number,
+  candidates: RotEntry[],
+  thinCandidates: ThinContentEntry[],
+  nowMs: number,
+): string {
   const lines: string[] = [];
   lines.push('---');
   lines.push('type: index');
@@ -139,6 +160,22 @@ function renderReport(scanned: number, candidates: RotEntry[], nowMs: number): s
     }
   }
   lines.push(CLOSE_TAG(REGION_ID));
+  lines.push('');
+  lines.push('## Thin content');
+  lines.push('');
+  lines.push(`${thinCandidates.length} notes have a placeholder or near-empty primary region.`);
+  lines.push('');
+  lines.push(OPEN_TAG(THIN_REGION_ID));
+  if (thinCandidates.length === 0) {
+    lines.push('_No candidates._');
+  } else {
+    lines.push('| Path | Region |');
+    lines.push('|------|--------|');
+    for (const t of thinCandidates) {
+      lines.push(`| [[${t.path.replace(/\.md$/, '')}|${t.title}]] | ${t.region} |`);
+    }
+  }
+  lines.push(CLOSE_TAG(THIN_REGION_ID));
   lines.push('');
   return lines.join('\n');
 }
