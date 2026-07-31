@@ -11,6 +11,7 @@ import { createLogger } from '../../shared/logger.js';
 import { markDirty } from '../../maintenance/mark-dirty.js';
 import { createReviewItem } from '../../review/create-review-item.js';
 import { generateReviewAnalysis, bucketConfidence } from '../../review/generate-review-analysis.js';
+import { TransientLLMError } from '../../shared/errors.js';
 
 const log = createLogger('handler:link-concepts');
 
@@ -177,6 +178,7 @@ ${CLOSE_TAG('analysis')}
           log.warn('Ambiguous entity resolution', { name: entity.name, kind, candidates: candidates.length });
         }
       } catch (err) {
+        if (err instanceof TransientLLMError) throw err;
         log.error('Failed to link entity', { name: entity.name, kind, error: (err as Error).message });
       }
     }

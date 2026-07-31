@@ -16,6 +16,7 @@ vi.mock('../../../src/review/generate-review-analysis.js', async (importOriginal
 });
 
 import { generateReviewAnalysis } from '../../../src/review/generate-review-analysis.js';
+import { TransientLLMError } from '../../../src/shared/errors.js';
 
 function makeLLM(): LLMClient {
   return {
@@ -196,5 +197,40 @@ describe('link-concepts handler', () => {
     const reviewFiles = await vault.listMarkdownFiles('review');
     const content = await vault.read(reviewFiles[0]);
     expect(content).not.toContain('Suggested match');
+  });
+
+  it('a TransientLLMError from generateReviewAnalysis during ambiguous-entity resolution propagates instead of being swallowed', async () => {
+    await vault.ensureFolder('Curated/wiki/entities');
+    await vault.create(
+      'Curated/wiki/entities/alex-chen.md',
+      serializeNote(
+        { id: 'e1', type: 'entity', title: 'Alex Chen', canonical_name: 'Alex Chen', entity_kind: 'person', aliases: [], created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+        '\n# Alex Chen\n\nBackend engineer.\n',
+      ),
+    );
+    await vault.create(
+      'Curated/wiki/entities/alex-park.md',
+      serializeNote(
+        { id: 'e2', type: 'entity', title: 'Alex Park', canonical_name: 'Alex Park', entity_kind: 'person', aliases: [], created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+        '\n# Alex Park\n\nProduct manager.\n',
+      ),
+    );
+    vi.mocked(generateReviewAnalysis).mockRejectedValue(new TransientLLMError('outage'));
+
+    const summaryPath = 'sources/s1.md';
+    await vault.create(summaryPath, '---\ntitle: S1\n---\n# S1\n');
+    const ctx = makeCtx();
+
+    await expect(
+      linkConceptsHandler.execute(
+        makeJob(summaryPath, { people: [{ name: 'Alex Chrk', context: 'Chrk reviewed the PR.' }] }),
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(TransientLLMError);
+
+    // No review item should have been written — the failure aborted before
+    // createReviewItem was reached, and the job should be retried whole.
+    const reviewFiles = await vault.listMarkdownFiles('review');
+    expect(reviewFiles).toHaveLength(0);
   });
 });
