@@ -90,16 +90,21 @@ describe('createLLMFromConfig', () => {
   });
 
   it('uses the medium-tier model for bedrock too', () => {
+    // models.medium is deliberately distinct from llm.model here — if the
+    // ternary in createLLMFromConfig silently fell back to the legacy
+    // single model instead of picking the tier-specific one, this would
+    // fail (a prior version of this test used the same string for both,
+    // which couldn't distinguish the two code paths).
     const config = KarpathyConfigSchema.parse({
       vaultPath: dir,
       llm: {
         provider: 'bedrock', region: 'us-west-2', model: 'claude-sonnet-4-6', bearerToken: 'tok',
-        models: { fast: 'claude-haiku-4-5-20251001-v1:0', medium: 'claude-sonnet-4-6', heavy: 'claude-opus-4-6-v1' },
+        models: { fast: 'claude-haiku-4-5-20251001-v1:0', medium: 'claude-legacy-fallback', heavy: 'claude-opus-4-6-v1' },
       },
     });
     createLLMFromConfig(config, dir, 'medium');
     expect(createBedrockClient).toHaveBeenCalledWith({
-      region: 'us-west-2', model: 'claude-sonnet-4-6', maxTokens: config.llm.maxTokens, bearerToken: 'tok',
+      region: 'us-west-2', model: 'claude-legacy-fallback', maxTokens: config.llm.maxTokens, bearerToken: 'tok',
     });
   });
 });
