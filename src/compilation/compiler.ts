@@ -12,6 +12,7 @@ import { createReviewItem } from '../review/create-review-item.js';
 import { createBudgetTrackerFromConfig } from '../shared/budget.js';
 import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
 import { TransientLLMError } from '../shared/errors.js';
+import { generateReviewAnalysis, bucketConfidence } from '../review/generate-review-analysis.js';
 
 const log = createLogger('compiler');
 
@@ -141,6 +142,15 @@ export async function compileFromSource(
 
       if (flaggedForReview) {
         try {
+          const analysis = await generateReviewAnalysis(config, projectRoot, {
+            kind: 'uncertain_entity_drop',
+            entityName: entity.name,
+            entityKind: entity.kind,
+            entityContext: entity.context,
+            dropReason: flaggedForReview.reason,
+            gateConfidence: flaggedForReview.confidence ?? 0,
+          });
+
           await createReviewItem(vault, {
             slug: `uncertain-drop-${slug}`,
             title: `Uncertain: ${entity.name} (${entity.kind})`,
@@ -149,6 +159,7 @@ export async function compileFromSource(
             sourceRefs: [sourcePath],
             links: [createdPath],
             conflictType: 'uncertain_entity_drop',
+            confidence: bucketConfidence(analysis.confidence),
             body: `
 # Uncertain: ${entity.name}
 
@@ -158,11 +169,14 @@ export async function compileFromSource(
 
 ## Analysis
 ${OPEN_TAG('analysis')}
-The significance gate suggested dropping "${entity.name}" (${flaggedForReview.reason}), but confidence ${flaggedForReview.confidence} was below the review threshold, so the page was created rather than silently discarded. Review [[${slug}]] and decide whether it deserves to exist — approve to keep it, reject to remove it.
+${analysis.reasoning}
+
+**Verdict:** ${analysis.verdict} (confidence: ${analysis.confidence.toFixed(2)})
 ${CLOSE_TAG('analysis')}
 `,
           });
         } catch (err) {
+          if (err instanceof TransientLLMError) throw err;
           log.error('Failed to create review item for uncertain drop; entity page was created but is unflagged', {
             name: entity.name,
             path: createdPath,

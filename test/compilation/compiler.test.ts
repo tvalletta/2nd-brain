@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,12 @@ import { compileFromSource, type CompilableEntity } from '../../src/compilation/
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
 import { TransientLLMError } from '../../src/shared/errors.js';
+import { generateReviewAnalysis } from '../../src/review/generate-review-analysis.js';
+
+vi.mock('../../src/review/generate-review-analysis.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/review/generate-review-analysis.js')>();
+  return { ...actual, generateReviewAnalysis: vi.fn() };
+});
 
 function makeEntity(overrides: Partial<CompilableEntity> = {}): CompilableEntity {
   return {
@@ -94,6 +100,9 @@ describe('compileFromSource — significance gate integration', () => {
   });
 
   it('llm mode: uncertain drop (low confidence) still creates the page AND flags it for review', async () => {
+    vi.mocked(generateReviewAnalysis).mockResolvedValue({
+      verdict: 'keep', reasoning: 'It is a specific term, not generic jargon.', confidence: 0.6, tier: 'fast',
+    });
     const config = KarpathyConfigSchema.parse({
       vaultPath: dir,
       enrichment: { significanceGate: 'llm', significanceGateDropConfidence: 0.7 },
@@ -111,9 +120,14 @@ describe('compileFromSource — significance gate integration', () => {
     const { data } = parseNote(await vault.read(reviewFiles[0]));
     expect(data.conflict_type).toBe('uncertain_entity_drop');
     expect(data.links).toEqual(result.created);
+    const content = await vault.read(reviewFiles[0]);
+    expect(content).toContain('It is a specific term, not generic jargon.');
   });
 
   it('llm mode: uncertain drop whose review-item write fails does not crash — entity still ends up in result.created', async () => {
+    vi.mocked(generateReviewAnalysis).mockResolvedValue({
+      verdict: 'keep', reasoning: 'Specific term.', confidence: 0.6, tier: 'fast',
+    });
     const config = KarpathyConfigSchema.parse({
       vaultPath: dir,
       enrichment: { significanceGate: 'llm', significanceGateDropConfidence: 0.7 },
@@ -134,6 +148,19 @@ describe('compileFromSource — significance gate integration', () => {
 
     expect(result.created).toHaveLength(1);
     expect(result.skipped).toHaveLength(0);
+  });
+
+  it('a TransientLLMError from generateReviewAnalysis during the uncertain-drop review-item write propagates instead of being swallowed', async () => {
+    vi.mocked(generateReviewAnalysis).mockRejectedValue(new TransientLLMError('outage'));
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      enrichment: { significanceGate: 'llm', significanceGateDropConfidence: 0.7 },
+    });
+    const llm = makeLLM({ action: 'drop', reason: 'maybe jargon', confidence: 0.4 });
+
+    await expect(
+      compileFromSource('sources/s1.md', [makeEntity()], { vault, llm, config, projectRoot: dir }),
+    ).rejects.toBeInstanceOf(TransientLLMError);
   });
 
   it('llm mode: keep verdict creates the page normally with no review item', async () => {
