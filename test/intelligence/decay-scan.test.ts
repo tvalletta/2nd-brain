@@ -85,7 +85,13 @@ last_verified: ${today}
 stability: 60
 half_life_domain: concept
 ---
-body.`,
+%% begin:current-understanding %%
+A substantial, well-formed understanding of this concept that comfortably exceeds the thin-content character floor.
+%% end:current-understanding %%
+
+%% begin:related-concepts %%
+- [[wiki/concepts/other.md]]
+%% end:related-concepts %%`,
     );
     const enqueued: JobCreateInput[] = [];
     const result = await runDecayScan({
@@ -98,6 +104,141 @@ body.`,
     });
     expect(result.refreshEnqueued).toBe(0);
     expect(enqueued).toHaveLength(0);
+  });
+
+  it('a thin (placeholder outcome) decision note above the retrievability threshold still enqueues, via thin-content', async () => {
+    await vault.ensureFolder('wiki/decisions');
+    const today = new Date().toISOString();
+    await vault.create(
+      'wiki/decisions/thin.md',
+      `---
+id: d1
+type: decision
+title: Thin decision
+created_at: ${today}
+updated_at: ${today}
+last_verified: ${today}
+stability: 365
+half_life_domain: decisions
+---
+## Context
+%% begin:context %%
+Some context.
+%% end:context %%
+
+## Outcome
+%% begin:outcome %%
+%% end:outcome %%`,
+    );
+
+    const enqueued: JobCreateInput[] = [];
+    const result = await runDecayScan({
+      vault, config,
+      enqueue: async (i) => { enqueued.push(i); return {} as never; },
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+    });
+
+    expect(result.thinContentEnqueued).toBe(1);
+    expect(result.refreshEnqueued).toBe(1);
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0].trigger).toBe('thin-content');
+    expect(enqueued[0].priority).toBe(80);
+  });
+
+  it('a thin note that is ALSO below the retrievability threshold enqueues exactly once', async () => {
+    await vault.ensureFolder('wiki/decisions');
+    await vault.create(
+      'wiki/decisions/thin-and-stale.md',
+      `---
+id: d2
+type: decision
+title: Thin and stale
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+last_verified: 2025-01-01T00:00:00Z
+stability: 30
+half_life_domain: decisions
+---
+## Outcome
+%% begin:outcome %%
+%% end:outcome %%`,
+    );
+
+    const enqueued: JobCreateInput[] = [];
+    const result = await runDecayScan({
+      vault, config,
+      enqueue: async (i) => { enqueued.push(i); return {} as never; },
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+    });
+
+    expect(enqueued).toHaveLength(1);
+    expect(result.thinContentEnqueued).toBe(1);
+    expect(result.refreshEnqueued).toBe(1);
+  });
+
+  it('a stale project_spec note is scored but does NOT enqueue topic-refresh (no REFRESH_TARGETS entry)', async () => {
+    await vault.ensureFolder('wiki/projects/proj-a');
+    await vault.create(
+      'wiki/projects/proj-a/technical.md',
+      `---
+id: s1
+type: project_spec
+title: proj-a technical
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+last_verified: 2025-01-01T00:00:00Z
+stability: 30
+---
+%% begin:content %%
+Agent-authored content.
+%% end:content %%`,
+    );
+
+    const enqueued: JobCreateInput[] = [];
+    const result = await runDecayScan({
+      vault, config,
+      enqueue: async (i) => { enqueued.push(i); return {} as never; },
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+    });
+
+    expect(enqueued).toHaveLength(0);
+    expect(result.refreshEnqueued).toBe(0);
+    const { data } = parseNote(await vault.read('wiki/projects/proj-a/technical.md'));
+    expect(typeof data.retrievability).toBe('number'); // still scored
+  });
+
+  it('a topic with rich current-understanding but an empty related-concepts region is still flagged thin', async () => {
+    await vault.ensureFolder('wiki/topics');
+    const today = new Date().toISOString();
+    await vault.create(
+      'wiki/topics/rich.md',
+      `---
+id: t1
+type: topic
+title: Rich topic
+created_at: ${today}
+updated_at: ${today}
+last_verified: ${today}
+stability: 365
+half_life_domain: topic
+---
+%% begin:current-understanding %%
+${'A'.repeat(200)}
+%% end:current-understanding %%
+
+%% begin:related-concepts %%
+%% end:related-concepts %%`,
+    );
+
+    const enqueued: JobCreateInput[] = [];
+    const result = await runDecayScan({
+      vault, config,
+      enqueue: async (i) => { enqueued.push(i); return {} as never; },
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+    });
+
+    expect(result.thinContentEnqueued).toBe(1);
+    expect(enqueued).toHaveLength(1);
   });
 });
 

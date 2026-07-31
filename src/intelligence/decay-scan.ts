@@ -13,6 +13,8 @@ import { parseNote, serializeNote } from '../vault/frontmatter.js';
 import { defaultStability, retrievability } from '../vault/half-life.js';
 import { upsertCandidate } from '../maintenance/research-queue.js';
 import { layoutFromConfig } from '../vault/paths.js';
+import { REFRESH_TARGETS, isPlaceholderContent, type RefreshTarget } from './refresh-targets.js';
+import { getProtectedRegion } from '../vault/protected-regions.js';
 
 /** Folders we scan for decay (subset of wiki kinds). */
 function targetFolders(layout: ReturnType<typeof layoutFromConfig>): string[] {
@@ -30,6 +32,7 @@ const RESEARCH_CANDIDATE_TYPES = new Set(['concept', 'topic']);
 export interface DecayScanResult {
   scanned: number;
   refreshEnqueued: number;
+  thinContentEnqueued: number;
   archiveCandidates: string[];
   researchCandidates: number;
 }
@@ -57,6 +60,7 @@ export async function runDecayScan(deps: DecayScanDeps): Promise<DecayScanResult
   const result: DecayScanResult = {
     scanned: 0,
     refreshEnqueued: 0,
+    thinContentEnqueued: 0,
     archiveCandidates: [],
     researchCandidates: 0,
   };
@@ -100,15 +104,24 @@ export async function runDecayScan(deps: DecayScanDeps): Promise<DecayScanResult
         fm.archive_candidate = true;
       }
 
-      if (r < refreshThreshold) {
+      const target = (REFRESH_TARGETS as Record<string, RefreshTarget>)[type];
+      const relatedConceptsEmpty =
+        (type === 'concept' || type === 'topic') &&
+        !(getProtectedRegion(body, 'related-concepts') ?? '').trim();
+      const isThin =
+        (target ? isPlaceholderContent(target, getProtectedRegion(body, target.primaryRegion)) : false) ||
+        relatedConceptsEmpty;
+
+      if ((r < refreshThreshold || isThin) && target) {
         await deps.enqueue({
           type: 'topic-refresh',
           targetPath: path,
-          trigger: 'cascade',
-          priority: 75,
+          trigger: isThin ? 'thin-content' : 'cascade',
+          priority: isThin ? 80 : 75, // thin-content backfill takes slight priority
           dedupeKey: `topic-refresh:${path}`,
         });
         result.refreshEnqueued += 1;
+        if (isThin) result.thinContentEnqueued += 1;
       }
 
       // Surface low-confidence concept/topic notes as research candidates.
