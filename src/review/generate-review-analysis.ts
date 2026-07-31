@@ -1,5 +1,5 @@
 import { createLLMFromConfig } from '../enrichment/llm-factory.js';
-import { createBudgetTrackerFromConfig } from '../shared/budget.js';
+import { createBudgetTrackerFromConfig, type BudgetTracker } from '../shared/budget.js';
 import { resolveStateDir } from '../config/defaults.js';
 import { TransientLLMError } from '../shared/errors.js';
 import type { KarpathyConfig } from '../config/schema.js';
@@ -47,10 +47,11 @@ export async function generateReviewAnalysis(
   config: KarpathyConfig,
   projectRoot: string,
   input: ReviewAnalysisInput,
+  budgetOverride?: BudgetTracker,
 ): Promise<ReviewAnalysisResult> {
   if (!config.review.analysisEnabled) return placeholderResult(input.kind);
 
-  const budget = createBudgetTrackerFromConfig(config, projectRoot);
+  const budget = budgetOverride ?? createBudgetTrackerFromConfig(config, projectRoot);
   const stateDir = resolveStateDir(config);
   const { buildPrompt, responseSchema } = PROMPTS[input.kind];
   const prompt = buildPrompt(input as never);

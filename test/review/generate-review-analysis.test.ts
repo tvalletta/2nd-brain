@@ -9,7 +9,13 @@ vi.mock('../../src/enrichment/llm-factory.js', () => ({
   createLLMFromConfig: vi.fn(),
 }));
 
+vi.mock('../../src/shared/budget.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/shared/budget.js')>();
+  return { ...actual, createBudgetTrackerFromConfig: vi.fn(actual.createBudgetTrackerFromConfig) };
+});
+
 import { createLLMFromConfig } from '../../src/enrichment/llm-factory.js';
+import { createBudgetTrackerFromConfig, type BudgetTracker } from '../../src/shared/budget.js';
 import { generateReviewAnalysis, bucketConfidence } from '../../src/review/generate-review-analysis.js';
 
 function fakeClient(behavior: (prompt: string, schema: unknown) => unknown) {
@@ -146,5 +152,23 @@ describe('generateReviewAnalysis', () => {
     const result = await generateReviewAnalysis(config({ review: { analysisEnabled: false } }), dir, SAMPLE_INPUT);
     expect(result).toMatchObject({ tier: 'placeholder' });
     expect(createLLMFromConfig).not.toHaveBeenCalled();
+  });
+
+  it('uses an injected BudgetTracker instead of constructing its own, avoiding a second tracker racing on the same budget.json', async () => {
+    vi.mocked(createLLMFromConfig).mockImplementation(() =>
+      fakeClient(() => ({ verdict: 'genuine_conflict', reasoning: 'fast reasoning', confidence: 0.9 })) as never,
+    );
+    const injectedTracker: BudgetTracker = {
+      tryReserve: vi.fn(() => true),
+      remaining: vi.fn(() => 10),
+      snapshot: vi.fn(() => ({ date: '2026-07-31', used: { fast: 0, medium: 0, heavy: 0 } })),
+      reset: vi.fn(),
+    };
+
+    const result = await generateReviewAnalysis(config(), dir, SAMPLE_INPUT, injectedTracker);
+
+    expect(result).toMatchObject({ verdict: 'genuine_conflict', tier: 'fast' });
+    expect(injectedTracker.tryReserve).toHaveBeenCalledWith('fast');
+    expect(createBudgetTrackerFromConfig).not.toHaveBeenCalled();
   });
 });

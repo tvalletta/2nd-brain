@@ -10,11 +10,21 @@ import { KarpathyConfigSchema } from '../../src/config/schema.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
 import { TransientLLMError } from '../../src/shared/errors.js';
 import { generateReviewAnalysis } from '../../src/review/generate-review-analysis.js';
+import { createBudgetTrackerFromConfig } from '../../src/shared/budget.js';
+import { createLLMFromConfig } from '../../src/enrichment/llm-factory.js';
 
 vi.mock('../../src/review/generate-review-analysis.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/review/generate-review-analysis.js')>();
   return { ...actual, generateReviewAnalysis: vi.fn() };
 });
+
+// Only used by the "budget tracker consistency" test below, which restores
+// generateReviewAnalysis's real implementation for that one test and needs
+// to intercept the LLM client it constructs internally without making a
+// real network call.
+vi.mock('../../src/enrichment/llm-factory.js', () => ({
+  createLLMFromConfig: vi.fn(),
+}));
 
 function makeEntity(overrides: Partial<CompilableEntity> = {}): CompilableEntity {
   return {
@@ -312,5 +322,88 @@ describe('compileFromSource — transient error propagation', () => {
     expect(result.skipped).toEqual(['Entity One']);
     expect(result.created).toHaveLength(2); // both pages get created; only the compile step failed for Entity One
     expect(calls).toBe(2); // execution continued to the second entity
+  });
+});
+
+describe('compileFromSource — budget tracker consistency', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-compiler-budget-'));
+    vault = createFsAdapter(dir);
+    await vault.ensureFolder('wiki/concepts');
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('the significance gate and generateReviewAnalysis share one real BudgetTracker, so the persisted daily count reflects every real call instead of being undercounted by a second tracker clobbering the first', async () => {
+    // Restore generateReviewAnalysis's real implementation for this test only
+    // (the module-level mock above replaces it with a bare vi.fn() for every
+    // other test in this file). The real implementation calls
+    // createLLMFromConfig internally, which is separately mocked above so no
+    // network call happens.
+    const actual = await vi.importActual<typeof import('../../src/review/generate-review-analysis.js')>(
+      '../../src/review/generate-review-analysis.js',
+    );
+    vi.mocked(generateReviewAnalysis).mockImplementation(actual.generateReviewAnalysis);
+    vi.mocked(createLLMFromConfig).mockImplementation(
+      () =>
+        ({
+          async complete() {
+            return '';
+          },
+          async extractStructured<T>(_p: string, schema: z.ZodType<T>): Promise<T> {
+            // High confidence so generateReviewAnalysis returns after the
+            // fast tier and never reserves a medium-tier slot.
+            return schema.parse({ verdict: 'keep', reasoning: 'Real review reasoning.', confidence: 0.9 });
+          },
+        }) as unknown as ReturnType<typeof createLLMFromConfig>,
+    );
+
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      enrichment: { significanceGate: 'llm', significanceGateDropConfidence: 0.7 },
+      intelligence: { budget: { enabled: true, llmCallsPerDay: { fast: 10, medium: 10, heavy: 10 } } },
+    });
+
+    // A custom significance-gate LLM (this is the `llm` injected directly
+    // into compileFromSource for heuristicGate/llmGate — a different code
+    // path than generateReviewAnalysis's createLLMFromConfig call above).
+    // First call (Entity One): uncertain drop -> flagged for review ->
+    // triggers generateReviewAnalysis. Second call (Entity Two): confident
+    // keep -> no review analysis, just one significance-gate reservation.
+    let sigGateCalls = 0;
+    const llm: LLMClient = {
+      async complete() {
+        return '';
+      },
+      async extractStructured<T>(_p: string, schema: z.ZodType<T>): Promise<T> {
+        sigGateCalls += 1;
+        if (sigGateCalls === 1) {
+          return schema.parse({ action: 'drop', reason: 'maybe jargon', confidence: 0.4 });
+        }
+        return schema.parse({ action: 'keep' });
+      },
+    };
+
+    const result = await compileFromSource(
+      'sources/s1.md',
+      [makeEntity({ name: 'Zephyr Protocol' }), makeEntity({ name: 'Nova Cluster' })],
+      { vault, llm, config, projectRoot: dir },
+    );
+
+    expect(result.created).toHaveLength(2);
+
+    // Real total: 1 significance-gate 'fast' reservation for Entity One + 1
+    // 'fast' reservation from generateReviewAnalysis's uncertain-drop review
+    // + 1 significance-gate 'fast' reservation for Entity Two = 3. Before
+    // the fix, generateReviewAnalysis constructed its own fresh tracker,
+    // whose write got silently clobbered by the long-lived tracker's next
+    // (stale in-memory) write for Entity Two, undercounting to 2.
+    const freshBudget = createBudgetTrackerFromConfig(config, dir);
+    expect(freshBudget.snapshot().used.fast).toBe(3);
   });
 });

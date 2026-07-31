@@ -149,7 +149,7 @@ export async function compileFromSource(
             entityContext: entity.context,
             dropReason: flaggedForReview.reason,
             gateConfidence: flaggedForReview.confidence ?? 0,
-          });
+          }, budget);
 
           await createReviewItem(vault, {
             slug: `uncertain-drop-${slug}`,
