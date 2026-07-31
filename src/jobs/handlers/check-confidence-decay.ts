@@ -27,14 +27,20 @@ export const checkConfidenceDecayHandler: JobHandler = {
     // Scan all project directories for sub-specs
     let projectDirs: string[];
     try {
-      const allFiles = await vault.listMarkdownFiles(`${context.config.layout.wiki}/projects`);
-      // Extract unique project slugs from paths like wiki/projects/{slug}/spec.md
+      const projectsDir = `${context.config.layout.wiki}/projects`;
+      const allFiles = await vault.listMarkdownFiles(projectsDir);
+      // listMarkdownFiles returns paths relative to the vault root (not to
+      // projectsDir), so strip the queried prefix before indexing into the
+      // remainder — a fixed parts[2] index silently breaks whenever
+      // layout.wiki has more than one path segment (e.g. "Curated/wiki").
+      const prefix = `${projectsDir}/`;
       const slugs = new Set<string>();
       for (const f of allFiles) {
-        const parts = f.split('/');
-        // wiki/projects/{slug}/something.md  => parts[2] is slug
-        if (parts.length >= 4 && !parts[2].startsWith('_')) {
-          slugs.add(parts[2]);
+        if (!f.startsWith(prefix)) continue;
+        const parts = f.slice(prefix.length).split('/');
+        // {slug}/something.md  => parts[0] is slug
+        if (parts.length >= 2 && !parts[0].startsWith('_')) {
+          slugs.add(parts[0]);
         }
       }
       projectDirs = Array.from(slugs);
@@ -46,7 +52,7 @@ export const checkConfidenceDecayHandler: JobHandler = {
     const staleProjects = new Set<string>();
 
     for (const slug of projectDirs) {
-      const hubDir = `wiki/projects/${slug}`;
+      const hubDir = `${context.config.layout.wiki}/projects/${slug}`;
       let specFiles: string[];
       try {
         specFiles = await vault.listMarkdownFiles(hubDir);

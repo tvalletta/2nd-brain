@@ -179,4 +179,47 @@ describe('check-confidence-decay handler', () => {
     expect(enqueuedJobs).toHaveLength(1);
     expect(enqueuedJobs[0].payload!.projectSlug).toBe('multi-spec');
   });
+
+  it('finds stale specs under a non-default layout.wiki (regression for the layout-hardcoding bug)', async () => {
+    const hubDir = 'Curated/wiki/projects/curated-proj';
+    await vault.ensureFolder(hubDir);
+    const specFm: Record<string, unknown> = {
+      id: 'curated-proj-technical', type: 'project_spec', title: 'curated-proj technical',
+      project_key: 'curated-proj', spec_type: 'technical', status: 'active', confidence: 'medium',
+      review_state: 'approved', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+      last_reinforced: '2026-01-01T00:00:00Z', reinforcement_count: 3,
+      conversations_since_update: 15, stale_threshold: 10,
+      source_refs: [], derived_from: [], aliases: [], links: [], change_origin: 'extraction',
+      protected_regions: ['content'],
+    };
+    await vault.atomicWrite(`${hubDir}/technical.md`, serializeNote(specFm, '\n# curated-proj technical\n'));
+    const indexFm: Record<string, unknown> = {
+      id: 'curated-proj', type: 'project', title: 'curated-proj', project_key: 'curated-proj',
+      status: 'active', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+      source_refs: [], derived_from: [], aliases: [], links: [], change_origin: 'extraction',
+      protected_regions: [],
+    };
+    await vault.atomicWrite(`${hubDir}/_index.md`, serializeNote(indexFm, '\n# curated-proj\n'));
+
+    const context: JobContext = {
+      vaultPath: tempDir,
+      projectRoot: tempDir,
+      vault,
+      enqueue: async (input: JobCreateInput) => {
+        enqueuedJobs.push(input);
+        return { ...input, id: 'enqueued', status: 'pending', createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0, priority: input.priority ?? 50, payload: input.payload ?? {}, trigger: input.trigger ?? 'cascade' } as Job;
+      },
+      llm: {} as any,
+      config: KarpathyConfigSchema.parse({
+        vaultPath: tempDir,
+        layout: { wiki: 'Curated/wiki' },
+        agent: { enabled: true, incrementalThreshold: 5 },
+      }),
+    };
+
+    await checkConfidenceDecayHandler.execute(makeJob(), context);
+
+    expect(enqueuedJobs).toHaveLength(1);
+    expect(enqueuedJobs[0].payload!.projectSlug).toBe('curated-proj');
+  });
 });
