@@ -19,6 +19,7 @@ import {
   OPEN_TAG,
   CLOSE_TAG,
   updateProtectedRegion,
+  hasProtectedRegion,
 } from '../vault/protected-regions.js';
 import { retrieve } from './retrieval.js';
 import { defaultStability } from '../vault/half-life.js';
@@ -71,6 +72,38 @@ export interface RefreshResult {
    * of the depth-1 cascade. 0 when `cascadeDepth: 0`.
    */
   neighborsCascaded: number;
+}
+
+/**
+ * Resolve the direct neighbor notes referenced by wikilinks in `text`,
+ * excluding self-references and duplicates. Shared by the depth-1 cascade
+ * (mark-dirty on every resolved neighbor) and, for concept/topic notes only,
+ * the `related-concepts` region render below — both need the identical
+ * resolved list, so this factors out what used to be single-purpose inline
+ * logic in the cascade block.
+ */
+async function resolveNeighbors(
+  vault: VaultAdapter,
+  config: KarpathyConfig,
+  text: string,
+  excludePath: string,
+): Promise<Array<{ path: string; name: string }>> {
+  const linkedNames = extractOutlinks(text);
+  if (linkedNames.length === 0) return [];
+  const index = await buildEntityIndex(vault, config.layout);
+  const seen = new Set<string>();
+  const neighbors: Array<{ path: string; name: string }> = [];
+  for (const name of linkedNames) {
+    const slug = slugify(name);
+    const path =
+      index.bySlug.get(slug) ??
+      index.byCanonicalName.get(name.trim().toLowerCase()) ??
+      index.byAlias.get(name.trim().toLowerCase());
+    if (!path || path === excludePath || seen.has(path)) continue;
+    seen.add(path);
+    neighbors.push({ path, name });
+  }
+  return neighbors;
 }
 
 export async function refreshTopic(
@@ -171,6 +204,21 @@ export async function refreshTopic(
     throw new Error(`topic synthesis failed for ${notePath}: ${(err as Error).message}`);
   }
 
+  // Resolve neighbor notes referenced in the freshly-synthesized primary
+  // region up front — both the depth-1 cascade (mark-dirty) and, for
+  // concept/topic notes, the `related-concepts` render below need the same
+  // resolved list.
+  const cascadeDepth = deps.config.intelligence.refresh.cascadeDepth;
+  const isConceptOrTopic = noteType === 'concept' || noteType === 'topic';
+  let resolvedNeighbors: Array<{ path: string; name: string }> = [];
+  if (cascadeDepth >= 1 || isConceptOrTopic) {
+    try {
+      resolvedNeighbors = await resolveNeighbors(deps.vault, deps.config, synthesis.primary, notePath);
+    } catch (err) {
+      log.warn('neighbor resolution failed', { notePath, error: (err as Error).message });
+    }
+  }
+
   // Apply update.
   let nextBody = body;
   nextBody = upsertRegion(nextBody, target.primaryRegion, synthesis.primary.trim());
@@ -182,6 +230,22 @@ export async function refreshTopic(
   const newSources = synthesis.new_sources.filter((s) => !existingSources.has(s));
   const sourcesBlock = formatSources(new Set([...existingSources, ...newSources]));
   nextBody = upsertRegion(nextBody, SOURCES_REGION, sourcesBlock);
+
+  // G4: for concept/topic only, render the resolved neighbor list into
+  // `related-concepts` — the same data the cascade below already computes,
+  // instead of computing it and discarding it after the markDirty calls.
+  let renderedRelatedConcepts = false;
+  if (isConceptOrTopic && hasProtectedRegion(nextBody, 'related-concepts')) {
+    const neighborLines = resolvedNeighbors.map((n) => `- [[${n.path.replace(/\.md$/, '')}]]`);
+    nextBody = upsertRegion(
+      nextBody,
+      'related-concepts',
+      neighborLines.length > 0
+        ? neighborLines.join('\n')
+        : '_No connected concepts identified in the current synthesis._',
+    );
+    renderedRelatedConcepts = true;
+  }
 
   // Frontmatter updates.
   fm.last_verified = nowIso;
@@ -211,6 +275,7 @@ export async function refreshTopic(
   regions.add(target.primaryRegion);
   if (target.secondaryRegion && synthesis.secondary) regions.add(target.secondaryRegion);
   regions.add(SOURCES_REGION);
+  if (renderedRelatedConcepts) regions.add('related-concepts');
   fm.protected_regions = [...regions];
 
   // Phase 1: clear the pending_evidence queue — we've just integrated it.
@@ -229,46 +294,23 @@ export async function refreshTopic(
     layoutFromConfig(deps.config),
   );
 
-  // Phase 1: cascade depth-1. Mark-dirty the direct neighbors referenced in
-  // the rewritten primary region. We do NOT auto-enqueue refresh — the
-  // threshold gate inside `evaluate-refresh-candidates` will pull them in
-  // only if their evidence (or staleness) accumulates. This keeps blast
-  // radius bounded.
+  // Phase 1: cascade depth-1. Mark-dirty the direct neighbors resolved above.
+  // We do NOT auto-enqueue refresh — the threshold gate inside
+  // `evaluate-refresh-candidates` will pull them in only if their evidence
+  // (or staleness) accumulates. This keeps blast radius bounded.
   let neighborsCascaded = 0;
-  const cascadeDepth = deps.config.intelligence.refresh.cascadeDepth;
   if (cascadeDepth >= 1) {
-    try {
-      const linkedNames = extractOutlinks(synthesis.primary);
-      if (linkedNames.length > 0) {
-        const index = await buildEntityIndex(deps.vault, deps.config.layout);
-        const seen = new Set<string>();
-        for (const name of linkedNames) {
-          // Resolve via slug match — same logic as resolveEntity. We accept
-          // any matched path regardless of folder (concepts, projects, etc).
-          const slug = slugify(name);
-          const path =
-            index.bySlug.get(slug) ??
-            index.byCanonicalName.get(name.trim().toLowerCase()) ??
-            index.byAlias.get(name.trim().toLowerCase());
-          if (!path || path === notePath || seen.has(path)) continue;
-          seen.add(path);
-          try {
-            const r = await markDirty(deps.vault, {
-              notePath: path,
-              ref: notePath,
-              reason: 'cascade-from-refresh',
-            });
-            if (r.added) neighborsCascaded++;
-          } catch (err) {
-            log.warn('cascade markDirty failed', {
-              path,
-              error: (err as Error).message,
-            });
-          }
-        }
+    for (const { path } of resolvedNeighbors) {
+      try {
+        const r = await markDirty(deps.vault, {
+          notePath: path,
+          ref: notePath,
+          reason: 'cascade-from-refresh',
+        });
+        if (r.added) neighborsCascaded++;
+      } catch (err) {
+        log.warn('cascade markDirty failed', { path, error: (err as Error).message });
       }
-    } catch (err) {
-      log.warn('cascade phase failed', { error: (err as Error).message });
     }
   }
 

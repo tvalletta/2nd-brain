@@ -492,6 +492,99 @@ Some agent-authored content.
       expect(data.pending_evidence_count).toBe(0);
       expect(data.last_verified).toBeDefined();
     });
+
+    it('G4: renders resolved neighbors into related-concepts for a topic note', async () => {
+      const topicPath = 'wiki/topics/recency-aware-rag.md';
+      await vault.ensureFolder('wiki/concepts');
+      await vault.create(
+        'wiki/concepts/cross-encoder.md',
+        `---
+id: c1
+type: concept
+title: Cross Encoder
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+# Cross Encoder
+`,
+      );
+      await vault.create(
+        topicPath,
+        `---
+id: t7
+type: topic
+title: Recency-aware RAG
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+stability: 30
+---
+# Recency-aware RAG
+%% begin:current-understanding %%
+Initial framing.
+%% end:current-understanding %%
+
+## Connected Concepts
+%% begin:related-concepts %%
+%% end:related-concepts %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sources/a.md', chunk_index: 0, chunk_hash: 'h1', text: 'cross encoder reranking helps' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'Two-stage retrieval pairs a bi-encoder with a [[Cross Encoder]] reranker [1].',
+        contradictions: [],
+        new_sources: ['wiki/sources/a.md'],
+      });
+
+      await refreshTopic({ vault, llm, store, config }, topicPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      const { body, data } = parseNote(await vault.read(topicPath));
+      expect(body).toContain('%% begin:related-concepts %%\n- [[wiki/concepts/cross-encoder]]\n%% end:related-concepts %%');
+      expect(data.protected_regions as string[]).toContain('related-concepts');
+    });
+
+    it('G4: writes the "no connected concepts" sentinel when zero neighbors resolve', async () => {
+      const topicPath = 'wiki/topics/isolated.md';
+      await vault.create(
+        topicPath,
+        `---
+id: t8
+type: topic
+title: Isolated Topic
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+stability: 30
+---
+# Isolated Topic
+%% begin:current-understanding %%
+old
+%% end:current-understanding %%
+
+%% begin:related-concepts %%
+%% end:related-concepts %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sources/b.md', chunk_index: 0, chunk_hash: 'h2', text: 'unrelated evidence with no wikilinks' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'A self-contained rewrite with no links to any other note [1].',
+        contradictions: [],
+        new_sources: [],
+      });
+
+      await refreshTopic({ vault, llm, store, config }, topicPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      const { body } = parseNote(await vault.read(topicPath));
+      expect(body).toContain('_No connected concepts identified in the current synthesis._');
+    });
   });
 
   describe('synthesis failure', () => {
