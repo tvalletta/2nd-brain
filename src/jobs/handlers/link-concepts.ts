@@ -10,6 +10,7 @@ import { slugify } from '../../vault/paths.js';
 import { createLogger } from '../../shared/logger.js';
 import { markDirty } from '../../maintenance/mark-dirty.js';
 import { createReviewItem } from '../../review/create-review-item.js';
+import { generateReviewAnalysis, bucketConfidence } from '../../review/generate-review-analysis.js';
 
 const log = createLogger('handler:link-concepts');
 
@@ -119,6 +120,36 @@ export const linkConceptsHandler: JobHandler = {
           const candidateList = candidates
             .map((c) => `- [[${c.path.split('/').pop()?.replace(/\.md$/, '')}]] (confidence: ${c.confidence.toFixed(2)})`)
             .join('\n');
+
+          const candidateDetails = await Promise.all(
+            candidates.map(async (c) => {
+              const noteContent = await context.vault.read(c.path);
+              const { data, body } = parseNote(noteContent);
+              return {
+                path: c.path,
+                title: (data.title as string) ?? c.path.split('/').pop()?.replace(/\.md$/, '') ?? c.path,
+                excerpt: body.replace(/%%[\s\S]*?%%/g, '').trim().slice(0, 300),
+              };
+            }),
+          );
+
+          const analysis = await generateReviewAnalysis(context.config, context.projectRoot, {
+            kind: 'ambiguous_entity',
+            entityName: entity.name,
+            entityKind: kind,
+            sourceContext: entity.context ?? entity.definition ?? '(no additional context)',
+            candidates: candidateDetails,
+          });
+
+          const validatedMatch =
+            analysis.verdict === 'match' && candidateDetails.some((c) => c.path === analysis.matchedPath)
+              ? analysis.matchedPath
+              : undefined;
+
+          const matchNote = validatedMatch
+            ? `\n\n**Suggested match:** [[${validatedMatch.split('/').pop()?.replace(/\.md$/, '')}]] (unconfirmed — approve or dismiss below)`
+            : '';
+
           await createReviewItem(context.vault, {
             slug: slugify(`ambiguous-${entity.name}`),
             title: `Ambiguous: ${entity.name} (${kind})`,
@@ -127,6 +158,7 @@ export const linkConceptsHandler: JobHandler = {
             sourceRefs: [summaryPath],
             links: candidates.map((c) => c.path),
             conflictType: 'ambiguous_entity',
+            confidence: bucketConfidence(analysis.confidence),
             body: `
 # Ambiguous Entity: ${entity.name}
 
@@ -138,10 +170,7 @@ ${candidateList}
 
 ## Analysis
 ${OPEN_TAG('analysis')}
-Multiple pages match the entity "${entity.name}". Please review and resolve by:
-1. Merging duplicate pages
-2. Adding an alias to the correct page
-3. Dismissing incorrect candidates
+${analysis.reasoning}${matchNote}
 ${CLOSE_TAG('analysis')}
 `,
           });
