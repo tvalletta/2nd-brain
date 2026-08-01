@@ -30,6 +30,8 @@ import { handle as handleReconcileEntities } from '../../src/mcp/tools/reconcile
 import { writeReconciliationQueue } from '../../src/maintenance/reconciliation-queue.js';
 import { handle as handleResolveArchiveCandidate } from '../../src/mcp/tools/resolve-archive-candidate.js';
 import { refreshArchiveQueue, readArchiveQueue } from '../../src/maintenance/archive-queue.js';
+import { handle as handleApproveResearch } from '../../src/mcp/tools/approve-research.js';
+import { readResearchQueue, writeResearchQueue } from '../../src/maintenance/research-queue.js';
 
 const SAMPLE_CLAUDE_MD = `# Karpathy Second Memory
 
@@ -845,5 +847,93 @@ describe('resolve_archive_candidate', () => {
   it('errors for an unknown id', async () => {
     const result = await handleResolveArchiveCandidate({ id: 'nope', decision: 'keep' }, ctx);
     expect(result.isError).toBe(true);
+  });
+});
+
+describe('approve_research — non-default layout.system (G0)', () => {
+  let tempDir: string;
+  let ctx: MCPContext;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'karpathy-mcp-research-'));
+    const vault = createFsAdapter(tempDir);
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: tempDir,
+      projectRoot: tempDir,
+      layout: { system: 'Curated/_system' },
+    });
+    ctx = {
+      config,
+      vault,
+      sessionLog: createSessionLogManager(vault, config.layout),
+      hotCache: createHotCacheManager(join(tempDir, 'CLAUDE.md')),
+      usageLogPath: join(tempDir, '.karpathy', 'logs', 'mcp-usage.jsonl'),
+      enqueueJob: async () => {},
+      runDeterministicJobs: async () => 0,
+    };
+
+    await writeResearchQueue(vault, {
+      candidates: [
+        {
+          slug: 'fsrs', title: 'FSRS', score: 0.6, reason: 'mentioned recently',
+          suggested: 'medium', status: 'pending', addedAt: '2026-06-01T00:00:00.000Z',
+        },
+      ],
+    }, config.layout);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('finds and updates a real candidate at the configured Curated/_system layout path (regression: used to always report "Slug not in queue")', async () => {
+    const result = await handleApproveResearch({ slug: 'fsrs', depth: 'heavy' }, ctx);
+    expect(result.isError).toBeFalsy();
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed).toEqual({ slug: 'fsrs', decision: 'heavy', status: 'pending' });
+
+    const queue = await readResearchQueue(ctx.vault, ctx.config.layout);
+    expect(queue.candidates[0].decision).toBe('heavy');
+  });
+
+  it('still errors for a genuinely unknown slug (regression: not just always-succeeding)', async () => {
+    const result = await handleApproveResearch({ slug: 'nonexistent', depth: 'light' }, ctx);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Slug not in queue: nonexistent');
+  });
+});
+
+describe('approve_research — default layout (regression)', () => {
+  let tempDir: string;
+  let ctx: MCPContext;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'karpathy-mcp-research-default-'));
+    const vault = createFsAdapter(tempDir);
+    const config = KarpathyConfigSchema.parse({ vaultPath: tempDir, projectRoot: tempDir });
+    ctx = {
+      config,
+      vault,
+      sessionLog: createSessionLogManager(vault, config.layout),
+      hotCache: createHotCacheManager(join(tempDir, 'CLAUDE.md')),
+      usageLogPath: join(tempDir, '.karpathy', 'logs', 'mcp-usage.jsonl'),
+      enqueueJob: async () => {},
+      runDeterministicJobs: async () => 0,
+    };
+    await writeResearchQueue(vault, {
+      candidates: [
+        { slug: 'raptor', title: 'RAPTOR', score: 0.5, reason: 'r', suggested: 'light', status: 'pending', addedAt: '2026-06-01T00:00:00.000Z' },
+      ],
+    }, config.layout);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('still works unmodified under the default wiki/_system layout', async () => {
+    const result = await handleApproveResearch({ slug: 'raptor', depth: 'medium' }, ctx);
+    expect(result.isError).toBeFalsy();
   });
 });
