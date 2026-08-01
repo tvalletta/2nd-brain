@@ -480,4 +480,110 @@ body.
     expect(report).toContain('Bare-identity person pages');
     expect(report).toContain('bryan');
   });
+
+  it('flags a stale-draft source_summary in its own table, using the default 14-day threshold', async () => {
+    await vault.ensureFolder('outputs/source-summaries');
+    await vault.create(
+      'outputs/source-summaries/2026-04-01-stuck.md',
+      `---
+id: sd1
+type: source_summary
+title: Stuck source
+status: draft
+source_type: transcript
+source_path: raw/stuck.md
+ingest_status: detected
+created_at: 2026-04-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+---
+body.`,
+    );
+    await vault.create(
+      'outputs/source-summaries/2026-05-01-fresh.md',
+      `---
+id: sd2
+type: source_summary
+title: Fresh source
+status: draft
+source_type: transcript
+source_path: raw/fresh.md
+ingest_status: detected
+created_at: 2026-05-01T00:00:00Z
+updated_at: 2026-05-01T00:00:00Z
+---
+body.`,
+    );
+    await vault.create(
+      'outputs/source-summaries/2026-01-01-processed.md',
+      `---
+id: sd3
+type: source_summary
+title: Processed source
+status: active
+source_type: transcript
+source_path: raw/processed.md
+ingest_status: linked
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+body.`,
+    );
+
+    const result = await runRotScan(vault, Date.parse('2026-05-06T00:00:00Z'));
+
+    expect(result.staleDraftCandidates.map((c) => c.path)).toEqual([
+      'outputs/source-summaries/2026-04-01-stuck.md',
+    ]);
+    expect(result.staleDraftCandidates[0].ingestStatus).toBe('detected');
+    // Below the 14-day default threshold — excluded.
+    expect(result.staleDraftCandidates.map((c) => c.path)).not.toContain('outputs/source-summaries/2026-05-01-fresh.md');
+    // Already-active — excluded regardless of age.
+    expect(result.staleDraftCandidates.map((c) => c.path)).not.toContain('outputs/source-summaries/2026-01-01-processed.md');
+
+    const report = await vault.read(result.reportPath);
+    expect(report).toContain('Stale draft sources');
+    expect(report).toContain('Stuck source');
+  });
+
+  it('excludes _index.md and respects a custom staleDraftReportDays threshold', async () => {
+    await vault.ensureFolder('outputs/source-summaries');
+    await vault.create(
+      'outputs/source-summaries/_index.md',
+      `---
+id: sd-idx
+type: index
+title: Sources index
+status: draft
+created_at: 2020-01-01T00:00:00Z
+updated_at: 2020-01-01T00:00:00Z
+---
+body.`,
+    );
+    await vault.create(
+      'outputs/source-summaries/six-days-old.md',
+      `---
+id: sd4
+type: source_summary
+title: Six days old
+status: draft
+source_type: transcript
+source_path: raw/six.md
+ingest_status: detected
+created_at: 2026-04-30T00:00:00Z
+updated_at: 2026-04-30T00:00:00Z
+---
+body.`,
+    );
+
+    const defaultResult = await runRotScan(vault, { nowMs: Date.parse('2026-05-06T00:00:00Z') });
+    expect(defaultResult.staleDraftCandidates).toHaveLength(0);
+
+    const customResult = await runRotScan(vault, {
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+      staleDraftReportDays: 5,
+    });
+    expect(customResult.staleDraftCandidates.map((c) => c.path)).toEqual([
+      'outputs/source-summaries/six-days-old.md',
+    ]);
+  });
 });
