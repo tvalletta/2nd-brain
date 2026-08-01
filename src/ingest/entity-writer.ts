@@ -13,6 +13,7 @@ import { nowISO } from '../shared/date-utils.js';
 import { createLogger } from '../shared/logger.js';
 import type { EntityResolution, EntityKind } from './entity-resolver.js';
 import { getOrCreateProjectHub } from '../compilation/project-hub.js';
+import { looksLikeBareHandleOrFirstName } from './name-variants.js';
 
 const log = createLogger('entity-writer');
 
@@ -24,6 +25,7 @@ export interface ExtractedEntityInfo {
   definition?: string;
   status?: string;
   chunkRefs: string[];
+  externalIds?: string[];
 }
 
 export interface MergeResult {
@@ -101,6 +103,17 @@ export async function mergeEntityPage(
     aliases.push(info.name);
     data.aliases = aliases;
     fieldsUpdated.push('aliases');
+  }
+
+  // Merge external_ids (deduped) — B2c Component 0.
+  if (info.externalIds?.length) {
+    const existingIds = new Set((data.external_ids as string[]) ?? []);
+    const before = existingIds.size;
+    for (const id of info.externalIds) existingIds.add(id);
+    if (existingIds.size !== before) {
+      data.external_ids = [...existingIds];
+      fieldsUpdated.push('external_ids');
+    }
   }
 
   // Append to mentions/timeline region
@@ -193,14 +206,18 @@ function buildFrontmatter(
   };
 
   switch (info.kind) {
-    case 'person':
+    case 'person': {
+      const bareIdentity = looksLikeBareHandleOrFirstName(info.name);
       return {
         ...base,
         type: 'entity',
         entity_kind: 'person',
         canonical_name: info.name,
+        external_ids: info.externalIds ?? [],
+        identity_uncertain: bareIdentity,
         protected_regions: ['summary', 'projects', 'topics', 'timeline', 'sources', 'backlinks'],
       };
+    }
     case 'project':
       return {
         ...base,

@@ -4,7 +4,8 @@ import { extractProtectedRegions, updateProtectedRegion, getProtectedRegion } fr
 import { nowISO } from '../shared/date-utils.js';
 import { createLogger } from '../shared/logger.js';
 import { normalizeName, levenshtein, buildEntityIndex } from '../ingest/entity-resolver.js';
-import { wikiContentFolders, DEFAULT_LAYOUT, type VaultLayout } from '../vault/paths.js';
+import { wikiContentFolders, kindToFolder, DEFAULT_LAYOUT, type VaultLayout } from '../vault/paths.js';
+import { personNameVariantScore } from './person-name-variants.js';
 
 const log = createLogger('entity-merger');
 
@@ -88,6 +89,16 @@ export async function mergeEntities(
     ...((target.data.aliases as string[]) ?? []),
     ...aliasesAdded,
   ];
+
+  // B2c: union external_ids (deduped) and clear identity_uncertain — a merge
+  // means the identity is now better-established than either page alone,
+  // regardless of the target's own prior identity_uncertain state.
+  const targetExternalIds = new Set((target.data.external_ids as string[]) ?? []);
+  for (const id of (source.data.external_ids as string[]) ?? []) {
+    targetExternalIds.add(id);
+  }
+  target.data.external_ids = [...targetExternalIds];
+  target.data.identity_uncertain = false;
 
   // links
   const targetLinks = new Set((target.data.links as string[]) ?? []);
@@ -250,6 +261,7 @@ export async function detectMergeCandidates(
   const index = await buildEntityIndex(vault, layout);
   const candidates: MergeCandidate[] = [];
   const seen = new Set<string>();
+  const personFolder = kindToFolder(layout, 'person');
 
   for (let i = 0; i < index.allEntries.length; i++) {
     for (let j = i + 1; j < index.allEntries.length; j++) {
@@ -328,6 +340,28 @@ export async function detectMergeCandidates(
           reason: `Name matches alias`,
           confidence: 0.95,
         });
+      }
+
+      // B2c 4th tier: person-scoped name-variant detection. No source_refs
+      // overlap requirement — this is the fix for the Bryan/Pino-shaped blind
+      // spot (a bare name/handle in one document, a fuller name in an
+      // unrelated document). Only runs if no earlier tier already claimed
+      // this pair. personNameVariantScore caps confidence at 0.65, well below
+      // AUTO_MERGE_THRESHOLD, so it only ever lands in the human-reviewed queue.
+      if (!seen.has(pairKey) && a.path.startsWith(personFolder) && b.path.startsWith(personFolder)) {
+        const scored = personNameVariantScore(a.name, a.aliases, b.name, b.aliases);
+        if (scored) {
+          seen.add(pairKey);
+          const [source, target] = a.name.length >= b.name.length ? [b, a] : [a, b];
+          candidates.push({
+            sourcePath: source.path,
+            targetPath: target.path,
+            sourceName: source.name,
+            targetName: target.name,
+            reason: scored.reason,
+            confidence: scored.confidence,
+          });
+        }
       }
     }
   }

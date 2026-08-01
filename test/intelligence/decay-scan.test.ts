@@ -429,4 +429,55 @@ Shipped in v2 and adopted by all downstream consumers.
     const result = await runRotScan(vault, Date.parse('2026-05-06T00:00:00Z'));
     expect(result.thinCandidates.map((c) => c.path)).not.toContain('wiki/decisions/resolved-decision.md');
   });
+
+  it('flags a person page with identity_uncertain=true as a bare-identity candidate, in its own table', async () => {
+    await vault.ensureFolder('wiki/entities');
+    await vault.create(
+      'wiki/entities/bryan.md',
+      `---
+id: e1
+type: entity
+title: Bryan
+entity_kind: person
+canonical_name: Bryan
+identity_uncertain: true
+created_at: 2026-04-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+confidence: high
+---
+body.
+
+%% begin:backlinks %%
+- [[wiki/something]]
+%% end:backlinks %%`,
+    );
+    await vault.create(
+      'wiki/entities/bryan-pino.md',
+      `---
+id: e2
+type: entity
+title: Bryan Pino
+entity_kind: person
+canonical_name: Bryan Pino
+identity_uncertain: false
+created_at: 2026-04-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+confidence: high
+---
+body.
+
+%% begin:backlinks %%
+- [[wiki/something]]
+%% end:backlinks %%`,
+    );
+
+    const result = await runRotScan(vault, Date.parse('2026-05-06T00:00:00Z'));
+
+    expect(result.bareIdentityCandidates.map((c) => c.path)).toContain('wiki/entities/bryan.md');
+    expect(result.bareIdentityCandidates.map((c) => c.path)).not.toContain('wiki/entities/bryan-pino.md');
+
+    const report = await vault.read(result.reportPath);
+    expect(report).toContain('Bare-identity person pages');
+    expect(report).toContain('bryan');
+  });
 });

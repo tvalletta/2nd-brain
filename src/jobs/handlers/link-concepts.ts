@@ -10,6 +10,8 @@ import { slugify } from '../../vault/paths.js';
 import { createLogger } from '../../shared/logger.js';
 import { markDirty } from '../../maintenance/mark-dirty.js';
 import { createReviewItem } from '../../review/create-review-item.js';
+import { findNameVariantCandidatesForNewPage } from '../../compilation/person-name-variants.js';
+import { refreshQueue } from '../../maintenance/reconciliation-queue.js';
 import { generateReviewAnalysis, bucketConfidence } from '../../review/generate-review-analysis.js';
 import { TransientLLMError } from '../../shared/errors.js';
 
@@ -23,6 +25,7 @@ interface PayloadEntity {
   definition?: string;
   confidence?: number;
   chunkRefs?: string[];
+  externalIds?: string[];
 }
 
 export const linkConceptsHandler: JobHandler = {
@@ -79,7 +82,12 @@ export const linkConceptsHandler: JobHandler = {
     const mergedPages: string[] = [];
 
     for (const { entity, kind } of filtered) {
-      const resolution = resolveEntity({ name: entity.name, kind }, index, context.config.layout);
+      const resolution = resolveEntity(
+        { name: entity.name, kind, externalIds: entity.externalIds },
+        index,
+        context.config.layout,
+        { nicknameMatchingEnabled: context.config.enrichment.personResolution.nicknameMatchingEnabled },
+      );
       const info: ExtractedEntityInfo = {
         name: entity.name,
         kind,
@@ -88,6 +96,7 @@ export const linkConceptsHandler: JobHandler = {
         definition: entity.definition,
         status: entity.status,
         chunkRefs: entity.chunkRefs ?? [],
+        externalIds: entity.externalIds,
       };
 
       try {
@@ -106,6 +115,31 @@ export const linkConceptsHandler: JobHandler = {
           }
           const path = await createEntityPage(context.vault, resolution, info, summaryPath);
           linkedPaths.push(path);
+
+          // B2c Component 3: same immediate-detection hookup as compiler.ts's
+          // rich path (compileFromSource) — best-effort, person-only.
+          if (kind === 'person' && context.config.enrichment.personResolution.enabled) {
+            try {
+              const nameVariantCandidates = findNameVariantCandidatesForNewPage(index, context.config.layout, {
+                name: entity.name,
+                path,
+                aliases: [],
+              });
+              if (nameVariantCandidates.length > 0) {
+                await refreshQueue(context.vault, nameVariantCandidates, context.config.layout);
+                log.info('Queued person name-variant candidates', {
+                  path,
+                  count: nameVariantCandidates.length,
+                });
+              }
+            } catch (err) {
+              log.warn('Name-variant check failed; page created without a candidate check', {
+                path,
+                error: (err as Error).message,
+              });
+            }
+          }
+
           touchedPages.push(path);
         } else if (resolution.status === 'matched' && resolution.matchedPath) {
           if (context.config.enrichment.autoMergeEntities) {

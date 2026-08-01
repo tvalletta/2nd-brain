@@ -265,3 +265,89 @@ Pending enrichment.
     expect(data.updated_at).not.toBe('2025-01-01T00:00:00Z');
   });
 });
+
+describe('compileEntityPage — wikilink-hygiene fix (B2c)', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-entity-compiler-wikilink-'));
+    vault = createFsAdapter(dir);
+    await vault.ensureFolder('wiki/entities');
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('collapses a full-vault-path wikilink emitted by the LLM to bare-name form (reproduces the real Matt Newman.md defect)', async () => {
+    const path = 'wiki/entities/matt-newman.md';
+    await vault.create(
+      path,
+      serializeNote(
+        {
+          id: 'p1', type: 'entity', title: 'Matt Newman', entity_kind: 'person', canonical_name: 'Matt Newman',
+          created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z',
+          source_refs: [], aliases: [], links: [],
+          protected_regions: ['summary', 'projects', 'topics', 'timeline', 'sources'],
+        },
+        `
+# Matt Newman
+
+## Summary
+%% begin:summary %%
+%% end:summary %%
+
+## Projects
+%% begin:projects %%
+%% end:projects %%
+
+## Topics & Interests
+%% begin:topics %%
+%% end:topics %%
+
+## Interactions Timeline
+%% begin:timeline %%
+%% end:timeline %%
+
+## Source References
+%% begin:sources %%
+%% end:sources %%
+`,
+      ),
+    );
+
+    const entity: CompilableEntity = {
+      name: 'Matt Newman', kind: 'person', context: 'Evaluated by Bryan Pino.', relationships: [], chunkRefs: [],
+    };
+    const llm: LLMClient = {
+      async complete() {
+        return `SUMMARY:
+Matt Newman was evaluated by [[Curated/wiki/entities/Bryan Pino]] on calibration.
+
+PROJECTS:
+(none)
+
+TOPICS:
+(none)
+
+TIMELINE:
+Evaluated per [[folder/sub/Bryan Pino|Bryan]].
+
+SOURCES:
+- source1.md`;
+      },
+      async extractStructured<T>(_p: string, schema: import('zod').ZodType<T>): Promise<T> {
+        return schema.parse({});
+      },
+    };
+
+    await compileEntityPage(entity, path, 'sources/source1.md', { vault, llm });
+
+    const { body } = parseNote(await vault.read(path));
+    expect(body).toContain('[[Bryan Pino]]');
+    expect(body).not.toContain('[[Curated/wiki/entities/Bryan Pino]]');
+    expect(body).toContain('[[Bryan Pino|Bryan]]');
+    expect(body).not.toContain('[[folder/sub/Bryan Pino|Bryan]]');
+  });
+});

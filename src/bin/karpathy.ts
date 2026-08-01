@@ -983,8 +983,8 @@ async function mergeCommand(args: string[]): Promise<void> {
 
     // Rebuild backlinks and indexes after merges
     process.stdout.write('Rebuilding backlinks and indexes...\n');
-    await rebuildAllBacklinks(vault);
-    await rebuildAllIndexes(vault);
+    await rebuildAllBacklinks(vault, config.layout);
+    await rebuildAllIndexes(vault, config.layout);
     process.stdout.write('Done.\n');
     return;
   }
@@ -1011,13 +1011,14 @@ async function mergeCommand(args: string[]): Promise<void> {
   let sourcePath: string | null = null;
   let targetPath: string | null = null;
 
+  const resolveOptions = { nicknameMatchingEnabled: config.enrichment.personResolution.nicknameMatchingEnabled };
   for (const kind of kinds) {
     if (!sourcePath) {
-      const sr = resolveEntity({ name: sourceName, kind }, index, config.layout);
+      const sr = resolveEntity({ name: sourceName, kind }, index, config.layout, resolveOptions);
       if (sr.status === 'matched') sourcePath = sr.matchedPath!;
     }
     if (!targetPath) {
-      const tr = resolveEntity({ name: targetName, kind }, index, config.layout);
+      const tr = resolveEntity({ name: targetName, kind }, index, config.layout, resolveOptions);
       if (tr.status === 'matched') targetPath = tr.matchedPath!;
     }
   }
@@ -1049,8 +1050,8 @@ async function mergeCommand(args: string[]): Promise<void> {
 
   // Rebuild backlinks and indexes
   process.stdout.write('Rebuilding backlinks and indexes...\n');
-  await rebuildAllBacklinks(vault);
-  await rebuildAllIndexes(vault);
+  await rebuildAllBacklinks(vault, config.layout);
+  await rebuildAllIndexes(vault, config.layout);
   process.stdout.write('Done.\n');
 }
 
@@ -1442,8 +1443,8 @@ async function curatorCommand(): Promise<void> {
 
   if (processed > 0) {
     process.stdout.write('\nRebuilding backlinks and indexes...\n');
-    await rebuildAllBacklinks(vault);
-    await rebuildAllIndexes(vault);
+    await rebuildAllBacklinks(vault, layout);
+    await rebuildAllIndexes(vault, layout);
     process.stdout.write(`Done. ${processed} merge(s) applied.\n`);
   } else {
     process.stdout.write('\nNo merges applied.\n');

@@ -26,7 +26,9 @@ export const resolveEntityTool: AgentToolDef = {
     const kind = input.kind as EntityKind;
 
     const index = await buildEntityIndex(context.vault, context.config.layout);
-    const result = resolveEntity({ name, kind }, index, context.config.layout);
+    const result = resolveEntity({ name, kind }, index, context.config.layout, {
+      nicknameMatchingEnabled: context.config.enrichment.personResolution.nicknameMatchingEnabled,
+    });
 
     if (result.status === 'matched') {
       return `Found: ${result.matchedPath} (confidence: ${result.confidence.toFixed(2)})`;

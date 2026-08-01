@@ -212,4 +212,45 @@ describe('detect-entity-dupes handler', () => {
     const queue = await readReconciliationQueue(vault, layout);
     expect(queue.entries.length).toBeGreaterThan(0);
   });
+
+  it('finds person name-variant candidates under a non-default layout.wiki (regression for the missing-layout-arg bug)', async () => {
+    // Regression for a real pre-existing bug: detectEntityDupesHandler used to
+    // call detectMergeCandidates(context.vault) without a layout argument, so
+    // it always scanned DEFAULT_LAYOUT's wiki/entities regardless of the
+    // configured layout.wiki — under Curated/wiki (the real vault's layout),
+    // that folder doesn't exist, so zero candidates were ever found.
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir, layout: { wiki: 'Curated/wiki' } });
+    await vault.ensureFolder('Curated/wiki/entities');
+    const fmBryan = {
+      id: 'b1', type: 'entity', entity_kind: 'person', canonical_name: 'Bryan', title: 'Bryan',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      source_refs: ['outputs/source-summaries/doc-a.md'], aliases: [],
+    };
+    const fmBryanPino = {
+      id: 'b2', type: 'entity', entity_kind: 'person', canonical_name: 'Bryan Pino', title: 'Bryan Pino',
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      source_refs: ['outputs/source-summaries/doc-b.md'], aliases: ['pino'],
+    };
+    await vault.create('Curated/wiki/entities/bryan.md', serializeNote(fmBryan, ''));
+    await vault.create('Curated/wiki/entities/bryan-pino.md', serializeNote(fmBryanPino, ''));
+
+    const ctx: JobContext = {
+      vaultPath: dir, projectRoot: dir, vault,
+      enqueue: async (input: JobCreateInput) => ({
+        ...input, id: 'enq', status: 'pending', createdAt: new Date().toISOString(),
+        retryCount: 0, maxRetries: 3, debounceMs: 0,
+        priority: input.priority ?? 50, payload: input.payload ?? {}, trigger: input.trigger ?? 'cascade',
+      } as Job),
+      llm: {} as never,
+      config,
+    };
+
+    await detectEntityDupesHandler.execute(makeJob(), ctx);
+
+    const queue = await readReconciliationQueue(vault, config.layout);
+    const found = queue.entries.find(
+      (e) => [e.sourceName, e.targetName].includes('Bryan') && [e.sourceName, e.targetName].includes('Bryan Pino'),
+    );
+    expect(found).toBeDefined();
+  });
 });

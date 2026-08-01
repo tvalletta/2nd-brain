@@ -120,9 +120,9 @@ export async function handle(args: Record<string, unknown>, ctx: MCPContext) {
       };
     }
 
-    const mergeResult = await mergeEntities(entry.sourcePath, entry.targetPath, ctx.vault);
+    const mergeResult = await mergeEntities(entry.sourcePath, entry.targetPath, ctx.vault, layout);
     await rebuildAllBacklinks(ctx.vault, layout);
-    await rebuildAllIndexes(ctx.vault);
+    await rebuildAllIndexes(ctx.vault, layout);
 
     const resolved = await resolveEntry(ctx.vault, input.id, input.decision, input.newName, layout);
     return {

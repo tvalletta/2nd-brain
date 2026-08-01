@@ -26,6 +26,8 @@ import { handle as handleLintVault } from '../../src/mcp/tools/lint-vault.js';
 import { handle as handleBatchGetNotes } from '../../src/mcp/tools/batch-get-notes.js';
 import { handle as handleVaultStatus } from '../../src/mcp/tools/vault-status.js';
 import { handle as handleSearchByTags } from '../../src/mcp/tools/search-by-tags.js';
+import { handle as handleReconcileEntities } from '../../src/mcp/tools/reconcile-entities.js';
+import { writeReconciliationQueue } from '../../src/maintenance/reconciliation-queue.js';
 
 const SAMPLE_CLAUDE_MD = `# Karpathy Second Memory
 
@@ -663,5 +665,95 @@ describe('MCP Tool Handlers', () => {
     expect(parsed[0].session_id).toBe('test123');
     expect(parsed[0].prompt_summary).toBeUndefined();
     expect(parsed[0].body).toBeUndefined();
+  });
+});
+
+describe('reconcile_entities — non-default layout.wiki (whole-branch-review regression)', () => {
+  // Regression for a real pre-existing bug found while tracing the B2c
+  // reconciliation-queue flow end-to-end: this handler called
+  // mergeEntities(..., ctx.vault) and rebuildAllIndexes(ctx.vault) without a
+  // layout argument, so under Curated/wiki (the real vault's configured
+  // layout.wiki), wikilink rewriting and the vault index rebuild silently
+  // scanned the wrong (non-existent, DEFAULT_LAYOUT) folders and did
+  // nothing. rebuildAllBacklinks was already correctly passing layout — only
+  // mergeEntities and rebuildAllIndexes were missing it.
+  let tempDir: string;
+  let ctx: MCPContext;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'karpathy-mcp-reconcile-'));
+    const vault = createFsAdapter(tempDir);
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: tempDir,
+      projectRoot: tempDir,
+      layout: { wiki: 'Curated/wiki' },
+    });
+    ctx = {
+      config,
+      vault,
+      sessionLog: createSessionLogManager(vault, config.layout),
+      hotCache: createHotCacheManager(join(tempDir, 'CLAUDE.md')),
+      usageLogPath: join(tempDir, '.karpathy', 'logs', 'mcp-usage.jsonl'),
+      enqueueJob: async () => {},
+      runDeterministicJobs: async () => 0,
+    };
+
+    await mkdir(join(tempDir, 'Curated/wiki/entities'), { recursive: true });
+    await mkdir(join(tempDir, 'Curated/wiki/_system'), { recursive: true });
+
+    const bryan = serializeNote(
+      { id: 'b1', type: 'entity', entity_kind: 'person', canonical_name: 'Bryan', title: 'Bryan', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', aliases: [] },
+      '',
+    );
+    const bryanPino = serializeNote(
+      { id: 'b2', type: 'entity', entity_kind: 'person', canonical_name: 'Bryan Pino', title: 'Bryan Pino', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', aliases: ['pino'] },
+      '',
+    );
+    // A third page referencing the source by its file slug (the form
+    // rewriteWikilinks() matches on, per entity-merger.ts's extractSlug) —
+    // proves rewriteWikilinks() actually scanned Curated/wiki/entities.
+    const otherPage = serializeNote(
+      { id: 'o1', type: 'entity', entity_kind: 'person', canonical_name: 'Other Person', title: 'Other Person', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', aliases: [] },
+      '# Other Person\n\nWorked with [[bryan]] on the offsite.\n',
+    );
+    await vault.create('Curated/wiki/entities/bryan.md', bryan);
+    await vault.create('Curated/wiki/entities/bryan-pino.md', bryanPino);
+    await vault.create('Curated/wiki/entities/other-person.md', otherPage);
+
+    await writeReconciliationQueue(vault, {
+      entries: [{
+        id: 'entry-1',
+        status: 'pending',
+        sourcePath: 'Curated/wiki/entities/bryan.md',
+        targetPath: 'Curated/wiki/entities/bryan-pino.md',
+        sourceName: 'Bryan',
+        targetName: 'Bryan Pino',
+        reason: 'name variant',
+        confidence: 0.5,
+      }],
+    }, config.layout);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('merges under the Curated/wiki layout and rewrites wikilinks across it (not the default wiki/ folder)', async () => {
+    const result = await handleReconcileEntities({ id: 'entry-1', decision: 'merge' }, ctx);
+    expect(result.isError).toBeFalsy();
+
+    // Source page deleted, target page survives.
+    expect(await ctx.vault.exists('Curated/wiki/entities/bryan.md')).toBe(false);
+    expect(await ctx.vault.exists('Curated/wiki/entities/bryan-pino.md')).toBe(true);
+
+    // The wikilink on the third page must have been rewritten from
+    // [[bryan]] to [[bryan-pino]] — this only happens if mergeEntities was
+    // called with the Curated/wiki layout, not the DEFAULT_LAYOUT default.
+    const otherContent = await ctx.vault.read('Curated/wiki/entities/other-person.md');
+    expect(otherContent).toContain('[[bryan-pino]]');
+    expect(otherContent).not.toContain('[[bryan]]');
+
+    const resultJson = JSON.parse(result.content[0].text);
+    expect(resultJson.wikilinksRewritten).toBe(1);
   });
 });

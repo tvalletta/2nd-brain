@@ -10,6 +10,8 @@ import { createLogger } from '../shared/logger.js';
 import { heuristicGate, llmGate } from '../intelligence/significance-gate.js';
 import { createReviewItem } from '../review/create-review-item.js';
 import { createBudgetTrackerFromConfig } from '../shared/budget.js';
+import { findNameVariantCandidatesForNewPage } from './person-name-variants.js';
+import { refreshQueue } from '../maintenance/reconciliation-queue.js';
 import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
 import { TransientLLMError } from '../shared/errors.js';
 import { generateReviewAnalysis, bucketConfidence } from '../review/generate-review-analysis.js';
@@ -35,6 +37,7 @@ export interface CompilableEntity {
     relationship: string;
   }>;
   chunkRefs: string[];
+  externalIds?: string[];
 }
 
 export async function compileFromSource(
@@ -57,9 +60,10 @@ export async function compileFromSource(
 
   for (const entity of entities) {
     const resolution = resolveEntity(
-      { name: entity.name, kind: entity.kind },
+      { name: entity.name, kind: entity.kind, externalIds: entity.externalIds },
       entityIndex,
       layout,
+      { nicknameMatchingEnabled: config.enrichment.personResolution.nicknameMatchingEnabled },
     );
 
     log.debug('Entity resolution', {
@@ -127,6 +131,7 @@ export async function compileFromSource(
         definition: entity.definition,
         status: entity.status,
         chunkRefs: entity.chunkRefs,
+        externalIds: entity.externalIds,
       }, sourcePath, layout);
 
       existingPagePath = createdPath;
@@ -139,6 +144,33 @@ export async function compileFromSource(
       entityIndex.byCanonicalName.set(entity.name.toLowerCase(), createdPath);
 
       result.created.push(createdPath);
+
+      // B2c Component 3: immediate person name-variant detection on new-page
+      // creation, so a same-day bare-name mention gets a same-day
+      // reconciliation-queue entry instead of waiting on the (often-disabled)
+      // scheduled detect-entity-dupes sweep. Best-effort: a failure here must
+      // never undo or block a page that was already successfully created.
+      if (entity.kind === 'person' && config.enrichment.personResolution.enabled) {
+        try {
+          const nameVariantCandidates = findNameVariantCandidatesForNewPage(entityIndex, layout, {
+            name: entity.name,
+            path: createdPath,
+            aliases: [],
+          });
+          if (nameVariantCandidates.length > 0) {
+            await refreshQueue(vault, nameVariantCandidates, layout);
+            log.info('Queued person name-variant candidates', {
+              path: createdPath,
+              count: nameVariantCandidates.length,
+            });
+          }
+        } catch (err) {
+          log.warn('Name-variant check failed; page created without a candidate check', {
+            path: createdPath,
+            error: (err as Error).message,
+          });
+        }
+      }
 
       if (flaggedForReview) {
         try {

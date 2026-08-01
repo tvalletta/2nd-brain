@@ -265,3 +265,150 @@ describe('extractEntitiesHandler / extractEntitiesRichHandler — transient erro
     expect((caught as Error).message).toContain('Rich entity extraction failed');
   });
 });
+
+const SLACK_FIXTURE = '* [@pino](https://adobe.enterprise.slack.com/team/U01FZCB8X29) is the lead.';
+
+describe('extract-entities — external-ID capture (B2c)', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  let enqueued: JobCreateInput[];
+
+  function makeCtx(llm: LLMClient): JobContext {
+    return {
+      vaultPath: dir, projectRoot: dir, vault,
+      enqueue: async (input: JobCreateInput) => {
+        enqueued.push(input);
+        return { ...input, id: 'enq', status: 'pending', createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0, priority: input.priority ?? 50, payload: input.payload ?? {}, trigger: input.trigger ?? 'cascade' } as Job;
+      },
+      llm,
+      config: KarpathyConfigSchema.parse({ vaultPath: dir }),
+    };
+  }
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-extract-extid-'));
+    vault = createFsAdapter(dir);
+    enqueued = [];
+    await vault.ensureFolder('outputs/source-summaries');
+    await vault.write('raw/offsite.md', SLACK_FIXTURE);
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('attaches externalIds to a matching person in the simple extract-entities -> link-concepts payload', async () => {
+    const summaryPath = 'outputs/source-summaries/offsite.md';
+    await vault.create(summaryPath, serializeNote(
+      { id: 's1', type: 'source_summary', title: 'Offsite', source_type: 'plaintext', source_path: 'raw/offsite.md', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+      '\n%% begin:entities %%\n%% end:entities %%\n',
+    ));
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() {
+        return { people: [{ name: 'pino', role: undefined, context: undefined, chunkRefs: [] }], projects: [], concepts: [], decisions: [], open_questions: [] } as never;
+      },
+    };
+    const ctx = makeCtx(llm);
+
+    await extractEntitiesHandler.execute(
+      { id: 'j1', type: 'extract-entities', status: 'running', priority: 50, targetPath: summaryPath, payload: { rawPath: 'raw/offsite.md' }, trigger: 'cascade', createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0 },
+      ctx,
+    );
+
+    const linkJob = enqueued.find((j) => j.type === 'link-concepts');
+    const people = (linkJob!.payload!.entities as Record<string, unknown[]>).people as Array<{ name: string; externalIds: string[] }>;
+    expect(people[0].externalIds).toEqual(['slack:U01FZCB8X29']);
+  });
+
+  it('attaches externalIds via whole-token match when the LLM extracts a fuller "First Last" name containing the handle (B2c whole-branch-review fix)', async () => {
+    const summaryPath = 'outputs/source-summaries/offsite.md';
+    await vault.create(summaryPath, serializeNote(
+      { id: 's1', type: 'source_summary', title: 'Offsite', source_type: 'plaintext', source_path: 'raw/offsite.md', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+      '\n%% begin:entities %%\n%% end:entities %%\n',
+    ));
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() {
+        // The LLM extracts the fuller "Bryan Pino" from the same document
+        // whose raw text carries the "[@pino](...)" Slack link — the
+        // "pino" token in the extracted name should still resolve to the
+        // handle's external ID, even though the extracted name isn't the
+        // literal handle string.
+        return { people: [{ name: 'Bryan Pino', role: undefined, context: undefined, chunkRefs: [] }], projects: [], concepts: [], decisions: [], open_questions: [] } as never;
+      },
+    };
+    const ctx = makeCtx(llm);
+
+    await extractEntitiesHandler.execute(
+      { id: 'j1', type: 'extract-entities', status: 'running', priority: 50, targetPath: summaryPath, payload: { rawPath: 'raw/offsite.md' }, trigger: 'cascade', createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0 },
+      ctx,
+    );
+
+    const linkJob = enqueued.find((j) => j.type === 'link-concepts');
+    const people = (linkJob!.payload!.entities as Record<string, unknown[]>).people as Array<{ name: string; externalIds: string[] }>;
+    expect(people[0].externalIds).toEqual(['slack:U01FZCB8X29']);
+  });
+
+  it('does not attach externalIds via a partial-substring false match (token-equality only, not substring containment)', async () => {
+    const summaryPath = 'outputs/source-summaries/offsite.md';
+    await vault.create(summaryPath, serializeNote(
+      { id: 's1', type: 'source_summary', title: 'Offsite', source_type: 'plaintext', source_path: 'raw/offsite.md', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+      '\n%% begin:entities %%\n%% end:entities %%\n',
+    ));
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() {
+        // "Pinocchio Marconi" contains "pino" only as a substring of a
+        // token ("pinocchio"), not as a whole token — must NOT match the
+        // "pino" handle, unlike the whole-token "Bryan Pino" case above.
+        return { people: [{ name: 'Pinocchio Marconi', role: undefined, context: undefined, chunkRefs: [] }], projects: [], concepts: [], decisions: [], open_questions: [] } as never;
+      },
+    };
+    const ctx = makeCtx(llm);
+
+    await extractEntitiesHandler.execute(
+      { id: 'j1', type: 'extract-entities', status: 'running', priority: 50, targetPath: summaryPath, payload: { rawPath: 'raw/offsite.md' }, trigger: 'cascade', createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0 },
+      ctx,
+    );
+
+    const linkJob = enqueued.find((j) => j.type === 'link-concepts');
+    const people = (linkJob!.payload!.entities as Record<string, unknown[]>).people as Array<{ name: string; externalIds: string[] }>;
+    expect(people[0].externalIds).toEqual([]);
+  });
+
+  it('does not attach externalIds when enrichment.personResolution.externalIdCaptureEnabled is false', async () => {
+    const summaryPath = 'outputs/source-summaries/offsite.md';
+    await vault.create(summaryPath, serializeNote(
+      { id: 's1', type: 'source_summary', title: 'Offsite', source_type: 'plaintext', source_path: 'raw/offsite.md', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+      '\n%% begin:entities %%\n%% end:entities %%\n',
+    ));
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() {
+        return { people: [{ name: 'pino', role: undefined, context: undefined, chunkRefs: [] }], projects: [], concepts: [], decisions: [], open_questions: [] } as never;
+      },
+    };
+    const ctx: JobContext = {
+      vaultPath: dir, projectRoot: dir, vault,
+      enqueue: async (input: JobCreateInput) => {
+        enqueued.push(input);
+        return { ...input, id: 'enq', status: 'pending', createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0, priority: input.priority ?? 50, payload: input.payload ?? {}, trigger: input.trigger ?? 'cascade' } as Job;
+      },
+      llm,
+      config: KarpathyConfigSchema.parse({
+        vaultPath: dir,
+        enrichment: { personResolution: { externalIdCaptureEnabled: false } },
+      }),
+    };
+
+    await extractEntitiesHandler.execute(
+      { id: 'j1', type: 'extract-entities', status: 'running', priority: 50, targetPath: summaryPath, payload: { rawPath: 'raw/offsite.md' }, trigger: 'cascade', createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0 },
+      ctx,
+    );
+
+    const linkJob = enqueued.find((j) => j.type === 'link-concepts');
+    const people = (linkJob!.payload!.entities as Record<string, unknown[]>).people as Array<{ name: string; externalIds: string[] }>;
+    expect(people[0].externalIds).toEqual([]);
+  });
+});

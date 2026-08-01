@@ -10,7 +10,7 @@ const log = createLogger('handler:detect-entity-dupes');
 export const detectEntityDupesHandler: JobHandler = {
   async execute(_job: Job, context: JobContext): Promise<void> {
     const layout = layoutFromConfig(context.config);
-    const candidates = await detectMergeCandidates(context.vault);
+    const candidates = await detectMergeCandidates(context.vault, layout);
 
     const autoCandidates = candidates.filter((c) => c.confidence >= AUTO_MERGE_THRESHOLD);
     const queueCandidates = candidates.filter((c) => c.confidence < AUTO_MERGE_THRESHOLD);

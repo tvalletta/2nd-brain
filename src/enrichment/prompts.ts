@@ -395,7 +395,7 @@ SOURCES:
   return `You are a wiki knowledge compiler. Compile a rich wiki article about the ${entityKind} "${entityName}".
 
 Use the references and related entities below to write comprehensive, well-organized content.
-Use [[wikilinks]] for all entity cross-references.
+Use [[wikilinks]] for all entity cross-references — always the bare entity name (e.g. [[Bryan Pino]]), never a full vault path (e.g. NOT [[Curated/wiki/entities/Bryan Pino]]).
 ${existingContent ? 'You are UPDATING an existing article. Enrich and update it with new information but NEVER remove or lose existing information.' : 'You are creating a new article from scratch.'}
 ${existingBlock}
 --- REFERENCES ---

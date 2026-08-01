@@ -150,6 +150,10 @@ export const EntitySchema = BaseFrontmatterSchema.extend({
   type: z.literal('entity'),
   entity_kind: z.string(),
   canonical_name: z.string(),
+  /** Stable external identifiers, "provider:id" form, e.g. "slack:U01FZCB8X29". */
+  external_ids: z.array(z.string()).default([]),
+  /** True when canonical_name is a bare first name or raw handle — cleared on merge/rename. */
+  identity_uncertain: z.boolean().default(false),
 });
 export type EntityFrontmatter = z.infer<typeof EntitySchema>;
 

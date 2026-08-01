@@ -33,6 +33,9 @@ const RichExtractedEntitiesSchema = z.preprocess(
       confidence: z.number().min(0).max(1).default(0.5),
       relationships: z.array(RelationshipSchema).default([]),
       chunkRefs: z.array(z.string()).default([]),
+      /** B2c: attached deterministically post-extraction by extract-entities.ts's
+       *  extractSlackHandleIds — never populated by the LLM itself. */
+      externalIds: z.array(z.string()).default([]),
     })).default([]),
     projects: z.array(z.object({
       name: z.string(),

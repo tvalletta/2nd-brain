@@ -134,7 +134,11 @@ export async function compileEntityPage(
       continue;
     }
 
-    updatedBody = updateProtectedRegion(updatedBody, section, compiledContent);
+    // B2c G4: collapse any full-vault-path wikilink the model still emits
+    // (e.g. [[Curated/wiki/entities/Bryan Pino]]) down to bare-name form
+    // ([[Bryan Pino]]) so entity-merger's rewriteWikilinks() — which matches
+    // on bare slug only — can find and update it on a future merge.
+    updatedBody = updateProtectedRegion(updatedBody, section, normalizeWikilinkTargets(compiledContent));
   }
 
   // Web enrichment for thin concept/topic definitions
@@ -169,6 +173,13 @@ export async function compileEntityPage(
   });
 
   return existingPagePath;
+}
+
+/** Collapse any `[[folder/path/Name]]`-shaped wikilink the model emits down to
+ *  bare-name form `[[Name]]`, so entity-merger's rewriteWikilinks() (which
+ *  matches on bare slug only) can find and update it on a future merge. */
+function normalizeWikilinkTargets(text: string): string {
+  return text.replace(/\[\[([^\]|]*\/)([^\]|/]+)(\|[^\]]+)?\]\]/g, (_, _path, name, alias) => `[[${name}${alias ?? ''}]]`);
 }
 
 /**

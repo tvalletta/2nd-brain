@@ -484,6 +484,7 @@ idempotent on `(notePath, ref)`.
 - Aliases MUST map to a canonical page id.
 - A rename MUST preserve canonical identity.
 - Duplicate pages MUST NOT be silently merged without review.
+- For `entity_kind: person` specifically (B2c): resolution additionally supports an exact external-ID match (highest confidence, no review needed — see §10.3), and honorific/nickname/initials-aware fuzzy matching. A person-scoped name-variant detection tier (no shared-source-reference requirement, unlike every other duplicate-detection tier — see §22.2) closes the case where a bare name/handle in one document and a fuller name in an unrelated document refer to the same person; every candidate it produces is confidence-capped below the auto-merge threshold and always routed to human review (§22), never silently merged — consistent with the rule above.
 
 ### 10.3 Type-specific schemas
 
@@ -514,6 +515,11 @@ Required fields:
 
 - `entity_kind`
 - `canonical_name`
+
+Optional fields (added by B2c, person name resolution):
+
+- `external_ids: []` — stable external identifiers, `"provider:id"` form (e.g. `"slack:U01FZCB8X29"`), default `[]`. An exact match is `resolveEntity`'s highest-confidence tier (1.0) — definitionally the same identity, no fuzziness.
+- `identity_uncertain: false` — `true` when `canonical_name` is a bare first name or raw handle rather than a full "First Last" name; cleared unconditionally on any merge or a `karpathy curator` rename decision. Purely a reportable signal (`wiki/_system/vault-health.md`'s bare-identity table) — never gates ingest or blocks page creation.
 
 Note: `concept` is no longer a page-producing `entity_kind` (§7.2) — concept
 mentions are consolidated into the glossary file instead of individual
@@ -859,7 +865,7 @@ When enabled, the layer adds:
 - **Weekly hot-topics digest** at `wiki/digests/{YYYY-Www}.md`;
 - **Topic refresh** that integrates new evidence into a note's primary richness region without overwriting contradictions — region-aware per note `type` (`concept`/`topic` → `current-understanding`, `decision` → `outcome`/`context`, `project` hub → `overview`), each with its own anti-fabrication prompt (an honest placeholder rather than a fabricated answer when evidence doesn't support one). Also renders resolved cascade-neighbors into `related-concepts` for `concept`/`topic` notes as a byproduct of the same pass;
 - **Decay scan** that enqueues refreshes for stale concept / topic / decision / project notes, and — independent of staleness, when the intelligence layer's optional richness backfill is enabled — force-enqueues a refresh for any note whose primary richness region is still empty or a known placeholder;
-- **Vault-rot diagnostic** at `wiki/_system/vault-health.md`, including a thin-content table (reporting-only) alongside the existing rot candidates;
+- **Vault-rot diagnostic** at `wiki/_system/vault-health.md`, including a thin-content table and a bare-identity person-pages table (both reporting-only) alongside the existing rot candidates;
 - **Human-in-the-loop research handshake**: gap detection writes a stack-ranked queue at `wiki/_system/research-queue.md`; the user picks depth (light / medium / heavy / skip) via Slack reply, queue edit, or the MCP `approve_research` tool; only then does `research-execute` fire;
 - **Significance gate** that drops generic / too-short entity names before they spawn noisy pages;
 - **Concept glossary synthesis** — mention de-duplication is content-aware (not just source-reference-aware), and a concept that accumulates enough mentions gets a short LLM-synthesized rollup line above its raw mention list, replacing the placeholder-quality "first gloss frozen forever" state.
@@ -904,6 +910,8 @@ The `detect-entity-dupes` job:
 3. Does NOT remove or modify existing entries; their `status` is set only by operator decisions.
 
 Running `detect-entity-dupes` twice MUST NOT create duplicate queue entries for the same pair.
+
+`detectMergeCandidates()`'s first three tiers (Levenshtein-distance names, substring names, alias match) all require overlapping `source_refs` between the candidate pair, to hold down false positives. **B2c adds a 4th tier, person-to-person pairs only, with no shared-source-reference requirement**: `personNameVariantScore()` (`src/compilation/person-name-variants.ts`) scores substring-containment and surname+nickname/initials-equivalent pairs, always below the auto-merge threshold. This is the mechanism that catches a bare name/handle in one document and a fuller name in a completely unrelated document — the class of duplicate every other tier structurally cannot see, because none of them relax the source-overlap requirement. In addition to the periodic `detect-entity-dupes` sweep, the same scoring function runs **immediately** when a new person page is created (both the rich `compileFromSource` path and the simple `link-concepts` path), gated on `enrichment.personResolution.enabled` and best-effort (a failure never blocks or undoes page creation) — so a same-day mention gets a same-day queue entry rather than waiting on the periodic sweep, which itself only runs when `maintenance.reviewEnabled: true`.
 
 ### 22.3 Resolution paths
 

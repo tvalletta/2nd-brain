@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { z } from 'zod';
 import { createFsAdapter } from '../../src/vault/fs-adapter.js';
-import { parseNote } from '../../src/vault/frontmatter.js';
+import { parseNote, serializeNote } from '../../src/vault/frontmatter.js';
 import { compileFromSource, type CompilableEntity } from '../../src/compilation/compiler.js';
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
@@ -12,10 +12,16 @@ import { TransientLLMError } from '../../src/shared/errors.js';
 import { generateReviewAnalysis } from '../../src/review/generate-review-analysis.js';
 import { createBudgetTrackerFromConfig } from '../../src/shared/budget.js';
 import { createLLMFromConfig } from '../../src/enrichment/llm-factory.js';
+import { readReconciliationQueue, refreshQueue } from '../../src/maintenance/reconciliation-queue.js';
 
 vi.mock('../../src/review/generate-review-analysis.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/review/generate-review-analysis.js')>();
   return { ...actual, generateReviewAnalysis: vi.fn() };
+});
+
+vi.mock('../../src/maintenance/reconciliation-queue.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/maintenance/reconciliation-queue.js')>();
+  return { ...actual, refreshQueue: vi.fn(actual.refreshQueue) };
 });
 
 // Only used by the "budget tracker consistency" test below, which restores
@@ -405,5 +411,89 @@ describe('compileFromSource — budget tracker consistency', () => {
     // (stale in-memory) write for Entity Two, undercounting to 2.
     const freshBudget = createBudgetTrackerFromConfig(config, dir);
     expect(freshBudget.snapshot().used.fast).toBe(3);
+  });
+});
+
+describe('compileFromSource — person name-variant detection (B2c)', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-compiler-namevariant-'));
+    vault = createFsAdapter(dir);
+    await vault.ensureFolder('wiki/entities');
+    vi.mocked(refreshQueue).mockClear();
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('queues a candidate when a new bare-named person page is created against an existing fuller-named page', async () => {
+    await vault.atomicWrite(
+      'wiki/entities/bryan-pino.md',
+      serializeNote({ id: 'e1', type: 'entity', title: 'Bryan Pino', canonical_name: 'Bryan Pino', entity_kind: 'person', aliases: ['pino'], created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' }, 'Body.'),
+    );
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir });
+
+    await compileFromSource(
+      'sources/s1.md',
+      [makeEntity({ name: 'Bryan', kind: 'person' })],
+      { vault, llm: makeLLM({}), config, projectRoot: dir },
+    );
+
+    const queue = await readReconciliationQueue(vault, config.layout);
+    const found = queue.entries.find(
+      (e) => [e.sourceName, e.targetName].includes('Bryan') && [e.sourceName, e.targetName].includes('Bryan Pino'),
+    );
+    expect(found).toBeDefined();
+  });
+
+  it('does not queue anything when no plausible match exists', async () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir });
+
+    await compileFromSource(
+      'sources/s1.md',
+      [makeEntity({ name: 'Zzyzx', kind: 'person' })],
+      { vault, llm: makeLLM({}), config, projectRoot: dir },
+    );
+
+    const queue = await readReconciliationQueue(vault, config.layout);
+    expect(queue.entries).toHaveLength(0);
+  });
+
+  it('a failure in the name-variant check does not prevent the page from being created', async () => {
+    vi.mocked(refreshQueue).mockRejectedValueOnce(new Error('disk full'));
+    await vault.atomicWrite(
+      'wiki/entities/bryan-pino.md',
+      serializeNote({ id: 'e1', type: 'entity', title: 'Bryan Pino', canonical_name: 'Bryan Pino', entity_kind: 'person', aliases: ['pino'], created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' }, 'Body.'),
+    );
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir });
+
+    const result = await compileFromSource(
+      'sources/s1.md',
+      [makeEntity({ name: 'Bryan', kind: 'person' })],
+      { vault, llm: makeLLM({}), config, projectRoot: dir },
+    );
+
+    expect(result.created).toHaveLength(1);
+    expect(await vault.exists('wiki/entities/bryan.md')).toBe(true);
+  });
+
+  it('resolves an existing external-ID-matched page instead of creating a duplicate, even with a completely different name', async () => {
+    await vault.atomicWrite(
+      'wiki/entities/pino.md',
+      serializeNote({ id: 'e1', type: 'entity', title: 'pino', canonical_name: 'pino', entity_kind: 'person', aliases: [], external_ids: ['slack:U01FZCB8X29'], created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' }, 'Body.'),
+    );
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir });
+
+    const result = await compileFromSource(
+      'sources/s1.md',
+      [makeEntity({ name: 'Frank Brown', kind: 'person', externalIds: ['slack:U01FZCB8X29'] })],
+      { vault, llm: makeLLM({}), config, projectRoot: dir },
+    );
+
+    expect(result.created).toHaveLength(0);
+    expect(result.updated).toContain('wiki/entities/pino.md');
   });
 });

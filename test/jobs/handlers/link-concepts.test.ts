@@ -17,6 +17,7 @@ vi.mock('../../../src/review/generate-review-analysis.js', async (importOriginal
 
 import { generateReviewAnalysis } from '../../../src/review/generate-review-analysis.js';
 import { TransientLLMError } from '../../../src/shared/errors.js';
+import { readReconciliationQueue } from '../../../src/maintenance/reconciliation-queue.js';
 
 function makeLLM(): LLMClient {
   return {
@@ -232,5 +233,49 @@ describe('link-concepts handler', () => {
     // createReviewItem was reached, and the job should be retried whole.
     const reviewFiles = await vault.listMarkdownFiles('review');
     expect(reviewFiles).toHaveLength(0);
+  });
+
+  it('queues a person name-variant candidate when a new bare-named page is created (B2c)', async () => {
+    await vault.ensureFolder('Curated/wiki/entities');
+    await vault.create(
+      'Curated/wiki/entities/bryan-pino.md',
+      serializeNote(
+        { id: 'e1', type: 'entity', title: 'Bryan Pino', canonical_name: 'Bryan Pino', entity_kind: 'person', aliases: ['pino'], created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+        '\n# Bryan Pino\n\nContent.\n',
+      ),
+    );
+    const summaryPath = 'sources/s1.md';
+    await vault.create(summaryPath, '---\ntitle: S1\n---\n# S1\n');
+    const ctx = makeCtx();
+
+    await linkConceptsHandler.execute(makeJob(summaryPath, { people: [{ name: 'Bryan' }] }), ctx);
+
+    const queue = await readReconciliationQueue(vault, ctx.config.layout);
+    const found = queue.entries.find(
+      (e) => [e.sourceName, e.targetName].includes('Bryan') && [e.sourceName, e.targetName].includes('Bryan Pino'),
+    );
+    expect(found).toBeDefined();
+  });
+
+  it('resolves an existing external-ID-matched page instead of creating a duplicate (B2c)', async () => {
+    await vault.ensureFolder('Curated/wiki/entities');
+    await vault.create(
+      'Curated/wiki/entities/pino.md',
+      serializeNote(
+        { id: 'e1', type: 'entity', title: 'pino', canonical_name: 'pino', entity_kind: 'person', aliases: [], external_ids: ['slack:U01FZCB8X29'], created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+        '\n# pino\n\nContent.\n',
+      ),
+    );
+    const summaryPath = 'sources/s1.md';
+    await vault.create(summaryPath, '---\ntitle: S1\n---\n# S1\n');
+    const ctx = makeCtx();
+
+    await linkConceptsHandler.execute(
+      makeJob(summaryPath, { people: [{ name: 'Frank Brown', externalIds: ['slack:U01FZCB8X29'] }] }),
+      ctx,
+    );
+
+    const entityFiles = await vault.listMarkdownFiles('Curated/wiki/entities');
+    expect(entityFiles).toEqual(['Curated/wiki/entities/pino.md']);
   });
 });
