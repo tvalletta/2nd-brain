@@ -248,4 +248,29 @@ describe('Review queue', () => {
     expect(content).toContain('resolution_state: dismissed');
     expect(content).toContain('**Rejected**');
   });
+
+  it('approving a review item sets status: active (Sub-project C, G5)', async () => {
+    await vault.create(
+      'review/approve-status.md',
+      '---\ntitle: Approve Status\nstatus: draft\nreview_state: unreviewed\nupdated_at: "2026-04-11T00:00:00.000Z"\n---\n# Test\n\n## Analysis\n%% begin:analysis %%\nPending.\n%% end:analysis %%\n',
+    );
+
+    await approveReviewItem(vault, 'review/approve-status.md');
+    const content = await vault.read('review/approve-status.md');
+    expect(content).toContain('review_state: approved');
+    expect(content).toContain('status: active');
+  });
+
+  it('rejecting a review item sets status: rejected (Sub-project C, G5 — NoteStatus\'s 4th enum value, first real producer)', async () => {
+    await vault.create(
+      'review/reject-status.md',
+      '---\ntitle: Reject Status\nstatus: draft\nreview_state: unreviewed\nresolution_state: open\nupdated_at: "2026-04-11T00:00:00.000Z"\n---\n# Test\n\n## Analysis\n%% begin:analysis %%\nPending.\n%% end:analysis %%\n',
+    );
+
+    await rejectReviewItem(vault, 'review/reject-status.md');
+    const content = await vault.read('review/reject-status.md');
+    expect(content).toContain('review_state: rejected');
+    expect(content).toContain('resolution_state: dismissed');
+    expect(content).toContain('status: rejected');
+  });
 });

@@ -37,6 +37,7 @@ export async function approveReviewItem(vault: VaultAdapter, path: string): Prom
   const content = await vault.read(path);
   let updated = content
     .replace(/review_state: \w+/, 'review_state: approved')
+    .replace(/status: \w+/, 'status: active') // Sub-project C (G5)
     .replace(/updated_at: ".*?"/, `updated_at: "${nowISO()}"`);
 
   updated = updateProtectedRegion(
@@ -54,6 +55,7 @@ export async function rejectReviewItem(vault: VaultAdapter, path: string): Promi
   let updated = content
     .replace(/review_state: \w+/, 'review_state: rejected')
     .replace(/resolution_state: \w+/, 'resolution_state: dismissed')
+    .replace(/status: \w+/, 'status: rejected') // Sub-project C (G5) — NoteStatus's 4th enum value, first real producer
     .replace(/updated_at: ".*?"/, `updated_at: "${nowISO()}"`);
 
   updated = updateProtectedRegion(
