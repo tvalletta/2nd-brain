@@ -488,6 +488,68 @@ describe('research executor (D3)', () => {
   });
 });
 
+describe('research executor — glossary-consolidated write guard (G3)', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp' });
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-guard-'));
+    vault = createFsAdapter(dir);
+    await vault.ensureFolder('wiki/concepts');
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('refuses to create a new individual concept page when the folder is glossary-consolidated', async () => {
+    await vault.create(
+      'wiki/concepts/glossary.md',
+      `---
+type: index
+title: Concept glossary
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+# Concept glossary
+`,
+    );
+    const llm = fakeLLM({
+      tldr: 'New concept summary.',
+      body: '## What it is\nSomething new.',
+      claims: [],
+      contradictions: [],
+      coverage: { 'what-is': true, 'why-it-matters': false, 'how-it-works': false, alternatives: false, 'recent-changes': false },
+    });
+
+    await expect(
+      executeResearch({ vault, llm, config }, 'brand-new-concept', {
+        depth: 'light',
+        nowMs: Date.parse('2026-07-01T00:00:00Z'),
+      }),
+    ).rejects.toThrow(/glossary-consolidated/);
+
+    expect(await vault.exists('wiki/concepts/brand-new-concept.md')).toBe(false);
+  });
+
+  it('is unaffected when the concepts folder has no glossary.md (pre-B1-style, default layout regression)', async () => {
+    const llm = fakeLLM({
+      tldr: 'New concept summary.',
+      body: '## What it is\nSomething new.',
+      claims: [],
+      contradictions: [],
+      coverage: { 'what-is': true, 'why-it-matters': false, 'how-it-works': false, alternatives: false, 'recent-changes': false },
+    });
+
+    await executeResearch({ vault, llm, config }, 'genuinely-new-concept', {
+      depth: 'light',
+      nowMs: Date.parse('2026-07-01T00:00:00Z'),
+    });
+
+    expect(await vault.exists('wiki/concepts/genuinely-new-concept.md')).toBe(true);
+  });
+});
+
 describe('significance gate (D4)', () => {
   it('drops too-short or stop-word names', () => {
     expect(heuristicGate({ name: 'X', kind: 'concept' }, []).action).toBe('drop');

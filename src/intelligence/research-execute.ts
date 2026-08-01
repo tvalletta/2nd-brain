@@ -276,6 +276,20 @@ async function writeConceptNote(deps: ResearchExecuteDeps, args: WriteArgs): Pro
   await deps.vault.ensureFolder(args.conceptsFolder);
   const exists = await deps.vault.exists(args.notePath);
 
+  // G3: refuse to (re)create an individual concept page inside a
+  // glossary-consolidated folder. If the target doesn't exist AND the
+  // concepts folder already has a glossary.md, the concept has been
+  // consolidated (B1) -- writing a new individual page here would silently
+  // fork a duplicate, disconnected representation of the same concept.
+  const glossaryPath = `${args.conceptsFolder}/glossary.md`;
+  if (!exists && (await deps.vault.exists(glossaryPath))) {
+    throw new Error(
+      `Refusing to create ${args.notePath}: ${args.conceptsFolder} is glossary-consolidated ` +
+        `(${glossaryPath} exists). This concept should be researched as a topic, or its ` +
+        `glossary entry enriched via concept-glossary synthesis, not given a new individual page.`,
+    );
+  }
+
   let fm: Record<string, unknown>;
   let body: string;
   if (exists) {
