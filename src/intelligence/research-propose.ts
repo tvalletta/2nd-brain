@@ -30,7 +30,14 @@ import { createLogger } from '../shared/logger.js';
 const log = createLogger('research-propose');
 
 function scanFolders(layout: ReturnType<typeof layoutFromConfig>): string[] {
-  return [`${layout.wiki}/concepts`, `${layout.wiki}/topics`];
+  // G3: `${layout.wiki}/concepts` intentionally excluded. Since B1's
+  // concept-glossary consolidation (commit 7de5da9, 2026-07-24), that folder
+  // contains only `_index.md`/`glossary.md` (type: index) -- never
+  // `type: concept` -- so scanning it for research candidates is
+  // permanently a no-op. Concepts get their own LLM-synthesis enrichment via
+  // concept-glossary.ts's rollup-line mechanism; individual-page tiered
+  // research remains valid only for topics.
+  return [`${layout.wiki}/topics`];
 }
 
 const RECENT_WINDOW_DAYS = 14;
@@ -121,7 +128,12 @@ export async function proposeResearch(deps: ProposeDeps, opts: ProposeOptions = 
         asNumber(fm.stability) ?? defaultStability((asString(fm.half_life_domain) as string) || type);
       const retr = retrievability({ lastVerifiedISO: lastVerified, stabilityDays: stability, nowMs });
       const confidence = asString(fm.confidence);
-      const confidenceGap = confidence === 'low' ? 1 : confidence === 'medium' ? 0.5 : confidence === 'high' ? 0 : 0.7;
+      // G4: an unset confidence field (the common case for most topic
+      // notes) now contributes the same 0.5 as an explicit
+      // `confidence: medium` -- previously it fell through to 0.7,
+      // outranking a human's own explicit medium-confidence judgment, which
+      // is backwards.
+      const confidenceGap = confidence === 'low' ? 1 : confidence === 'medium' ? 0.5 : confidence === 'high' ? 0 : 0.5;
       const staleness = 1 - retr;
       const domain = asString(fm.half_life_domain) || (type === 'concept' ? 'concept' : 'topic');
       const domainHeat = AI_DOMAINS.has(domain) ? 1 : 0;
@@ -171,9 +183,29 @@ export async function proposeResearch(deps: ProposeDeps, opts: ProposeOptions = 
     }
   }
 
-  // Auto-expire low-score stale entries from the prior queue.
+  // Auto-expire low-score stale entries from the prior queue, AND (G3) drop
+  // any entry whose backing page no longer exists -- orphaned by a folder
+  // migration (e.g. B1's concept-glossary consolidation) or manual
+  // deletion. Completed candidates are exempt: a completed research result
+  // may legitimately reference a page that's since been archived by
+  // Sub-project C's lifecycle mechanism -- that's a different, valid
+  // lifecycle state, not an orphan.
+  let orphansPurged = 0;
+  const orphanedSlugs: string[] = [];
   for (const prior of existing.candidates) {
     if (candidates.find((c) => c.slug === prior.slug)) continue; // re-proposed → keep
+
+    if (prior.status !== 'completed') {
+      const stillBacked =
+        (await deps.vault.exists(`${layout.wiki}/concepts/${prior.slug}.md`)) ||
+        (await deps.vault.exists(`${layout.wiki}/topics/${prior.slug}.md`));
+      if (!stillBacked) {
+        orphansPurged++;
+        orphanedSlugs.push(prior.slug);
+        continue; // drop -- no backing page in either folder
+      }
+    }
+
     if (prior.status === 'completed') {
       // Keep completed rows for one-week visibility, then expire.
       if (prior.completedAt && nowMs - new Date(prior.completedAt).getTime() > 7 * 86400_000) {
@@ -193,6 +225,7 @@ export async function proposeResearch(deps: ProposeDeps, opts: ProposeOptions = 
   // Cap.
   candidates.sort((a, b) => b.score - a.score);
   const trimmed = candidates.slice(0, cap);
+  const cappedSlugs = candidates.slice(cap).map((c) => c.slug);
 
   await writeResearchQueue(deps.vault, { candidates: trimmed }, layout);
   await appendLogEntry(
@@ -204,6 +237,28 @@ export async function proposeResearch(deps: ProposeDeps, opts: ProposeOptions = 
     },
     layout,
   );
+  if (orphansPurged > 0) {
+    await appendLogEntry(
+      deps.vault,
+      {
+        kind: 'research:orphans-purged',
+        message: `${orphansPurged} orphaned candidate(s) purged (no backing page): ${orphanedSlugs.slice(0, 10).join(', ')}`,
+        at: nowIso,
+      },
+      layout,
+    );
+  }
+  if (cappedSlugs.length > 0) {
+    await appendLogEntry(
+      deps.vault,
+      {
+        kind: 'research:queue-capped',
+        message: `${cappedSlugs.length} candidate(s) dropped by queueCap (${cap}): ${cappedSlugs.slice(0, 10).join(', ')}`,
+        at: nowIso,
+      },
+      layout,
+    );
+  }
 
   // G1: auto-drain decided-but-unexecuted candidates into research-execute
   // jobs. Off by default (intelligence.research.autoDrainEnabled) -- see

@@ -30,6 +30,15 @@ describe('research-propose job handler (G1)', () => {
     dir = await mkdtemp(join(tmpdir(), 'karpathy-rp-handler-'));
     vault = createFsAdapter(dir);
     await vault.ensureFolder('wiki/topics');
+    // Backing page for the 'fsrs' slug both tests below seed into the
+    // queue. Required as of G3's orphan-purge (Task 5): a queue candidate
+    // with no backing page in wiki/concepts or wiki/topics is now purged
+    // before proposeResearch's drain step ever sees it, which would make
+    // these tests fail (or pass) for the wrong reason.
+    await vault.create(
+      'wiki/topics/fsrs.md',
+      `---\nid: fsrs\ntype: topic\ntitle: FSRS\ncreated_at: 2026-01-01T00:00:00Z\nupdated_at: 2026-01-01T00:00:00Z\n---\nbody.`,
+    );
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
