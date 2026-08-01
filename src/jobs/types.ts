@@ -37,6 +37,7 @@ export const JobType = z.enum([
   'research-execute',
   'rebuild-vault-artifacts',
   'migrate-concept-glossary',
+  'glossary-synthesize',
   // Phase 1 (cascading curation) -------------------------------------------
   'evaluate-refresh-candidates',
   // Curator reconciliation (§22) -------------------------------------------

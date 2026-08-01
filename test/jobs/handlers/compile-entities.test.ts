@@ -98,3 +98,76 @@ describe('compile-entities handler — self-reference filtering', () => {
     expect(await vault.exists('wiki/concepts/glossary.md')).toBe(true);
   });
 });
+
+describe('compile-entities handler — glossary synthesis threshold', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  let enqueued: JobCreateInput[];
+
+  function makeCtx(overrides: Record<string, unknown> = {}): JobContext {
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir, ...overrides });
+    return {
+      vaultPath: dir, projectRoot: dir, vault,
+      enqueue: async (input: JobCreateInput) => {
+        enqueued.push(input);
+        return {
+          ...input, id: 'enq', status: 'pending', createdAt: new Date().toISOString(),
+          retryCount: 0, maxRetries: 3, debounceMs: 0,
+          priority: input.priority ?? 50, payload: input.payload ?? {}, trigger: input.trigger ?? 'cascade',
+        } as Job;
+      },
+      llm: makeLLM(), config,
+    };
+  }
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-glossary-threshold-'));
+    vault = createFsAdapter(dir);
+    enqueued = [];
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  async function makeSummary(path: string): Promise<void> {
+    await vault.ensureFolder('sources');
+    await vault.create(
+      path,
+      serializeNote(
+        { id: 's1', type: 'source_summary', title: 'S', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: 'some-project' },
+        '\nBody.\n',
+      ),
+    );
+  }
+
+  it('enqueues glossary-synthesize once a concept mention crosses the configured threshold', async () => {
+    const ctx = makeCtx({ intelligence: { richness: { glossarySynthesisThreshold: 2 } } });
+    await makeSummary('sources/s1.md');
+    await compileEntitiesHandler.execute(
+      makeJob('sources/s1.md', { concepts: [{ name: 'Efficiency', definition: 'first', confidence: 0.9 }] }),
+      ctx,
+    );
+    await makeSummary('sources/s2.md');
+    await compileEntitiesHandler.execute(
+      makeJob('sources/s2.md', { concepts: [{ name: 'Efficiency', definition: 'second', confidence: 0.9 }] }),
+      ctx,
+    );
+
+    const glossaryJobs = enqueued.filter((j) => j.type === 'glossary-synthesize');
+    expect(glossaryJobs).toHaveLength(1);
+    expect(glossaryJobs[0].payload).toEqual({ conceptName: 'Efficiency' });
+    expect(glossaryJobs[0].dedupeKey).toBe('glossary-synthesize:efficiency');
+  });
+
+  it('does not enqueue glossary-synthesize when the threshold is not crossed', async () => {
+    const ctx = makeCtx({ intelligence: { richness: { glossarySynthesisThreshold: 5 } } });
+    await makeSummary('sources/s1.md');
+    await compileEntitiesHandler.execute(
+      makeJob('sources/s1.md', { concepts: [{ name: 'Efficiency', definition: 'first', confidence: 0.9 }] }),
+      ctx,
+    );
+
+    expect(enqueued.filter((j) => j.type === 'glossary-synthesize')).toHaveLength(0);
+  });
+});
