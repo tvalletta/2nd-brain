@@ -21,6 +21,7 @@ import { join, dirname } from 'node:path';
 import type { KarpathyConfig } from '../config/schema.js';
 import { GLOBAL_CONFIG_PATH } from '../config/defaults.js';
 import { readResearchQueue } from '../maintenance/research-queue.js';
+import { layoutFromConfig } from '../vault/paths.js';
 import { createFsAdapter } from '../vault/fs-adapter.js';
 import { openStoreFromConfig } from '../embeddings/factory.js';
 import { readSchedulerState } from './scheduler.js';
@@ -448,7 +449,7 @@ async function checkResearchQueue(
     };
   }
   const vault = createFsAdapter(config.vaultPath);
-  const queue = await readResearchQueue(vault);
+  const queue = await readResearchQueue(vault, layoutFromConfig(config));
   const pending = queue.candidates.filter((c) => c.status === 'pending' && !c.decision).length;
   const approved = queue.candidates.filter((c) => c.status === 'pending' && c.decision && c.decision !== 'skip').length;
   const completed = queue.candidates.filter((c) => c.status === 'completed').length;

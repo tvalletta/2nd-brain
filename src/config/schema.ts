@@ -214,6 +214,19 @@ export const IntelligenceConfigSchema = z.object({
       queueCap: z.number().int().positive().default(50),
       autoExpireDays: z.number().int().positive().default(14),
       autoExpireBelowScore: z.number().min(0).max(1).default(0.3),
+      /**
+       * G1 (Sub-project D): when true, a decided-but-unexecuted candidate is
+       * automatically enqueued as a research-execute job by the next
+       * research-propose run, instead of requiring
+       * `karpathy intel research <slug> <depth>` by hand. Defaults to
+       * **false**: research-execute makes real LLM calls (budget-gated per
+       * G2, but still real cost) and -- depending on `search.provider` --
+       * spawns an external websearch MCP subprocess that has never been
+       * exercised against real traffic in the production vault. Ship built
+       * and one flip away; see docs/superpowers/specs/2026-07-31-sub-
+       * project-d-research-queue-redesign-design.md §14/§15.
+       */
+      autoDrainEnabled: z.boolean().default(false),
       depths: z
         .object({
           light: z.object({ rounds: z.number().int().positive().default(1), perRound: z.number().int().positive().default(3), topSources: z.number().int().positive().default(3) }).default({}),

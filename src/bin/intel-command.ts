@@ -18,7 +18,7 @@ import { runRotScan } from '../intelligence/rot-scan.js';
 import {
   readResearchQueue,
   writeResearchQueue,
-  RESEARCH_QUEUE_PATH,
+  researchQueuePath,
 } from '../maintenance/research-queue.js';
 import { tickScheduler, readSchedulerState, defaultSchedule } from '../intelligence/scheduler.js';
 import { maybeRunAutoBackfill } from '../intelligence/auto-backfill.js';
@@ -215,7 +215,7 @@ export async function intelCommand(args: string[]): Promise<void> {
     case 'queue': {
       const config = await loadConfig();
       const vault = createFsAdapter(config.vaultPath);
-      const queue = await readResearchQueue(vault);
+      const queue = await readResearchQueue(vault, config.layout);
       if (queue.candidates.length === 0) {
         process.stdout.write('Research queue is empty.\n');
         return;
@@ -322,15 +322,15 @@ export async function intelCommand(args: string[]): Promise<void> {
       }
       const config = await loadConfig();
       const vault = createFsAdapter(config.vaultPath);
-      const queue = await readResearchQueue(vault);
+      const queue = await readResearchQueue(vault, config.layout);
       if (queue.candidates.length === 0) {
         process.stdout.write('Queue is empty — nothing to approve. Run `karpathy intel propose` first.\n');
         return;
       }
       applyDecisions(queue.candidates, decisions);
-      await writeResearchQueue(vault, queue);
+      await writeResearchQueue(vault, queue, config.layout);
       const sorted = [...queue.candidates].sort((a, b) => b.score - a.score);
-      process.stdout.write(`Applied ${decisions.length} decision(s) to ${RESEARCH_QUEUE_PATH}:\n`);
+      process.stdout.write(`Applied ${decisions.length} decision(s) to ${researchQueuePath(config.layout)}:\n`);
       for (const d of decisions) {
         const target =
           d.match.index !== undefined ? sorted[d.match.index - 1] : queue.candidates.find((c) => c.slug.toLowerCase() === d.match.slug);
@@ -380,7 +380,7 @@ export async function intelCommand(args: string[]): Promise<void> {
       }
 
       // Research queue stats.
-      const queue = await readResearchQueue(vault);
+      const queue = await readResearchQueue(vault, config.layout);
       const pending = queue.candidates.filter((c) => c.status === 'pending' && !c.decision).length;
       const decided = queue.candidates.filter((c) => c.status === 'pending' && c.decision && c.decision !== 'skip').length;
       const completed = queue.candidates.filter((c) => c.status === 'completed').length;

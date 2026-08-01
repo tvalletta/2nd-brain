@@ -7,6 +7,7 @@ import {
   readResearchQueue,
   writeResearchQueue,
 } from '../../maintenance/research-queue.js';
+import { layoutFromConfig } from '../../vault/paths.js';
 
 const InputSchema = z.object({
   slug: z.string(),
@@ -16,7 +17,7 @@ const InputSchema = z.object({
 export const definition = {
   name: 'approve_research',
   description:
-    'Approve a research candidate at the chosen depth (light/medium/heavy) or skip it. Updates the research queue at wiki/_system/research-queue.md.',
+    'Approve a research candidate at the chosen depth (light/medium/heavy) or skip it. Updates the research queue.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -33,7 +34,8 @@ export const definition = {
 
 export async function handle(args: Record<string, unknown>, ctx: MCPContext) {
   const input = InputSchema.parse(args);
-  const queue = await readResearchQueue(ctx.vault);
+  const layout = layoutFromConfig(ctx.config);
+  const queue = await readResearchQueue(ctx.vault, layout);
   const candidate = queue.candidates.find((c) => c.slug === input.slug);
   if (!candidate) {
     return {
@@ -42,7 +44,7 @@ export async function handle(args: Record<string, unknown>, ctx: MCPContext) {
     };
   }
   candidate.decision = input.depth;
-  await writeResearchQueue(ctx.vault, queue);
+  await writeResearchQueue(ctx.vault, queue, layout);
   return {
     content: [
       {
