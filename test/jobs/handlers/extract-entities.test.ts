@@ -265,3 +265,59 @@ describe('extractEntitiesHandler / extractEntitiesRichHandler — transient erro
     expect((caught as Error).message).toContain('Rich entity extraction failed');
   });
 });
+
+const SLACK_FIXTURE = '* [@pino](https://adobe.enterprise.slack.com/team/U01FZCB8X29) is the lead.';
+
+describe('extract-entities — external-ID capture (B2c)', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  let enqueued: JobCreateInput[];
+
+  function makeCtx(llm: LLMClient): JobContext {
+    return {
+      vaultPath: dir, projectRoot: dir, vault,
+      enqueue: async (input: JobCreateInput) => {
+        enqueued.push(input);
+        return { ...input, id: 'enq', status: 'pending', createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0, priority: input.priority ?? 50, payload: input.payload ?? {}, trigger: input.trigger ?? 'cascade' } as Job;
+      },
+      llm,
+      config: KarpathyConfigSchema.parse({ vaultPath: dir }),
+    };
+  }
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-extract-extid-'));
+    vault = createFsAdapter(dir);
+    enqueued = [];
+    await vault.ensureFolder('outputs/source-summaries');
+    await vault.write('raw/offsite.md', SLACK_FIXTURE);
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('attaches externalIds to a matching person in the simple extract-entities -> link-concepts payload', async () => {
+    const summaryPath = 'outputs/source-summaries/offsite.md';
+    await vault.create(summaryPath, serializeNote(
+      { id: 's1', type: 'source_summary', title: 'Offsite', source_type: 'plaintext', source_path: 'raw/offsite.md', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+      '\n%% begin:entities %%\n%% end:entities %%\n',
+    ));
+    const llm: LLMClient = {
+      async complete() { return ''; },
+      async extractStructured() {
+        return { people: [{ name: 'pino', role: undefined, context: undefined, chunkRefs: [] }], projects: [], concepts: [], decisions: [], open_questions: [] } as never;
+      },
+    };
+    const ctx = makeCtx(llm);
+
+    await extractEntitiesHandler.execute(
+      { id: 'j1', type: 'extract-entities', status: 'running', priority: 50, targetPath: summaryPath, payload: { rawPath: 'raw/offsite.md' }, trigger: 'cascade', createdAt: new Date().toISOString(), retryCount: 0, maxRetries: 3, debounceMs: 0 },
+      ctx,
+    );
+
+    const linkJob = enqueued.find((j) => j.type === 'link-concepts');
+    const people = (linkJob!.payload!.entities as Record<string, unknown[]>).people as Array<{ name: string; externalIds: string[] }>;
+    expect(people[0].externalIds).toEqual(['slack:U01FZCB8X29']);
+  });
+});

@@ -479,4 +479,21 @@ describe('compileFromSource — person name-variant detection (B2c)', () => {
     expect(result.created).toHaveLength(1);
     expect(await vault.exists('wiki/entities/bryan.md')).toBe(true);
   });
+
+  it('resolves an existing external-ID-matched page instead of creating a duplicate, even with a completely different name', async () => {
+    await vault.atomicWrite(
+      'wiki/entities/pino.md',
+      serializeNote({ id: 'e1', type: 'entity', title: 'pino', canonical_name: 'pino', entity_kind: 'person', aliases: [], external_ids: ['slack:U01FZCB8X29'], created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' }, 'Body.'),
+    );
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir });
+
+    const result = await compileFromSource(
+      'sources/s1.md',
+      [makeEntity({ name: 'Frank Brown', kind: 'person', externalIds: ['slack:U01FZCB8X29'] })],
+      { vault, llm: makeLLM({}), config, projectRoot: dir },
+    );
+
+    expect(result.created).toHaveLength(0);
+    expect(result.updated).toContain('wiki/entities/pino.md');
+  });
 });

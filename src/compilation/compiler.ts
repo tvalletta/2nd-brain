@@ -37,6 +37,7 @@ export interface CompilableEntity {
     relationship: string;
   }>;
   chunkRefs: string[];
+  externalIds?: string[];
 }
 
 export async function compileFromSource(
@@ -59,7 +60,7 @@ export async function compileFromSource(
 
   for (const entity of entities) {
     const resolution = resolveEntity(
-      { name: entity.name, kind: entity.kind },
+      { name: entity.name, kind: entity.kind, externalIds: entity.externalIds },
       entityIndex,
       layout,
     );
@@ -129,6 +130,7 @@ export async function compileFromSource(
         definition: entity.definition,
         status: entity.status,
         chunkRefs: entity.chunkRefs,
+        externalIds: entity.externalIds,
       }, sourcePath, layout);
 
       existingPagePath = createdPath;

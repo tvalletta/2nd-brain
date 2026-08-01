@@ -10,6 +10,7 @@ import { createLogger } from '../../shared/logger.js';
 import type { SourceType } from '../../ingest/classifier.js';
 import type { ExtractedEntities } from '../../enrichment/entity-extractor.js';
 import { TransientLLMError } from '../../shared/errors.js';
+import { extractSlackHandleIds } from '../../ingest/external-id-extractor.js';
 
 const log = createLogger('handler:extract-entities');
 
@@ -23,6 +24,9 @@ export const extractEntitiesHandler: JobHandler = {
 
     // Read raw content
     const rawContent = await context.vault.read(rawPath);
+    // B2c Component 0: deterministic Slack-handle -> external-ID capture.
+    // No LLM call — same deterministic-lane cost as chunking.
+    const handleIdMap = extractSlackHandleIds(rawContent);
 
     // Read source summary
     const summaryContent = await context.vault.read(summaryPath);
@@ -71,7 +75,7 @@ export const extractEntitiesHandler: JobHandler = {
         type: 'link-concepts',
         targetPath: summaryPath,
         payload: {
-          entities: serializeEntitiesForPayload(entities),
+          entities: serializeEntitiesForPayload(entities, handleIdMap),
           sourceSummaryPath: summaryPath,
         },
         trigger: 'cascade',
@@ -135,9 +139,15 @@ function formatEntitiesMarkdown(entities: ExtractedEntities): string {
   return sections.join('\n') || 'No entities detected.';
 }
 
-function serializeEntitiesForPayload(entities: ExtractedEntities): Record<string, unknown> {
+function serializeEntitiesForPayload(
+  entities: ExtractedEntities,
+  handleIdMap: Map<string, string>,
+): Record<string, unknown> {
   return {
-    people: entities.people.map((p) => ({ name: p.name, role: p.role, context: p.context, chunkRefs: p.chunkRefs })),
+    people: entities.people.map((p) => ({
+      name: p.name, role: p.role, context: p.context, chunkRefs: p.chunkRefs,
+      externalIds: handleIdMap.has(p.name.toLowerCase()) ? [handleIdMap.get(p.name.toLowerCase())!] : [],
+    })),
     projects: entities.projects.map((p) => ({ name: p.name, status: p.status, context: p.context, chunkRefs: p.chunkRefs })),
     concepts: entities.concepts.map((c) => ({ name: c.name, definition: c.definition, chunkRefs: c.chunkRefs })),
     decisions: entities.decisions.map((d) => ({ name: d.title, status: d.status, context: d.context, chunkRefs: d.chunkRefs })),
@@ -161,6 +171,9 @@ export const extractEntitiesRichHandler: JobHandler = {
 
     // Read raw content
     const rawContent = await context.vault.read(rawPath);
+    // B2c Component 0: deterministic Slack-handle -> external-ID capture.
+    // No LLM call — same deterministic-lane cost as chunking.
+    const handleIdMap = extractSlackHandleIds(rawContent);
 
     // Read source summary
     const summaryContent = await context.vault.read(summaryPath);
@@ -212,7 +225,7 @@ export const extractEntitiesRichHandler: JobHandler = {
         type: 'compile-entities',
         targetPath: summaryPath,
         payload: {
-          entities: serializeRichEntitiesForPayload(entities),
+          entities: serializeRichEntitiesForPayload(entities, handleIdMap),
           sourceSummaryPath: summaryPath,
         },
         trigger: 'cascade',
@@ -303,11 +316,15 @@ function formatRichEntitiesMarkdown(entities: RichExtractedEntities): string {
   return sections.join('\n') || 'No entities detected.';
 }
 
-function serializeRichEntitiesForPayload(entities: RichExtractedEntities): Record<string, unknown> {
+function serializeRichEntitiesForPayload(
+  entities: RichExtractedEntities,
+  handleIdMap: Map<string, string>,
+): Record<string, unknown> {
   return {
     people: entities.people.map((p) => ({
       name: p.name, role: p.role, context: p.context,
       relationships: p.relationships, chunkRefs: p.chunkRefs,
+      externalIds: handleIdMap.has(p.name.toLowerCase()) ? [handleIdMap.get(p.name.toLowerCase())!] : [],
     })),
     projects: entities.projects.map((p) => ({
       name: p.name, status: p.status, context: p.context,

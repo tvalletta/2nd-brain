@@ -256,4 +256,26 @@ describe('link-concepts handler', () => {
     );
     expect(found).toBeDefined();
   });
+
+  it('resolves an existing external-ID-matched page instead of creating a duplicate (B2c)', async () => {
+    await vault.ensureFolder('Curated/wiki/entities');
+    await vault.create(
+      'Curated/wiki/entities/pino.md',
+      serializeNote(
+        { id: 'e1', type: 'entity', title: 'pino', canonical_name: 'pino', entity_kind: 'person', aliases: [], external_ids: ['slack:U01FZCB8X29'], created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+        '\n# pino\n\nContent.\n',
+      ),
+    );
+    const summaryPath = 'sources/s1.md';
+    await vault.create(summaryPath, '---\ntitle: S1\n---\n# S1\n');
+    const ctx = makeCtx();
+
+    await linkConceptsHandler.execute(
+      makeJob(summaryPath, { people: [{ name: 'Frank Brown', externalIds: ['slack:U01FZCB8X29'] }] }),
+      ctx,
+    );
+
+    const entityFiles = await vault.listMarkdownFiles('Curated/wiki/entities');
+    expect(entityFiles).toEqual(['Curated/wiki/entities/pino.md']);
+  });
 });

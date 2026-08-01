@@ -25,6 +25,7 @@ interface PayloadEntity {
   definition?: string;
   confidence?: number;
   chunkRefs?: string[];
+  externalIds?: string[];
 }
 
 export const linkConceptsHandler: JobHandler = {
@@ -81,7 +82,11 @@ export const linkConceptsHandler: JobHandler = {
     const mergedPages: string[] = [];
 
     for (const { entity, kind } of filtered) {
-      const resolution = resolveEntity({ name: entity.name, kind }, index, context.config.layout);
+      const resolution = resolveEntity(
+        { name: entity.name, kind, externalIds: entity.externalIds },
+        index,
+        context.config.layout,
+      );
       const info: ExtractedEntityInfo = {
         name: entity.name,
         kind,
@@ -90,6 +95,7 @@ export const linkConceptsHandler: JobHandler = {
         definition: entity.definition,
         status: entity.status,
         chunkRefs: entity.chunkRefs ?? [],
+        externalIds: entity.externalIds,
       };
 
       try {

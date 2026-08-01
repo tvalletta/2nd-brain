@@ -65,6 +65,7 @@ export const compileEntitiesHandler: JobHandler = {
         role: person.role,
         relationships: person.relationships ?? [],
         chunkRefs: person.chunkRefs ?? [],
+        externalIds: person.externalIds ?? [],
       });
     }
 
