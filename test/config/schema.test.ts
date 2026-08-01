@@ -84,3 +84,28 @@ describe('KarpathyConfigSchema — enrichment.personResolution', () => {
     expect(config.enrichment.personResolution.externalIdCaptureEnabled).toBe(true);
   });
 });
+
+describe('KarpathyConfigSchema — intelligence.lifecycle', () => {
+  it('defaults intelligence.lifecycle when omitted, with staleDraftArchiveEnabled OFF', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.intelligence.lifecycle).toEqual({
+      enabled: true,
+      staleDraftReportDays: 14,
+      staleDraftArchiveEnabled: false,
+      staleDraftArchiveDays: 30,
+      archiveQueueEnabled: true,
+    });
+  });
+
+  it('allows overriding staleDraftArchiveEnabled and staleDraftArchiveDays', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      intelligence: { lifecycle: { staleDraftArchiveEnabled: true, staleDraftArchiveDays: 45 } },
+    });
+    expect(config.intelligence.lifecycle.staleDraftArchiveEnabled).toBe(true);
+    expect(config.intelligence.lifecycle.staleDraftArchiveDays).toBe(45);
+    // Other fields still default.
+    expect(config.intelligence.lifecycle.staleDraftReportDays).toBe(14);
+    expect(config.intelligence.lifecycle.archiveQueueEnabled).toBe(true);
+  });
+});

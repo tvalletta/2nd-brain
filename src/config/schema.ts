@@ -88,6 +88,38 @@ export const EmbeddingsConfigSchema = z.object({
   timeoutMs: z.number().int().positive().default(5000),
 });
 
+/**
+ * Sub-project C: draft/archival lifecycle. Master gate (`enabled`) plus
+ * per-mechanism knobs — see docs/superpowers/specs/2026-07-31-sub-project-c-
+ * draft-archival-lifecycle-design.md §12 for the full rationale.
+ */
+export const LifecycleConfigSchema = z.object({
+  /** Master gate for all Sub-project C behavior (G0-G7). */
+  enabled: z.boolean().default(true),
+  /** G1: age (days) past which a draft source_summary appears in vault-health.md's
+   *  "Stale draft sources" table. */
+  staleDraftReportDays: z.number().int().positive().default(14),
+  /**
+   * G2: gate for auto-archiving stale drafts. Defaults to **false** — with a
+   * large real-vault backlog of already-stale drafts, defaulting this on
+   * would silently archive the majority of source_summary notes the moment
+   * the daily job first runs after deploy. G0/G1/G3-G5 and the reporting
+   * table are unaffected by this default and work identically regardless.
+   * An operator opts in explicitly once ready.
+   */
+  staleDraftArchiveEnabled: z.boolean().default(false),
+  /** G2: age (days) past which a draft source_summary is auto-archived (once
+   *  staleDraftArchiveEnabled is true). Should be >= staleDraftReportDays — a
+   *  note should always be reported as stale before it's auto-archived; see
+   *  `lifecycleConfigWarnings` in config/loader.ts for the (warn-only) check. */
+  staleDraftArchiveDays: z.number().int().positive().default(30),
+  /** G3: gate for rot-scan feeding its candidates into the archive queue.
+   *  Independent of maintenance.reviewEnabled — this queue is populated by
+   *  the always-scheduled weekly rot-scan job, not by the reviewEnabled-
+   *  gated detect-* jobs. */
+  archiveQueueEnabled: z.boolean().default(true),
+});
+
 export const IntelligenceConfigSchema = z.object({
   /** Per-content-type recency weight β in `α·sim + β·exp(-Δt/30)`. */
   recencyWeight: z
@@ -208,6 +240,8 @@ export const IntelligenceConfigSchema = z.object({
         .default({}),
     })
     .default({}),
+  /** Sub-project C: draft/archival lifecycle. */
+  lifecycle: LifecycleConfigSchema.default({}),
 });
 
 export const NotificationsConfigSchema = z.object({
