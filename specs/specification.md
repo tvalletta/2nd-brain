@@ -270,6 +270,12 @@ graph TD
     evaluate-refresh-candidates -->|threshold OR retrievability| topic-refresh
     topic-refresh -.->|cascadeDepth>=1: markDirty neighbors| neighbor_pending["neighbor.pending_evidence"]
 
+    %% Decay/rot (B2b: region-aware refresh + thin-content backfill)
+    decay-scan -->|stale OR thin, per REFRESH_TARGETS[type]| topic-refresh
+
+    %% Concept glossary threshold synthesis (B2b)
+    compile-entities -->|mention count crosses richness.glossarySynthesisThreshold| glossary-synthesize
+
     %% Agent path
     agent-ingest -->|if threshold reached| agent-synthesize-project
     agent-ingest --> update-backlinks
@@ -286,11 +292,13 @@ graph TD
     style update-backlinks fill:#e8f5e9
     style rebuild-index fill:#e8f5e9
     style rebuild-indexes fill:#e8f5e9
+    style glossary-synthesize fill:#e8f5e9
 ```
 
 **Key properties:**
 
-- Terminal jobs (green): `summarize-source`, `update-backlinks`, `rebuild-index`, `rebuild-indexes`, `detect-contradictions`, `detect-duplicates`, `detect-cross-project-patterns`, `generate-synthesis-skills`, `flush-hot-cache`, `lint-wiki`.
+- Terminal jobs (green): `summarize-source`, `update-backlinks`, `rebuild-index`, `rebuild-indexes`, `detect-contradictions`, `detect-duplicates`, `detect-cross-project-patterns`, `generate-synthesis-skills`, `flush-hot-cache`, `lint-wiki`, `glossary-synthesize`.
+- `decay-scan` resolves the region to refresh per note `type` via the `REFRESH_TARGETS` registry (`concept`/`topic` → `current-understanding`, `decision` → `outcome`, `project` hub → `overview`); `project_spec` has no entry and is never routed to `topic-refresh` (owned exclusively by `agent-synthesize-project`). Enqueue fires on retrievability decay OR thin/placeholder content — the latter gated on `intelligence.richness.enabled`.
 - Deduplication: `update-backlinks` and `rebuild-indexes` use `dedupeKey` + optional 5s debounce to collapse rapid cascades.
 - Two ingest paths diverge at `ingest-raw-file`: deterministic (classify → extract → compile → crosslink) vs agent (agent-ingest → synthesize).
 
@@ -849,11 +857,12 @@ When enabled, the layer adds:
 - **Embedding store** at `.karpathy/state/embeddings.sqlite` with a pluggable provider (deterministic offline / Bedrock Titan production);
 - **Two-stage retrieval with recency boost** powering the MCP `get_related` tool;
 - **Weekly hot-topics digest** at `wiki/digests/{YYYY-Www}.md`;
-- **Topic refresh** that integrates new evidence into a `current-understanding` protected region without overwriting contradictions;
-- **Decay scan** that enqueues refreshes for stale concept / topic / decision notes;
-- **Vault-rot diagnostic** at `wiki/_system/vault-health.md`;
+- **Topic refresh** that integrates new evidence into a note's primary richness region without overwriting contradictions — region-aware per note `type` (`concept`/`topic` → `current-understanding`, `decision` → `outcome`/`context`, `project` hub → `overview`), each with its own anti-fabrication prompt (an honest placeholder rather than a fabricated answer when evidence doesn't support one). Also renders resolved cascade-neighbors into `related-concepts` for `concept`/`topic` notes as a byproduct of the same pass;
+- **Decay scan** that enqueues refreshes for stale concept / topic / decision / project notes, and — independent of staleness, when the intelligence layer's optional richness backfill is enabled — force-enqueues a refresh for any note whose primary richness region is still empty or a known placeholder;
+- **Vault-rot diagnostic** at `wiki/_system/vault-health.md`, including a thin-content table (reporting-only) alongside the existing rot candidates;
 - **Human-in-the-loop research handshake**: gap detection writes a stack-ranked queue at `wiki/_system/research-queue.md`; the user picks depth (light / medium / heavy / skip) via Slack reply, queue edit, or the MCP `approve_research` tool; only then does `research-execute` fire;
-- **Significance gate** that drops generic / too-short entity names before they spawn noisy pages.
+- **Significance gate** that drops generic / too-short entity names before they spawn noisy pages;
+- **Concept glossary synthesis** — mention de-duplication is content-aware (not just source-reference-aware), and a concept that accumulates enough mentions gets a short LLM-synthesized rollup line above its raw mention list, replacing the placeholder-quality "first gloss frozen forever" state.
 
 All artefacts produced by the layer respect the protected-region overwrite policy in section 12. The research handshake explicitly forbids autonomous web research without user approval.
 

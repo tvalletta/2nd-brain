@@ -9,6 +9,7 @@ import { createLogger } from '../../shared/logger.js';
 import { upsertConceptMention } from '../../maintenance/concept-glossary.js';
 import { upsertActionItem } from '../../maintenance/action-items.js';
 import { layoutFromConfig, slugify } from '../../vault/paths.js';
+import { normalizeName } from '../../ingest/entity-resolver.js';
 import { basename } from 'node:path';
 
 const log = createLogger('handler:compile-entities');
@@ -82,11 +83,25 @@ export const compileEntitiesHandler: JobHandler = {
     const layout = layoutFromConfig(context.config);
     for (const concept of (entities.concepts ?? [])) {
       if (!shouldInclude(concept.name, 'concept', concept.confidence)) { filteredOut++; continue; }
-      await upsertConceptMention(context.vault, layout, {
-        name: concept.name,
-        gloss: concept.definition ?? '',
-        sourceRef: sourceSummaryPath,
-      });
+      const { crossedSynthesisThreshold } = await upsertConceptMention(
+        context.vault,
+        layout,
+        {
+          name: concept.name,
+          gloss: concept.definition ?? '',
+          sourceRef: sourceSummaryPath,
+        },
+        { synthesisThreshold: context.config.intelligence.richness.glossarySynthesisThreshold },
+      );
+      if (crossedSynthesisThreshold) {
+        await context.enqueue({
+          type: 'glossary-synthesize',
+          payload: { conceptName: concept.name },
+          trigger: 'cascade',
+          priority: 40,
+          dedupeKey: `glossary-synthesize:${normalizeName(concept.name)}`,
+        });
+      }
     }
 
     for (const topic of (entities.topics ?? [])) {

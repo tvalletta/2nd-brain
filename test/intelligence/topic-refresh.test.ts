@@ -15,7 +15,8 @@ import type { LLMClient } from '../../src/enrichment/llm-client.js';
 import { TransientLLMError } from '../../src/shared/errors.js';
 
 interface FakeResponse {
-  current_understanding: string;
+  primary: string;
+  secondary?: string;
   contradictions: { ref: string; reason: string }[];
   new_sources: string[];
 }
@@ -92,7 +93,7 @@ Initial framing — combine cosine sim with time decay.
     ]);
 
     const llm = fakeLLM({
-      current_understanding:
+      primary:
         'Recency-aware RAG combines bi-encoder + cross-encoder + a recency prior. Two-stage retrieval is now table stakes [1][2].',
       contradictions: [],
       new_sources: ['wiki/sessions/2026-04-15.md', 'wiki/sessions/2026-04-20.md'],
@@ -139,7 +140,7 @@ old understanding
       { doc_id: 'wiki/sessions/c.md', chunk_index: 0, chunk_hash: 'h', text: 'conflicting evidence', metadata: { type: 'session_summary' } },
     ]);
     const llm = fakeLLM({
-      current_understanding: 'updated with caveats',
+      primary: 'updated with caveats',
       contradictions: [{ ref: '[1]', reason: 'reverses prior claim' }],
       new_sources: [],
     });
@@ -198,7 +199,7 @@ Initial framing.
     ]);
 
     const llm = fakeLLM({
-      current_understanding: 'Two-stage retrieval pairs a bi-encoder with a [[Cross Encoder]] reranker [1].',
+      primary: 'Two-stage retrieval pairs a bi-encoder with a [[Cross Encoder]] reranker [1].',
       contradictions: [],
       new_sources: ['wiki/sources/2026-04-15.md'],
     });
@@ -268,7 +269,7 @@ Initial framing.
     ]);
 
     const llm = fakeLLM({
-      current_understanding: 'Two-stage retrieval pairs a bi-encoder with a [[Cross Encoder]] reranker [1].',
+      primary: 'Two-stage retrieval pairs a bi-encoder with a [[Cross Encoder]] reranker [1].',
       contradictions: [],
       new_sources: ['wiki/sources/2026-04-15.md'],
     });
@@ -318,7 +319,7 @@ old
       { doc_id: 'wiki/sources/a.md', chunk_index: 0, chunk_hash: 'h', text: 'evidence' },
     ]);
     const llm = fakeLLM({
-      current_understanding: 'See [[Foo]] for details.',
+      primary: 'See [[Foo]] for details.',
       contradictions: [],
       new_sources: [],
     });
@@ -354,12 +355,350 @@ stability: 60
 # Empty
 `,
     );
-    const llm = fakeLLM({ current_understanding: '', contradictions: [], new_sources: [] });
+    const llm = fakeLLM({ primary: '', contradictions: [], new_sources: [] });
     const result = await refreshTopic({ vault, llm, store, config }, topicPath, {
       nowMs: Date.parse('2026-05-01T00:00:00Z'),
     });
     expect(result.retrievedCount).toBe(0);
     expect(result.lastVerified.startsWith('2026-05-01')).toBe(true);
+  });
+
+  describe('generalized region dispatch (B2b)', () => {
+    it('decision: reads outcome as primary and context as secondary, and rewrites outcome', async () => {
+      const decisionPath = 'wiki/decisions/adopt-litellm.md';
+      await vault.ensureFolder('wiki/decisions');
+      await vault.create(
+        decisionPath,
+        `---
+id: d1
+type: decision
+title: Adopt LiteLLM proxy
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+stability: 30
+half_life_domain: decisions
+---
+# Adopt LiteLLM proxy
+
+## Context
+%% begin:context %%
+Needed multi-provider fallback.
+%% end:context %%
+
+## Outcome
+%% begin:outcome %%
+%% end:outcome %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sessions/a.md', chunk_index: 0, chunk_hash: 'h1', text: 'LiteLLM proxy shipped and is routing traffic in production' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'The LiteLLM proxy shipped and now routes all traffic in production [1].',
+        contradictions: [],
+        new_sources: ['wiki/sessions/a.md'],
+      });
+
+      const result = await refreshTopic({ vault, llm, store, config }, decisionPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      expect(result.retrievedCount).toBe(1);
+      const { body } = parseNote(await vault.read(decisionPath));
+      expect(body).toContain('The LiteLLM proxy shipped');
+      expect(body).toContain('Needed multi-provider fallback.'); // context untouched (no secondary in response)
+    });
+
+    it('decision: rewrites context when the LLM response includes a secondary field (positive path)', async () => {
+      const decisionPath = 'wiki/decisions/adopt-litellm-2.md';
+      await vault.ensureFolder('wiki/decisions');
+      await vault.create(
+        decisionPath,
+        `---
+id: d1b
+type: decision
+title: Adopt LiteLLM proxy (v2)
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+stability: 30
+half_life_domain: decisions
+---
+# Adopt LiteLLM proxy (v2)
+
+## Context
+%% begin:context %%
+Needed multi-provider fallback.
+%% end:context %%
+
+## Outcome
+%% begin:outcome %%
+%% end:outcome %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sessions/a2.md', chunk_index: 0, chunk_hash: 'h1b', text: 'LiteLLM proxy shipped and is routing traffic in production' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'The LiteLLM proxy shipped and now routes all traffic in production [1].',
+        secondary: 'Originally needed multi-provider fallback; evidence now also shows it absorbs regional outages.',
+        contradictions: [],
+        new_sources: ['wiki/sessions/a2.md'],
+      });
+
+      await refreshTopic({ vault, llm, store, config }, decisionPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      const { body, data } = parseNote(await vault.read(decisionPath));
+      expect(body).toContain('The LiteLLM proxy shipped');
+      expect(body).toContain('it absorbs regional outages.');
+      expect(body).not.toContain('Needed multi-provider fallback.'); // context WAS rewritten
+      expect(data.protected_regions as string[]).toContain('context');
+    });
+
+    it('project: reads overview as primary and rewrites it', async () => {
+      const hubPath = 'wiki/projects/second-brain/_index.md';
+      await vault.ensureFolder('wiki/projects/second-brain');
+      await vault.create(
+        hubPath,
+        `---
+id: p1
+type: project
+title: Second Brain
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+stability: 30
+---
+# Second Brain
+
+## Overview
+%% begin:overview %%
+Pending enrichment.
+%% end:overview %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sessions/b.md', chunk_index: 0, chunk_hash: 'h2', text: 'Second Brain is a local-first knowledge system built on an Obsidian vault' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'Second Brain is a local-first knowledge system built on an Obsidian vault [1].',
+        contradictions: [],
+        new_sources: ['wiki/sessions/b.md'],
+      });
+
+      await refreshTopic({ vault, llm, store, config }, hubPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      const { body } = parseNote(await vault.read(hubPath));
+      expect(body).toContain('local-first knowledge system built on an Obsidian vault');
+      expect(body).not.toContain('Pending enrichment.');
+    });
+
+    it('an unmapped type (e.g. project_spec) bumps last_verified and clears pending_evidence without touching the body or calling the LLM', async () => {
+      const specPath = 'wiki/projects/second-brain/technical.md';
+      await vault.ensureFolder('wiki/projects/second-brain');
+      await vault.create(
+        specPath,
+        `---
+id: s1
+type: project_spec
+title: Second Brain technical
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+pending_evidence:
+  - ref: wiki/sources/x.md
+    at: 2026-04-01T00:00:00Z
+pending_evidence_count: 1
+---
+# Second Brain technical
+%% begin:content %%
+Some agent-authored content.
+%% end:content %%
+`,
+      );
+
+      // Populate the store with a chunk that WOULD match this note's
+      // title/tldr if retrieval were ever reached. With the correct
+      // dispatch order (type-check before retrieval), this store entry is
+      // never even queried — `refreshTopic` short-circuits on the unmapped
+      // type before calling `retrieve()` at all. Without this fixture, a
+      // regression that reorders retrieval ahead of the type-check (or
+      // resolves a fallback target for unmapped types) would still see 0
+      // hits from an empty store and take the equivalently-shaped
+      // "no evidence" branch — passing this test for the wrong reason.
+      // With a real hit available, that same regression would instead
+      // reach `extractStructured`, which this fixture makes fail loudly.
+      await store.upsert([
+        { doc_id: 'wiki/sessions/spec-evidence.md', chunk_index: 0, chunk_hash: 'hspec', text: 'Second Brain technical details and architecture notes' },
+      ]);
+
+      let called = false;
+      const llm: LLMClient = {
+        async complete() { called = true; return ''; },
+        async extractStructured() { called = true; throw new Error('should not be called'); },
+      };
+
+      const result = await refreshTopic({ vault, llm, store, config }, specPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      expect(called).toBe(false);
+      expect(result.retrievedCount).toBe(0);
+      expect(result.pendingCleared).toBe(1);
+
+      const { data, body } = parseNote(await vault.read(specPath));
+      expect(body).toContain('Some agent-authored content.');
+      expect(data.pending_evidence_count).toBe(0);
+      expect(data.last_verified).toBeDefined();
+    });
+
+    it('G4: renders resolved neighbors into related-concepts for a topic note', async () => {
+      const topicPath = 'wiki/topics/recency-aware-rag.md';
+      await vault.ensureFolder('wiki/concepts');
+      await vault.create(
+        'wiki/concepts/cross-encoder.md',
+        `---
+id: c1
+type: concept
+title: Cross Encoder
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+# Cross Encoder
+`,
+      );
+      await vault.create(
+        topicPath,
+        `---
+id: t7
+type: topic
+title: Recency-aware RAG
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+stability: 30
+---
+# Recency-aware RAG
+%% begin:current-understanding %%
+Initial framing.
+%% end:current-understanding %%
+
+## Connected Concepts
+%% begin:related-concepts %%
+%% end:related-concepts %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sources/a.md', chunk_index: 0, chunk_hash: 'h1', text: 'cross encoder reranking helps' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'Two-stage retrieval pairs a bi-encoder with a [[Cross Encoder]] reranker [1].',
+        contradictions: [],
+        new_sources: ['wiki/sources/a.md'],
+      });
+
+      await refreshTopic({ vault, llm, store, config }, topicPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      const { body, data } = parseNote(await vault.read(topicPath));
+      expect(body).toContain('%% begin:related-concepts %%\n- [[wiki/concepts/cross-encoder]]\n%% end:related-concepts %%');
+      expect(data.protected_regions as string[]).toContain('related-concepts');
+    });
+
+    it('G4: writes the "no connected concepts" sentinel when zero neighbors resolve', async () => {
+      const topicPath = 'wiki/topics/isolated.md';
+      await vault.create(
+        topicPath,
+        `---
+id: t8
+type: topic
+title: Isolated Topic
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+stability: 30
+---
+# Isolated Topic
+%% begin:current-understanding %%
+old
+%% end:current-understanding %%
+
+%% begin:related-concepts %%
+%% end:related-concepts %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sources/b.md', chunk_index: 0, chunk_hash: 'h2', text: 'unrelated evidence with no wikilinks' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'A self-contained rewrite with no links to any other note [1].',
+        contradictions: [],
+        new_sources: [],
+      });
+
+      await refreshTopic({ vault, llm, store, config }, topicPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      const { body } = parseNote(await vault.read(topicPath));
+      expect(body).toContain('_No connected concepts identified in the current synthesis._');
+    });
+
+    it('G4: a topic with a resolvable neighbor but NO pre-existing related-concepts region is left untouched (no stray region appended)', async () => {
+      const topicPath = 'wiki/topics/no-related-region.md';
+      await vault.ensureFolder('wiki/concepts');
+      await vault.create(
+        'wiki/concepts/cross-encoder-2.md',
+        `---
+id: c2b
+type: concept
+title: Cross Encoder Two
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+# Cross Encoder Two
+`,
+      );
+      await vault.create(
+        topicPath,
+        `---
+id: t9
+type: topic
+title: No Related Region Topic
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+stability: 30
+---
+# No Related Region Topic
+%% begin:current-understanding %%
+Initial framing.
+%% end:current-understanding %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sources/c.md', chunk_index: 0, chunk_hash: 'h3', text: 'cross encoder reranking helps' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'Two-stage retrieval pairs a bi-encoder with a [[Cross Encoder Two]] reranker [1].',
+        contradictions: [],
+        new_sources: ['wiki/sources/c.md'],
+      });
+
+      await refreshTopic({ vault, llm, store, config }, topicPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      const { body, data } = parseNote(await vault.read(topicPath));
+      expect(body).not.toContain('related-concepts');
+      expect(body).not.toContain('_No connected concepts identified in the current synthesis._');
+      expect((data.protected_regions as string[] | undefined) ?? []).not.toContain('related-concepts');
+    });
   });
 
   describe('synthesis failure', () => {

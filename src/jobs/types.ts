@@ -37,6 +37,7 @@ export const JobType = z.enum([
   'research-execute',
   'rebuild-vault-artifacts',
   'migrate-concept-glossary',
+  'glossary-synthesize',
   // Phase 1 (cascading curation) -------------------------------------------
   'evaluate-refresh-candidates',
   // Curator reconciliation (§22) -------------------------------------------
@@ -47,7 +48,7 @@ export const JobType = z.enum([
 ]);
 export type JobType = z.infer<typeof JobType>;
 
-export const JobTrigger = z.enum(['file-watcher', 'hook', 'timer', 'cli', 'cascade']);
+export const JobTrigger = z.enum(['file-watcher', 'hook', 'timer', 'cli', 'cascade', 'thin-content']);
 export type JobTrigger = z.infer<typeof JobTrigger>;
 
 export const JobSchema = z.object({

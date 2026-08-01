@@ -7,6 +7,7 @@ import { buildSynthesisSystemPrompt, buildSynthesisUserPrompt } from '../../agen
 import { createDigestCache } from '../../agent/digest-cache.js';
 import { createIngestTracker } from '../../agent/ingest-tracker.js';
 import { listProjectSpecs } from '../../compilation/project-hub.js';
+import { layoutFromConfig } from '../../vault/paths.js';
 import { createLogger } from '../../shared/logger.js';
 import type { AgentContext } from '../../agent/tool-registry.js';
 
@@ -33,11 +34,12 @@ export const agentSynthesizeProjectHandler: JobHandler = {
     const { vault, config } = context;
     const stateDir = join(context.projectRoot, config.stateDir);
     const agentConfig = config.agent;
+    const layout = layoutFromConfig(config);
 
     log.info('Starting full re-synthesis', { projectSlug });
 
     // 1. Read current hub state
-    const indexPath = `wiki/projects/${projectSlug}/_index.md`;
+    const indexPath = `${layout.wiki}/projects/${projectSlug}/_index.md`;
     let currentHub: string;
     try {
       currentHub = await vault.read(indexPath);
@@ -47,7 +49,7 @@ export const agentSynthesizeProjectHandler: JobHandler = {
     }
 
     // 2. Read current sub-specs
-    const specs = await listProjectSpecs(vault, projectSlug);
+    const specs = await listProjectSpecs(vault, projectSlug, layout);
     const currentSpecs: Array<{ specType: string; content: string }> = [];
     for (const spec of specs) {
       try {

@@ -34,6 +34,7 @@ import { detectEntityDupesHandler } from './detect-entity-dupes.js';
 import { reEnrichNoteHandler } from './re-enrich-note.js';
 import { syncFtsIndexHandler } from './sync-fts-index.js';
 import { migrateConceptGlossaryHandler } from './migrate-concept-glossary.js';
+import { glossarySynthesizeHandler } from './glossary-synthesize.js';
 
 export function createHandlerRegistry(): Map<JobType, JobHandler> {
   const map = new Map<JobType, JobHandler>();
@@ -73,6 +74,7 @@ export function createHandlerRegistry(): Map<JobType, JobHandler> {
   map.set('re-enrich-note', reEnrichNoteHandler);
   map.set('sync-fts-index', syncFtsIndexHandler);
   map.set('migrate-concept-glossary', migrateConceptGlossaryHandler);
+  map.set('glossary-synthesize', glossarySynthesizeHandler);
 
   // Verify every job type has a registered handler
   for (const jobType of JobType.options) {

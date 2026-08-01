@@ -40,3 +40,22 @@ describe('KarpathyConfigSchema — review', () => {
     expect(config.review.confidenceEscalationThreshold).toBe(0.5);
   });
 });
+
+describe('KarpathyConfigSchema — intelligence.richness', () => {
+  it('defaults intelligence.richness when omitted', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.intelligence.richness).toEqual({
+      enabled: true,
+      glossarySynthesisThreshold: 3,
+    });
+  });
+
+  it('allows overriding enabled and glossarySynthesisThreshold', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      intelligence: { richness: { enabled: false, glossarySynthesisThreshold: 5 } },
+    });
+    expect(config.intelligence.richness.enabled).toBe(false);
+    expect(config.intelligence.richness.glossarySynthesisThreshold).toBe(5);
+  });
+});

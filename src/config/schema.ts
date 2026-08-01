@@ -146,6 +146,19 @@ export const IntelligenceConfigSchema = z.object({
     })
     .default({}),
   /**
+   * B2b: wiki content richness. Gates thin-content backfill (decay-scan) and
+   * glossary threshold synthesis (compile-entities → glossary-synthesize).
+   */
+  richness: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** Mention count at which a glossary concept gets an LLM-synthesized rollup line
+       *  instead of just a bare list of raw glosses. Re-fires every `threshold` mentions
+       *  past the last synthesis (e.g. at 3, then 6, then 9...). */
+      glossarySynthesisThreshold: z.number().int().positive().default(3),
+    })
+    .default({}),
+  /**
    * Phase 0: per-day LLM call budget by tier. The reflection scheduler picks
    * highest-value targets within this ceiling. Set any tier to 0 to disable
    * a tier; set the parent to `enabled: false` for unlimited (legacy).
