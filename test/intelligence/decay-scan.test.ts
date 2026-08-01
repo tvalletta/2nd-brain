@@ -240,6 +240,86 @@ ${'A'.repeat(200)}
     expect(result.thinContentEnqueued).toBe(1);
     expect(enqueued).toHaveLength(1);
   });
+
+  it('respects intelligence.richness.enabled: false — a thin note above the retrievability threshold no longer force-enqueues (regression for config-wiring gap)', async () => {
+    const richnessDisabledConfig = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp',
+      intelligence: { richness: { enabled: false } },
+    });
+    await vault.ensureFolder('wiki/decisions');
+    const today = new Date().toISOString();
+    await vault.create(
+      'wiki/decisions/thin-disabled.md',
+      `---
+id: d3
+type: decision
+title: Thin decision, richness disabled
+created_at: ${today}
+updated_at: ${today}
+last_verified: ${today}
+stability: 365
+half_life_domain: decisions
+---
+## Context
+%% begin:context %%
+Some context.
+%% end:context %%
+
+## Outcome
+%% begin:outcome %%
+%% end:outcome %%`,
+    );
+
+    const enqueued: JobCreateInput[] = [];
+    const result = await runDecayScan({
+      vault,
+      config: richnessDisabledConfig,
+      enqueue: async (i) => { enqueued.push(i); return {} as never; },
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+    });
+
+    // Above the retrievability threshold AND thin — but richness is
+    // disabled, so the thin-content backfill (G2) must not fire. Falls
+    // back to pre-B2b behavior: no enqueue at all for a fresh, non-decayed
+    // note, regardless of placeholder content.
+    expect(result.thinContentEnqueued).toBe(0);
+    expect(result.refreshEnqueued).toBe(0);
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it('intelligence.richness.enabled: false does not suppress retrievability-driven refresh (only the thin-content force-enqueue)', async () => {
+    const richnessDisabledConfig = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp',
+      intelligence: { richness: { enabled: false } },
+    });
+    await vault.create(
+      'wiki/concepts/old-disabled.md',
+      `---
+id: c3
+type: concept
+title: Old concept, richness disabled
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+last_verified: 2025-01-01T00:00:00Z
+stability: 30
+half_life_domain: concept
+---
+body content for old concept.`,
+    );
+
+    const enqueued: JobCreateInput[] = [];
+    const result = await runDecayScan({
+      vault,
+      config: richnessDisabledConfig,
+      enqueue: async (i) => { enqueued.push(i); return {} as never; },
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+    });
+
+    expect(result.refreshEnqueued).toBe(1);
+    expect(result.thinContentEnqueued).toBe(0);
+    expect(enqueued[0].trigger).toBe('cascade');
+    expect(enqueued[0].priority).toBe(75);
+  });
 });
 
 describe('rot-scan (C2)', () => {

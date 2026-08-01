@@ -105,12 +105,19 @@ export async function runDecayScan(deps: DecayScanDeps): Promise<DecayScanResult
       }
 
       const target = (REFRESH_TARGETS as Record<string, RefreshTarget>)[type];
+      // Gated on intelligence.richness.enabled: this is the thin-content
+      // backfill mechanism (G2), not the underlying region-aware refresh
+      // dispatch (G1) — disabling richness must fall back to the pre-B2b
+      // behavior of enqueuing topic-refresh from retrievability decay alone.
+      const richnessEnabled = deps.config.intelligence.richness.enabled;
       const relatedConceptsEmpty =
+        richnessEnabled &&
         (type === 'concept' || type === 'topic') &&
         !(getProtectedRegion(body, 'related-concepts') ?? '').trim();
       const isThin =
-        (target ? isPlaceholderContent(target, getProtectedRegion(body, target.primaryRegion)) : false) ||
-        relatedConceptsEmpty;
+        richnessEnabled &&
+        ((target ? isPlaceholderContent(target, getProtectedRegion(body, target.primaryRegion)) : false) ||
+          relatedConceptsEmpty);
 
       if ((r < refreshThreshold || isThin) && target) {
         await deps.enqueue({

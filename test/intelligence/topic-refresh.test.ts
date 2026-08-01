@@ -410,6 +410,54 @@ Needed multi-provider fallback.
       expect(body).toContain('Needed multi-provider fallback.'); // context untouched (no secondary in response)
     });
 
+    it('decision: rewrites context when the LLM response includes a secondary field (positive path)', async () => {
+      const decisionPath = 'wiki/decisions/adopt-litellm-2.md';
+      await vault.ensureFolder('wiki/decisions');
+      await vault.create(
+        decisionPath,
+        `---
+id: d1b
+type: decision
+title: Adopt LiteLLM proxy (v2)
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+stability: 30
+half_life_domain: decisions
+---
+# Adopt LiteLLM proxy (v2)
+
+## Context
+%% begin:context %%
+Needed multi-provider fallback.
+%% end:context %%
+
+## Outcome
+%% begin:outcome %%
+%% end:outcome %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sessions/a2.md', chunk_index: 0, chunk_hash: 'h1b', text: 'LiteLLM proxy shipped and is routing traffic in production' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'The LiteLLM proxy shipped and now routes all traffic in production [1].',
+        secondary: 'Originally needed multi-provider fallback; evidence now also shows it absorbs regional outages.',
+        contradictions: [],
+        new_sources: ['wiki/sessions/a2.md'],
+      });
+
+      await refreshTopic({ vault, llm, store, config }, decisionPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      const { body, data } = parseNote(await vault.read(decisionPath));
+      expect(body).toContain('The LiteLLM proxy shipped');
+      expect(body).toContain('it absorbs regional outages.');
+      expect(body).not.toContain('Needed multi-provider fallback.'); // context WAS rewritten
+      expect(data.protected_regions as string[]).toContain('context');
+    });
+
     it('project: reads overview as primary and rewrites it', async () => {
       const hubPath = 'wiki/projects/second-brain/_index.md';
       await vault.ensureFolder('wiki/projects/second-brain');
@@ -472,6 +520,21 @@ Some agent-authored content.
 %% end:content %%
 `,
       );
+
+      // Populate the store with a chunk that WOULD match this note's
+      // title/tldr if retrieval were ever reached. With the correct
+      // dispatch order (type-check before retrieval), this store entry is
+      // never even queried — `refreshTopic` short-circuits on the unmapped
+      // type before calling `retrieve()` at all. Without this fixture, a
+      // regression that reorders retrieval ahead of the type-check (or
+      // resolves a fallback target for unmapped types) would still see 0
+      // hits from an empty store and take the equivalently-shaped
+      // "no evidence" branch — passing this test for the wrong reason.
+      // With a real hit available, that same regression would instead
+      // reach `extractStructured`, which this fixture makes fail loudly.
+      await store.upsert([
+        { doc_id: 'wiki/sessions/spec-evidence.md', chunk_index: 0, chunk_hash: 'hspec', text: 'Second Brain technical details and architecture notes' },
+      ]);
 
       let called = false;
       const llm: LLMClient = {
@@ -584,6 +647,57 @@ old
 
       const { body } = parseNote(await vault.read(topicPath));
       expect(body).toContain('_No connected concepts identified in the current synthesis._');
+    });
+
+    it('G4: a topic with a resolvable neighbor but NO pre-existing related-concepts region is left untouched (no stray region appended)', async () => {
+      const topicPath = 'wiki/topics/no-related-region.md';
+      await vault.ensureFolder('wiki/concepts');
+      await vault.create(
+        'wiki/concepts/cross-encoder-2.md',
+        `---
+id: c2b
+type: concept
+title: Cross Encoder Two
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+# Cross Encoder Two
+`,
+      );
+      await vault.create(
+        topicPath,
+        `---
+id: t9
+type: topic
+title: No Related Region Topic
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+stability: 30
+---
+# No Related Region Topic
+%% begin:current-understanding %%
+Initial framing.
+%% end:current-understanding %%
+`,
+      );
+      await store.upsert([
+        { doc_id: 'wiki/sources/c.md', chunk_index: 0, chunk_hash: 'h3', text: 'cross encoder reranking helps' },
+      ]);
+
+      const llm = fakeLLM({
+        primary: 'Two-stage retrieval pairs a bi-encoder with a [[Cross Encoder Two]] reranker [1].',
+        contradictions: [],
+        new_sources: ['wiki/sources/c.md'],
+      });
+
+      await refreshTopic({ vault, llm, store, config }, topicPath, {
+        nowMs: Date.parse('2026-05-01T00:00:00Z'),
+      });
+
+      const { body, data } = parseNote(await vault.read(topicPath));
+      expect(body).not.toContain('related-concepts');
+      expect(body).not.toContain('_No connected concepts identified in the current synthesis._');
+      expect((data.protected_regions as string[] | undefined) ?? []).not.toContain('related-concepts');
     });
   });
 
