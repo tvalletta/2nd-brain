@@ -127,15 +127,15 @@ describe('intelligence scheduler', () => {
     expect(enq[0].dedupeKey).toBe('d');
   });
 
-  it('defaultSchedule({}) matches the 6 baseline jobs (reviewEnabled defaults off)', () => {
+  it('defaultSchedule({}) matches the 7 baseline jobs (reviewEnabled defaults off)', () => {
     const schedule = defaultSchedule();
-    expect(schedule).toHaveLength(6);
+    expect(schedule).toHaveLength(7);
     expect(schedule.map((j) => j.type)).not.toContain('detect-contradictions');
   });
 
   it('defaultSchedule({ reviewEnabled: true }) adds the 3 review/dedup jobs', () => {
     const schedule = defaultSchedule({ reviewEnabled: true });
-    expect(schedule).toHaveLength(9);
+    expect(schedule).toHaveLength(10);
     const types = schedule.map((j) => j.type);
     expect(types).toContain('detect-contradictions');
     expect(types).toContain('detect-duplicates');

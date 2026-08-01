@@ -79,6 +79,13 @@ export function defaultSchedule(opts: ScheduleOptions = {}): ScheduledJob[] {
       dedupeKey: 'rot-scan',
     },
     {
+      type: 'archive-stale-drafts',
+      cadence: 'daily',
+      intervalSec: 86_400,
+      priority: 90,
+      dedupeKey: 'archive-stale-drafts',
+    },
+    {
       type: 'digest-weekly',
       cadence: 'weekly',
       intervalSec: 7 * 86_400,
