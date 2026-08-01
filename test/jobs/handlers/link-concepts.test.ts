@@ -279,3 +279,110 @@ describe('link-concepts handler', () => {
     expect(entityFiles).toEqual(['Curated/wiki/entities/pino.md']);
   });
 });
+
+describe('link-concepts handler — draft/archived -> active promotion (Sub-project C, G0/G7)', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+
+  function makeCtx(overrides: Record<string, unknown> = {}): JobContext {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      enrichment: { significanceGate: 'off' },
+      ...overrides,
+    });
+    return {
+      vaultPath: dir,
+      projectRoot: dir,
+      vault,
+      enqueue: async (input) => ({
+        ...input, id: 'enq', status: 'pending', createdAt: new Date().toISOString(),
+        retryCount: 0, maxRetries: 3, debounceMs: 0,
+        priority: input.priority ?? 50, payload: input.payload ?? {}, trigger: input.trigger ?? 'cascade',
+      } as Job),
+      llm: makeLLM(),
+      config,
+    };
+  }
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-link-concepts-promo-'));
+    vault = createFsAdapter(dir);
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  // `id` is threaded through explicitly (rather than a fixed literal) so each
+  // note's serialized frontmatter is byte-distinct across test cases in this
+  // block — gray-matter caches parsed results keyed by the raw content
+  // string, and two notes with identical frontmatter+body would otherwise
+  // share a mutable `data` object across unrelated test cases within this file.
+  async function makeSummary(path: string, status: string, id: string): Promise<void> {
+    await vault.ensureFolder('sources');
+    await vault.create(
+      path,
+      serializeNote(
+        { id, type: 'source_summary', title: 'S', status, created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z' },
+        '\nBody.\n',
+      ),
+    );
+  }
+
+  it('promotes a draft source to active once entities are linked', async () => {
+    const summaryPath = 'sources/draft.md';
+    await makeSummary(summaryPath, 'draft', 's1');
+
+    await linkConceptsHandler.execute(makeJob(summaryPath, {}), makeCtx());
+
+    const { data } = parseNote(await vault.read(summaryPath));
+    expect(data.ingest_status).toBe('linked');
+    expect(data.status).toBe('active');
+  });
+
+  it('recovers an archived source to active, clearing archived_at/archived_reason (G7)', async () => {
+    const summaryPath = 'sources/archived.md';
+    await vault.ensureFolder('sources');
+    await vault.create(
+      summaryPath,
+      serializeNote(
+        {
+          id: 's2', type: 'source_summary', title: 'S', status: 'archived',
+          archived_at: '2026-04-01T00:00:00Z', archived_reason: 'stale-draft (40d at ingest_status: detected)',
+          created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z',
+        },
+        '\nBody.\n',
+      ),
+    );
+
+    await linkConceptsHandler.execute(makeJob(summaryPath, {}), makeCtx());
+
+    const { data } = parseNote(await vault.read(summaryPath));
+    expect(data.status).toBe('active');
+    expect(data.archived_at).toBeUndefined();
+    expect(data.archived_reason).toBeUndefined();
+  });
+
+  it('never overrides an explicit rejected status', async () => {
+    const summaryPath = 'sources/rejected.md';
+    await makeSummary(summaryPath, 'rejected', 's3');
+
+    await linkConceptsHandler.execute(makeJob(summaryPath, {}), makeCtx());
+
+    const { data } = parseNote(await vault.read(summaryPath));
+    expect(data.status).toBe('rejected');
+  });
+
+  it('does not promote when intelligence.lifecycle.enabled is false', async () => {
+    const summaryPath = 'sources/draft-disabled.md';
+    await makeSummary(summaryPath, 'draft', 's4');
+
+    await linkConceptsHandler.execute(
+      makeJob(summaryPath, {}),
+      makeCtx({ intelligence: { lifecycle: { enabled: false } } }),
+    );
+
+    const { data } = parseNote(await vault.read(summaryPath));
+    expect(data.status).toBe('draft');
+  });
+});

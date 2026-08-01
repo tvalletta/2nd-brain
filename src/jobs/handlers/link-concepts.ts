@@ -222,6 +222,18 @@ ${CLOSE_TAG('analysis')}
     const { data, body } = parseNote(summaryContent);
     data.links = [...new Set([...(data.links as string[] ?? []), ...linkedPaths])];
     data.ingest_status = 'linked';
+    // Sub-project C (G0/G7): a source that just got linked has demonstrably
+    // been processed — promote out of 'draft', and out of 'archived' if a
+    // prior stale-draft sweep or manual edit had parked it there. Never
+    // touch 'rejected' — an explicit human rejection is a stronger signal
+    // than pipeline progress. gray-matter's stringifier throws on
+    // `undefined`-valued keys, so clearing archived_at/archived_reason uses
+    // `delete`, not assignment.
+    if (context.config.intelligence.lifecycle.enabled && data.status !== 'active' && data.status !== 'rejected') {
+      data.status = 'active';
+      delete data.archived_at;
+      delete data.archived_reason;
+    }
     data.updated_at = nowISO();
     const updated = serializeNote(data, body);
     await context.vault.atomicWrite(summaryPath, updated);

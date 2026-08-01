@@ -97,6 +97,53 @@ describe('compile-entities handler — self-reference filtering', () => {
 
     expect(await vault.exists('wiki/concepts/glossary.md')).toBe(true);
   });
+
+  it('promotes a draft self-referential source to active on the early-return path (Sub-project C, G0)', async () => {
+    const { slugify } = await import('../../../src/vault/paths.js');
+    const selfSlug = slugify(dir.split('/').pop()!);
+
+    const summaryPath = 'sources/self-draft.md';
+    await vault.ensureFolder('sources');
+    await vault.create(
+      summaryPath,
+      serializeNote(
+        { id: 's3', type: 'source_summary', title: 'Self session', status: 'draft', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: selfSlug },
+        '\nBody.\n',
+      ),
+    );
+
+    await compileEntitiesHandler.execute(makeJob(summaryPath, {}), makeCtx());
+
+    const { data } = parseNote(await vault.read(summaryPath));
+    expect(data.ingest_status).toBe('linked');
+    expect(data.status).toBe('active');
+  });
+
+  it('recovers an archived self-referential source to active on the early-return path (G7)', async () => {
+    const { slugify } = await import('../../../src/vault/paths.js');
+    const selfSlug = slugify(dir.split('/').pop()!);
+
+    const summaryPath = 'sources/self-archived.md';
+    await vault.ensureFolder('sources');
+    await vault.create(
+      summaryPath,
+      serializeNote(
+        {
+          id: 's4', type: 'source_summary', title: 'Self session', status: 'archived',
+          archived_at: '2026-04-01T00:00:00Z', archived_reason: 'stale-draft (40d at ingest_status: detected)',
+          created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: selfSlug,
+        },
+        '\nBody.\n',
+      ),
+    );
+
+    await compileEntitiesHandler.execute(makeJob(summaryPath, {}), makeCtx());
+
+    const { data } = parseNote(await vault.read(summaryPath));
+    expect(data.status).toBe('active');
+    expect(data.archived_at).toBeUndefined();
+    expect(data.archived_reason).toBeUndefined();
+  });
 });
 
 describe('compile-entities handler — glossary synthesis threshold', () => {
@@ -169,5 +216,18 @@ describe('compile-entities handler — glossary synthesis threshold', () => {
     );
 
     expect(enqueued.filter((j) => j.type === 'glossary-synthesize')).toHaveLength(0);
+  });
+
+  it('promotes a draft source to active on the normal completion path (Sub-project C, G0)', async () => {
+    const ctx = makeCtx();
+    await makeSummary('sources/normal-draft.md');
+    await compileEntitiesHandler.execute(
+      makeJob('sources/normal-draft.md', { concepts: [{ name: 'Some Concept', definition: 'x', confidence: 0.9 }] }),
+      ctx,
+    );
+
+    const { data } = parseNote(await vault.read('sources/normal-draft.md'));
+    expect(data.ingest_status).toBe('linked');
+    expect(data.status).toBe('active');
   });
 });

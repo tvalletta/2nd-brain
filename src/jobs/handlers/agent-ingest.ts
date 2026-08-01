@@ -54,6 +54,14 @@ export const agentIngestHandler: JobHandler = {
 
         data.ingest_status = 'linked';
         data.conversation_intent = result.completionData?.conversation_intent;
+        // Sub-project C (G0/G7): agent-ingest's own completion path — a 4th
+        // call site (alongside link-concepts.ts and compile-entities.ts's
+        // two sites) that stamps ingest_status: 'linked'. Same guard.
+        if (context.config.intelligence.lifecycle.enabled && data.status !== 'active' && data.status !== 'rejected') {
+          data.status = 'active';
+          delete data.archived_at;
+          delete data.archived_reason;
+        }
 
         const updated = serializeNote(data, body);
         await context.vault.atomicWrite(summaryPath, updated);
