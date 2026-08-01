@@ -1,6 +1,6 @@
 # Design: Draft/Archival Lifecycle (Sub-project C)
 
-**Status:** Approved for plan write-up (design conversation complete 2026-07-31, run in minimal-interaction mode per operator instruction; see §16 for the one open item that needs Tom's confirmation — it does not block plan write-up).
+**Status:** Approved for plan write-up (design conversation complete 2026-07-31, run in minimal-interaction mode per operator instruction; §19's mass-archival rollout question decided by defaulting the risky switch OFF rather than deciding whether Tom should turn it on — see §19).
 **Sub-project:** C. Standalone — not part of the three-way "Content Richness" split (B2a/B2b/B2c), which is complete and merged. No soft dependency on B2's code; this spec reuses the **pattern** Sub-project A established (a persisted, human-resolved queue file) via a new, separate queue, and reuses B1/intelligence-plan machinery (`decay-scan.ts`, `rot-scan.ts`) that already exists.
 
 ## 0. Context
@@ -618,8 +618,14 @@ export const LifecycleConfigSchema = z.object({
    *  "Stale draft sources" table. */
   staleDraftReportDays: z.number().int().positive().default(14),
   /** G2: gate for auto-archiving stale drafts. Independent of `enabled` so an
-   *  operator can keep G0/G1/G3-G5 while opting out of auto-archival specifically. */
-  staleDraftArchiveEnabled: z.boolean().default(true),
+   *  operator can keep G0/G1/G3-G5 while opting out of auto-archival specifically.
+   *  Defaults to false (see §19): with 11,499 real drafts already past the
+   *  archive threshold in Tom's live vault, defaulting this on would silently
+   *  archive the large majority of Curated/sources/ the moment the daily job
+   *  first runs after deploy. Ships fully built and one config flip away —
+   *  G0/G1/G3-G5 and the reporting table are unaffected by this default and
+   *  work identically regardless. */
+  staleDraftArchiveEnabled: z.boolean().default(false),
   /** G2: age (days) past which a draft source_summary is auto-archived. Must be
    *  >= staleDraftReportDays (validated at config-load time, matching the existing
    *  pattern for intelligence.decay's two-threshold refresh/archive relationship). */
@@ -713,7 +719,7 @@ archived_reason: undefined   # free text; set on archival, cleared on un-archiva
 - `review-queue.ts`: `approveReviewItem` on a fixture `status: draft` review note ends at `status: active` alongside the existing `review_state: approved` assertion; `rejectReviewItem` ends at `status: rejected` alongside existing `review_state: rejected`/`resolution_state: dismissed` assertions. Regression: existing approve/reject tests' other field assertions (the `analysis` protected-region append, `updated_at` bump) pass unmodified.
 - CLI (`karpathy archivist`): scripted-stdin test (matching whatever pattern `curatorCommand`'s own tests use, if any exist, or a fresh integration test under `test/bin/`) exercising all five keystrokes (`a`/`k`/`S`/`s`/`q`) against a fixture archive-queue with one pending entry each; asserts the right frontmatter mutation + queue resolution per keystroke; `q` leaves remaining entries `pending`.
 - MCP (`resolve_archive_candidate`): added to `test/mcp/tools.test.ts` per CLAUDE.md's documented convention — no-args call returns pending entries (capped at 10); `{id, decision: 'archive'}` mutates the target note and resolves the entry; `{id, decision: 'supersede'}` without `supersededByPath` errors; `{id, decision: 'supersede', supersededByPath: <nonexistent>}` errors (path-existence guard, mirroring `reconcile_entities`'s existing merge/rename guard); unknown `id` errors on both entries points.
-- `config/schema.ts`: `LifecycleConfigSchema` defaults (`enabled: true`, `staleDraftReportDays: 14`, `staleDraftArchiveEnabled: true`, `staleDraftArchiveDays: 30`, `archiveQueueEnabled: true`); the load-time warning fires when `staleDraftArchiveDays < staleDraftReportDays` and does not throw.
+- `config/schema.ts`: `LifecycleConfigSchema` defaults (`enabled: true`, `staleDraftReportDays: 14`, `staleDraftArchiveEnabled: false`, `staleDraftArchiveDays: 30`, `archiveQueueEnabled: true`); the load-time warning fires when `staleDraftArchiveDays < staleDraftReportDays` and does not throw.
 
 ## 18. Explicitly deferred
 
@@ -724,8 +730,8 @@ archived_reason: undefined   # free text; set on archival, cleared on un-archiva
 - **A `karpathy archivist --auto` power-user flag** analogous to `karpathy merge --auto`'s existing explicit-opt-in bypass of the reconciliation queue — not requested by the audit, and auto-archiving wiki content without review is an explicit non-goal (§1); could be revisited if Tom later decides the review step is unnecessary friction for high-confidence rot candidates.
 - **`session_summary` archival** — not scoped (§1); revisit if the vault's 5,809-and-growing session-summary count ever becomes a demonstrated problem the way `source_summary` was.
 
-## 19. Open questions for Tom
+## 19. Decision (resolved 2026-07-31, operating in minimal-interaction mode)
 
-- **`staleDraftArchiveDays: 30` (default) will archive the large majority of the 11,499 currently-draft source summaries on its very first scheduled run**, per §15's first edge case. This is the correct, intended behavior for closing the gap this spec describes — but it's a big, one-time, vault-wide change the moment it ships and the daily job first fires. Recommend reviewing the count via the new "Stale draft sources" vault-health table (which will show the same backlog with zero side effects) for at least one cycle before enabling `staleDraftArchiveEnabled` in the live config, if a gentler rollout is preferred. Not a design fork — the mechanism is the same either way, just a rollout-sequencing preference; noted here rather than decided unilaterally since it affects Tom's live vault content immediately upon deploy.
+- **`staleDraftArchiveEnabled` defaults to `false` (decided, see §12).** `staleDraftArchiveDays: 30` would archive the large majority of the 11,499 currently-draft source summaries on the very first scheduled run after deploy — correct, intended behavior for closing the gap this spec describes, but a big, one-time, vault-wide change to Tom's live data the moment the daily job first fires. Unlike the code-scope questions resolved unilaterally in B2b/B2c's design docs, this one mass-transforms real, already-existing vault content the instant it's enabled — not something to default on without Tom's explicit go-ahead. Resolution: ship G0/G1/G3/G4/G5 and the "Stale draft sources" reporting table fully enabled by default (zero risk — visibility only), but G2's actual auto-archival stays off until Tom flips `staleDraftArchiveEnabled: true` himself, after watching the report table for a cycle if he wants a gentler rollout. This is flagged directly to Tom (not decided on his behalf) as the one action in this whole sub-project that only he should switch on.
 
 Everything else in this design was resolved directly from the specification, the existing code's established conventions (Sub-project A's queue pattern, B2b/B2c's report-table pattern), and the concrete vault evidence in §0 — no other product/scope call required a stop.
