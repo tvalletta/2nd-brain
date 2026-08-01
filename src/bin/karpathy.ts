@@ -1011,13 +1011,14 @@ async function mergeCommand(args: string[]): Promise<void> {
   let sourcePath: string | null = null;
   let targetPath: string | null = null;
 
+  const resolveOptions = { nicknameMatchingEnabled: config.enrichment.personResolution.nicknameMatchingEnabled };
   for (const kind of kinds) {
     if (!sourcePath) {
-      const sr = resolveEntity({ name: sourceName, kind }, index, config.layout);
+      const sr = resolveEntity({ name: sourceName, kind }, index, config.layout, resolveOptions);
       if (sr.status === 'matched') sourcePath = sr.matchedPath!;
     }
     if (!targetPath) {
-      const tr = resolveEntity({ name: targetName, kind }, index, config.layout);
+      const tr = resolveEntity({ name: targetName, kind }, index, config.layout, resolveOptions);
       if (tr.status === 'matched') targetPath = tr.matchedPath!;
     }
   }

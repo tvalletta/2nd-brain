@@ -93,11 +93,18 @@ export async function buildEntityIndex(
   return { bySlug, byCanonicalName, byAlias, byExternalId, allEntries };
 }
 
+export interface ResolveEntityOptions {
+  /** Gate for the nickname/honorific/initials fuzzy-match tier (B2c Component 1). Defaults to true — pass `config.enrichment.personResolution.nicknameMatchingEnabled` at call sites that have config in scope. */
+  nicknameMatchingEnabled?: boolean;
+}
+
 export function resolveEntity(
   entity: { name: string; kind: EntityKind; externalIds?: string[] },
   index: EntityIndex,
   layout: VaultLayout = DEFAULT_LAYOUT,
+  options: ResolveEntityOptions = {},
 ): EntityResolution {
+  const nicknameMatchingEnabled = options.nicknameMatchingEnabled ?? true;
   // Tier 0 (highest priority): exact external-ID match. Definitionally
   // certain — no fuzziness, no honorific stripping needed.
   for (const id of entity.externalIds ?? []) {
@@ -114,7 +121,7 @@ export function resolveEntity(
   }
 
   const { name, kind } = entity;
-  const normalizedInput = kind === 'person' ? stripHonorifics(name) : name;
+  const normalizedInput = kind === 'person' && nicknameMatchingEnabled ? stripHonorifics(name) : name;
   const normalized = normalizeName(normalizedInput);
   const slug = slugify(normalizedInput);
   const folder = kindToFolder(layout, kind);
@@ -144,7 +151,7 @@ export function resolveEntity(
   }
 
   // 5. Fuzzy matching
-  const fuzzyMatches = findFuzzyMatches(normalizedInput, index.allEntries, folder, kind);
+  const fuzzyMatches = findFuzzyMatches(normalizedInput, index.allEntries, folder, kind, nicknameMatchingEnabled);
   if (fuzzyMatches.length === 1) {
     return {
       entityName: name,
@@ -173,8 +180,9 @@ export function resolveEntities(
   entities: Array<{ name: string; kind: EntityKind }>,
   index: EntityIndex,
   layout: VaultLayout = DEFAULT_LAYOUT,
+  options: ResolveEntityOptions = {},
 ): EntityResolution[] {
-  return entities.map((e) => resolveEntity(e, index, layout));
+  return entities.map((e) => resolveEntity(e, index, layout, options));
 }
 
 // --- Name normalization ---
@@ -195,6 +203,7 @@ function findFuzzyMatches(
   entries: EntityIndexEntry[],
   preferredFolder: string,
   kind: EntityKind,
+  nicknameMatchingEnabled: boolean,
 ): Array<{ path: string; confidence: number }> {
   const normalized = normalizeName(name);
   const nameWords = new Set(normalized.split(/\s+/));
@@ -219,7 +228,7 @@ function findFuzzyMatches(
     // full-string edit distance also happens to fall within that tier's
     // generic threshold, but at a much lower, less meaningful confidence —
     // the nickname-aware match should take priority when it applies.
-    if (kind === 'person') {
+    if (kind === 'person' && nicknameMatchingEnabled) {
       const entryTokens = entryNormalized.split(/\s+/);
       const nameTokens = normalized.split(/\s+/);
       if (nameTokens.length >= 2 && entryTokens.length >= 2) {

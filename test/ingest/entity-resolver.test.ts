@@ -451,6 +451,66 @@ describe('entity-resolver', () => {
     });
   });
 
+  describe('resolveEntity — nicknameMatchingEnabled: false gate (B2c required fix)', () => {
+    it('does not strip honorifics when the gate is disabled', async () => {
+      await createEntityFile('wiki/entities/sarah-chen.md', {
+        id: 'e1', title: 'Sarah Chen', canonical_name: 'Sarah Chen', entity_kind: 'person',
+        type: 'entity', aliases: [],
+        created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+      });
+      const index = await buildEntityIndex(vault);
+
+      const resolution = resolveEntity(
+        { name: 'Dr. Sarah Chen', kind: 'person' },
+        index,
+        DEFAULT_LAYOUT,
+        { nicknameMatchingEnabled: false },
+      );
+      // No honorific stripping -> "dr. sarah chen" slug/name never matches
+      // "sarah-chen.md" via any of tiers 1-4, and the full-string Levenshtein
+      // distance from the honorific-laden form is too large to fall into the
+      // generic fuzzy tier either.
+      expect(resolution.status).toBe('new');
+    });
+
+    it('does not apply the nickname/initials tier when the gate is disabled', async () => {
+      // "Bob Newman" vs "Robert Newman" is chosen (mirroring the existing
+      // "Bob Effect"/"Robert Effect" isolation test above) specifically
+      // because its full-string Levenshtein distance is too large to also
+      // fall into the pre-existing, kind-independent generic fuzzy tier —
+      // unlike "Matt"/"Matthew", which coincidentally matches generically
+      // regardless of this gate. This isolates the person-only nickname
+      // tier itself, not some other tier that happens to produce the same
+      // result.
+      await createEntityFile('wiki/entities/robert-newman.md', {
+        id: 'e1', title: 'Robert Newman', canonical_name: 'Robert Newman', entity_kind: 'person',
+        type: 'entity', aliases: [],
+        created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+      });
+      const index = await buildEntityIndex(vault);
+
+      const resolution = resolveEntity(
+        { name: 'Bob Newman', kind: 'person' },
+        index,
+        DEFAULT_LAYOUT,
+        { nicknameMatchingEnabled: false },
+      );
+      expect(resolution.status).toBe('new');
+    });
+
+    it('defaults to enabled when no options are passed (backward-compatible)', async () => {
+      await createEntityFile('wiki/entities/matthew-newman.md', {
+        id: 'e1', title: 'Matthew Newman', canonical_name: 'Matthew Newman', entity_kind: 'person',
+        type: 'entity', aliases: [],
+        created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+      });
+      const index = await buildEntityIndex(vault);
+
+      const resolution = resolveEntity({ name: 'Matt Newman', kind: 'person' }, index);
+      expect(resolution.status).toBe('matched');
+    });
+  });
+
   describe('resolveEntities', () => {
     it('resolves multiple entities', async () => {
       await createEntityFile('wiki/entities/john-smith.md', {

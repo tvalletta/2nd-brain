@@ -25,8 +25,11 @@ export const extractEntitiesHandler: JobHandler = {
     // Read raw content
     const rawContent = await context.vault.read(rawPath);
     // B2c Component 0: deterministic Slack-handle -> external-ID capture.
-    // No LLM call — same deterministic-lane cost as chunking.
-    const handleIdMap = extractSlackHandleIds(rawContent);
+    // No LLM call — same deterministic-lane cost as chunking. Gated on
+    // enrichment.personResolution.externalIdCaptureEnabled.
+    const handleIdMap = context.config.enrichment.personResolution.externalIdCaptureEnabled
+      ? extractSlackHandleIds(rawContent)
+      : new Map<string, string>();
 
     // Read source summary
     const summaryContent = await context.vault.read(summaryPath);
@@ -139,6 +142,41 @@ function formatEntitiesMarkdown(entities: ExtractedEntities): string {
   return sections.join('\n') || 'No entities detected.';
 }
 
+/**
+ * Resolve external IDs for an extracted person name against the current raw
+ * document's handle -> external-ID map (B2c Component 0).
+ *
+ * Two tiers, in order:
+ *  1. Exact match: the extracted name IS the handle itself (e.g. the LLM
+ *     extracted "pino" verbatim, matching a raw `[@pino](...)` link).
+ *  2. Token match (B2c whole-branch-review addition): the handle appears as
+ *     a whole, case-insensitive token within a fuller "First Last" extracted
+ *     name in the SAME document (e.g. "Bryan Pino" contains the token
+ *     "pino") — this is exactly the real vault's Bryan/Pino evidence trail
+ *     (design §0.1), just within a single document rather than across two.
+ *     Deliberately token-EQUALITY, not substring-containment: matching a
+ *     short handle as a raw substring anywhere inside a longer name (e.g.
+ *     handle "ed" inside "Edward Norton") would be a materially higher-risk,
+ *     lower-precision match this design explicitly avoids.
+ *
+ * This does NOT close the case of a handle that's a surname+initial
+ * abbreviation not literally present as a token in the extracted name (e.g.
+ * handle "brownf" vs extracted name "Frank Brown") — nor the cross-document
+ * case with no shared raw text at all. Both are accepted residual gaps; see
+ * design doc §12.
+ */
+function resolveExternalIdsForName(name: string, handleIdMap: Map<string, string>): string[] {
+  const lowerName = name.toLowerCase();
+  const exact = handleIdMap.get(lowerName);
+  if (exact) return [exact];
+
+  const tokens = lowerName.split(/\s+/);
+  for (const [handle, id] of handleIdMap) {
+    if (tokens.includes(handle)) return [id];
+  }
+  return [];
+}
+
 function serializeEntitiesForPayload(
   entities: ExtractedEntities,
   handleIdMap: Map<string, string>,
@@ -146,7 +184,7 @@ function serializeEntitiesForPayload(
   return {
     people: entities.people.map((p) => ({
       name: p.name, role: p.role, context: p.context, chunkRefs: p.chunkRefs,
-      externalIds: handleIdMap.has(p.name.toLowerCase()) ? [handleIdMap.get(p.name.toLowerCase())!] : [],
+      externalIds: resolveExternalIdsForName(p.name, handleIdMap),
     })),
     projects: entities.projects.map((p) => ({ name: p.name, status: p.status, context: p.context, chunkRefs: p.chunkRefs })),
     concepts: entities.concepts.map((c) => ({ name: c.name, definition: c.definition, chunkRefs: c.chunkRefs })),
@@ -172,8 +210,11 @@ export const extractEntitiesRichHandler: JobHandler = {
     // Read raw content
     const rawContent = await context.vault.read(rawPath);
     // B2c Component 0: deterministic Slack-handle -> external-ID capture.
-    // No LLM call — same deterministic-lane cost as chunking.
-    const handleIdMap = extractSlackHandleIds(rawContent);
+    // No LLM call — same deterministic-lane cost as chunking. Gated on
+    // enrichment.personResolution.externalIdCaptureEnabled.
+    const handleIdMap = context.config.enrichment.personResolution.externalIdCaptureEnabled
+      ? extractSlackHandleIds(rawContent)
+      : new Map<string, string>();
 
     // Read source summary
     const summaryContent = await context.vault.read(summaryPath);
@@ -324,7 +365,7 @@ function serializeRichEntitiesForPayload(
     people: entities.people.map((p) => ({
       name: p.name, role: p.role, context: p.context,
       relationships: p.relationships, chunkRefs: p.chunkRefs,
-      externalIds: handleIdMap.has(p.name.toLowerCase()) ? [handleIdMap.get(p.name.toLowerCase())!] : [],
+      externalIds: resolveExternalIdsForName(p.name, handleIdMap),
     })),
     projects: entities.projects.map((p) => ({
       name: p.name, status: p.status, context: p.context,

@@ -63,6 +63,7 @@ export async function compileFromSource(
       { name: entity.name, kind: entity.kind, externalIds: entity.externalIds },
       entityIndex,
       layout,
+      { nicknameMatchingEnabled: config.enrichment.personResolution.nicknameMatchingEnabled },
     );
 
     log.debug('Entity resolution', {

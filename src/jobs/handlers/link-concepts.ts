@@ -86,6 +86,7 @@ export const linkConceptsHandler: JobHandler = {
         { name: entity.name, kind, externalIds: entity.externalIds },
         index,
         context.config.layout,
+        { nicknameMatchingEnabled: context.config.enrichment.personResolution.nicknameMatchingEnabled },
       );
       const info: ExtractedEntityInfo = {
         name: entity.name,
