@@ -207,6 +207,14 @@ describe('archive-queue', () => {
       expect(data.status).toBe('archived');
       expect(data.archived_reason).toBe('superseded');
       expect(data.superseded_by).toEqual(['wiki/concepts/new.md']);
+
+      // Repeat call with the same entry/path (e.g. a retried job, or a second
+      // resolution attempt against a still-stale in-memory `entry` object) —
+      // `superseded_by`'s Set-based merge in `applyArchiveDecision` must not
+      // duplicate the entry on a second write to the same target note.
+      await applyArchiveDecision(vault, entry, 'supersede', 'wiki/concepts/new.md', layout);
+      const { data: dataAfterRepeat } = parseNote(await vault.read('wiki/concepts/old.md'));
+      expect(dataAfterRepeat.superseded_by).toEqual(['wiki/concepts/new.md']);
     });
 
     it('"keep" resolves the queue entry without touching the note', async () => {
