@@ -177,12 +177,17 @@ describe('compile-entities handler — glossary synthesis threshold', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  async function makeSummary(path: string): Promise<void> {
+  // `id` defaults to 's1' to preserve existing call sites verbatim. Pass an
+  // explicit, unique id for any new test in this block — gray-matter caches
+  // parsed results keyed by the raw content string, and two fixtures with
+  // identical frontmatter+body would otherwise share a mutable `data` object
+  // across unrelated test cases within this file.
+  async function makeSummary(path: string, id = 's1'): Promise<void> {
     await vault.ensureFolder('sources');
     await vault.create(
       path,
       serializeNote(
-        { id: 's1', type: 'source_summary', title: 'S', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: 'some-project' },
+        { id, type: 'source_summary', title: 'S', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: 'some-project' },
         '\nBody.\n',
       ),
     );
@@ -220,7 +225,7 @@ describe('compile-entities handler — glossary synthesis threshold', () => {
 
   it('promotes a draft source to active on the normal completion path (Sub-project C, G0)', async () => {
     const ctx = makeCtx();
-    await makeSummary('sources/normal-draft.md');
+    await makeSummary('sources/normal-draft.md', 's5');
     await compileEntitiesHandler.execute(
       makeJob('sources/normal-draft.md', { concepts: [{ name: 'Some Concept', definition: 'x', confidence: 0.9 }] }),
       ctx,
