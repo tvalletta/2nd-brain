@@ -94,6 +94,49 @@ describe('entity-writer', () => {
       expect(timeline).toContain('[[meeting]]');
     });
 
+    it('sets identity_uncertain=true and stores external_ids for a bare-named person', async () => {
+      const info: ExtractedEntityInfo = {
+        name: 'Bryan',
+        kind: 'person',
+        chunkRefs: [],
+        externalIds: ['slack:U01FZCB8X29'],
+      };
+      const resolution: EntityResolution = {
+        entityName: 'Bryan',
+        entityKind: 'person',
+        status: 'new',
+        suggestedPath: 'wiki/entities/bryan.md',
+        confidence: 0,
+      };
+
+      const path = await createEntityPage(vault, resolution, info, 'outputs/source-summaries/offsite.md');
+      const { data } = parseNote(await vault.read(path));
+
+      expect(data.identity_uncertain).toBe(true);
+      expect(data.external_ids).toEqual(['slack:U01FZCB8X29']);
+    });
+
+    it('sets identity_uncertain=false for a "First Last" person and defaults external_ids to []', async () => {
+      const info: ExtractedEntityInfo = {
+        name: 'Bryan Pino',
+        kind: 'person',
+        chunkRefs: [],
+      };
+      const resolution: EntityResolution = {
+        entityName: 'Bryan Pino',
+        entityKind: 'person',
+        status: 'new',
+        suggestedPath: 'wiki/entities/bryan-pino.md',
+        confidence: 0,
+      };
+
+      const path = await createEntityPage(vault, resolution, info, 'outputs/source-summaries/offsite.md');
+      const { data } = parseNote(await vault.read(path));
+
+      expect(data.identity_uncertain).toBe(false);
+      expect(data.external_ids).toEqual([]);
+    });
+
     it('creates a project hub', async () => {
       const info: ExtractedEntityInfo = {
         name: 'Phoenix',
@@ -260,6 +303,27 @@ describe('entity-writer', () => {
       const content = await vault.read(path);
       const { data } = parseNote(content);
       expect(data.aliases).toContain('Alice Johnson');
+    });
+
+    it('unions external_ids without duplication across two calls with overlapping IDs', async () => {
+      const path = await createTestEntityPage();
+
+      const first = await mergeEntityPage(
+        vault, path,
+        { name: 'Alice', kind: 'person', context: 'first mention', chunkRefs: [], externalIds: ['slack:U1', 'slack:U2'] },
+        'outputs/source-summaries/a.md',
+      );
+      expect(first.fieldsUpdated).toContain('external_ids');
+
+      const second = await mergeEntityPage(
+        vault, path,
+        { name: 'Alice', kind: 'person', context: 'second mention', chunkRefs: [], externalIds: ['slack:U2', 'slack:U3'] },
+        'outputs/source-summaries/b.md',
+      );
+      expect(second.fieldsUpdated).toContain('external_ids');
+
+      const { data } = parseNote(await vault.read(path));
+      expect((data.external_ids as string[]).sort()).toEqual(['slack:U1', 'slack:U2', 'slack:U3']);
     });
 
     it('appends to summary with citation', async () => {

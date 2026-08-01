@@ -147,6 +147,36 @@ describe('type-specific schemas', () => {
     expect(result.success).toBe(true);
   });
 
+  it('defaults external_ids and identity_uncertain on entity when omitted', () => {
+    const result = EntitySchema.parse({
+      id: 'ent-2',
+      type: 'entity',
+      title: 'Bryan',
+      created_at: '2026-04-11T00:00:00.000Z',
+      updated_at: '2026-04-11T00:00:00.000Z',
+      entity_kind: 'person',
+      canonical_name: 'Bryan',
+    });
+    expect(result.external_ids).toEqual([]);
+    expect(result.identity_uncertain).toBe(false);
+  });
+
+  it('accepts explicit external_ids and identity_uncertain on entity', () => {
+    const result = EntitySchema.parse({
+      id: 'ent-3',
+      type: 'entity',
+      title: 'Bryan',
+      created_at: '2026-04-11T00:00:00.000Z',
+      updated_at: '2026-04-11T00:00:00.000Z',
+      entity_kind: 'person',
+      canonical_name: 'Bryan',
+      external_ids: ['slack:U01FZCB8X29'],
+      identity_uncertain: true,
+    });
+    expect(result.external_ids).toEqual(['slack:U01FZCB8X29']);
+    expect(result.identity_uncertain).toBe(true);
+  });
+
   it('validates contradiction', () => {
     const result = ContradictionSchema.safeParse({
       id: 'contra-1',
