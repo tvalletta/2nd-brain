@@ -17,6 +17,7 @@ export function vaultHealthPath(layout: VaultLayout): string {
 }
 const REGION_ID = 'vault-health';
 const THIN_REGION_ID = 'vault-health-thin-content';
+const BARE_IDENTITY_REGION_ID = 'vault-health-bare-identity';
 
 const STALE_DAYS = 180;
 function scanFolders(layout: VaultLayout): string[] {
@@ -46,10 +47,16 @@ export interface ThinContentEntry {
   region: string;
 }
 
+export interface BareIdentityEntry {
+  path: string;
+  title: string;
+}
+
 export interface RotScanResult {
   scanned: number;
   candidates: RotEntry[];
   thinCandidates: ThinContentEntry[];
+  bareIdentityCandidates: BareIdentityEntry[];
   reportPath: string;
 }
 
@@ -80,6 +87,7 @@ export async function runRotScan(
   const healthPath = vaultHealthPath(layout);
   const candidates: RotEntry[] = [];
   const thinCandidates: ThinContentEntry[] = [];
+  const bareIdentityCandidates: BareIdentityEntry[] = [];
   let scanned = 0;
 
   for (const folder of scanFolders(layout)) {
@@ -120,19 +128,24 @@ export async function runRotScan(
       if (target && isPlaceholderContent(target, getProtectedRegion(body, target.primaryRegion))) {
         thinCandidates.push({ path, title: asString(fm.title) || path, region: target.primaryRegion });
       }
+
+      if (asString(fm.entity_kind) === 'person' && fm.identity_uncertain === true) {
+        bareIdentityCandidates.push({ path, title: asString(fm.title) || path });
+      }
     }
   }
 
   candidates.sort((a, b) => b.ageDays - a.ageDays);
   await vault.ensureFolder(layout.system);
-  await vault.atomicWrite(healthPath, renderReport(scanned, candidates, thinCandidates, nowMs));
-  return { scanned, candidates, thinCandidates, reportPath: healthPath };
+  await vault.atomicWrite(healthPath, renderReport(scanned, candidates, thinCandidates, bareIdentityCandidates, nowMs));
+  return { scanned, candidates, thinCandidates, bareIdentityCandidates, reportPath: healthPath };
 }
 
 function renderReport(
   scanned: number,
   candidates: RotEntry[],
   thinCandidates: ThinContentEntry[],
+  bareIdentityCandidates: BareIdentityEntry[],
   nowMs: number,
 ): string {
   const lines: string[] = [];
@@ -176,6 +189,22 @@ function renderReport(
     }
   }
   lines.push(CLOSE_TAG(THIN_REGION_ID));
+  lines.push('');
+  lines.push('## Bare-identity person pages');
+  lines.push('');
+  lines.push(`${bareIdentityCandidates.length} person pages have a canonical name that is a bare first name or handle.`);
+  lines.push('');
+  lines.push(OPEN_TAG(BARE_IDENTITY_REGION_ID));
+  if (bareIdentityCandidates.length === 0) {
+    lines.push('_No candidates._');
+  } else {
+    lines.push('| Path |');
+    lines.push('|------|');
+    for (const b of bareIdentityCandidates) {
+      lines.push(`| [[${b.path.replace(/\.md$/, '')}|${b.title}]] |`);
+    }
+  }
+  lines.push(CLOSE_TAG(BARE_IDENTITY_REGION_ID));
   lines.push('');
   return lines.join('\n');
 }
