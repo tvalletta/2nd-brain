@@ -59,3 +59,28 @@ describe('KarpathyConfigSchema — intelligence.richness', () => {
     expect(config.intelligence.richness.glossarySynthesisThreshold).toBe(5);
   });
 });
+
+describe('KarpathyConfigSchema — enrichment.personResolution', () => {
+  it('defaults enrichment.personResolution when omitted', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.enrichment.personResolution).toEqual({
+      enabled: true,
+      externalIdCaptureEnabled: true,
+      nicknameMatchingEnabled: true,
+      extraNicknameGroups: [],
+    });
+  });
+
+  it('allows overriding enabled and supplying extraNicknameGroups', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      enrichment: {
+        personResolution: { enabled: false, extraNicknameGroups: [['grig', 'grigor']] },
+      },
+    });
+    expect(config.enrichment.personResolution.enabled).toBe(false);
+    expect(config.enrichment.personResolution.extraNicknameGroups).toEqual([['grig', 'grigor']]);
+    // Other fields still default
+    expect(config.enrichment.personResolution.externalIdCaptureEnabled).toBe(true);
+  });
+});

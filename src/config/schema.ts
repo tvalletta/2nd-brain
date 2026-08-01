@@ -220,6 +220,21 @@ export const NotificationsConfigSchema = z.object({
     .default({}),
 });
 
+/**
+ * B2c: person name resolution. Gates external-ID capture (Component 0),
+ * nickname/honorific/initials fuzzy-match extensions (Component 1), and the
+ * immediate name-variant detection check on new-page creation (Component 3).
+ */
+export const PersonResolutionConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  /** Gate for Component 0 (external-ID capture) — Slack link scanning at extraction time. */
+  externalIdCaptureEnabled: z.boolean().default(true),
+  /** Gate for Component 1's nickname/honorific/initials fuzzy-match extensions. */
+  nicknameMatchingEnabled: z.boolean().default(true),
+  /** Additional nickname-equivalence groups appended to the built-in NICKNAME_GROUPS seed list. */
+  extraNicknameGroups: z.array(z.array(z.string())).default([]),
+});
+
 export const EnrichmentConfigSchema = z.object({
   enabled: z.boolean().default(true),
   maxChunkSize: z.number().int().positive().default(12000),
@@ -233,6 +248,7 @@ export const EnrichmentConfigSchema = z.object({
   significanceGate: z.enum(['off', 'heuristic', 'llm']).default('llm'),
   /** Below this confidence, an LLM "drop" verdict creates the page anyway and flags it for review instead of silently discarding it. */
   significanceGateDropConfidence: z.number().min(0).max(1).default(0.7),
+  personResolution: PersonResolutionConfigSchema.default({}),
 });
 
 export const JobsConfigSchema = z.object({
