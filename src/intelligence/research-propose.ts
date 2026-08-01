@@ -267,6 +267,7 @@ export async function proposeResearch(deps: ProposeDeps, opts: ProposeOptions = 
   // 'research' case) so the job queue's existing dedup guarantees a
   // candidate already queued/running never gets stacked a second time.
   let drained = 0;
+  const drainedDetails: string[] = [];
   if (deps.config.intelligence.research.autoDrainEnabled && deps.enqueue) {
     for (const c of trimmed) {
       if (c.status !== 'pending' || !c.decision || c.decision === 'skip') continue;
@@ -279,6 +280,7 @@ export async function proposeResearch(deps: ProposeDeps, opts: ProposeOptions = 
           dedupeKey: `research-execute:${c.slug}`,
         });
         drained++;
+        drainedDetails.push(`${c.slug} (${c.decision})`);
       } catch (err) {
         log.warn('research-drain: enqueue failed', {
           slug: c.slug,
@@ -287,11 +289,13 @@ export async function proposeResearch(deps: ProposeDeps, opts: ProposeOptions = 
       }
     }
     if (drained > 0) {
+      // Slug/depth detail capped to first 10, matching the queue-capped /
+      // orphans-purged log lines' convention above.
       await appendLogEntry(
         deps.vault,
         {
           kind: 'research:drain',
-          message: `${drained} decided candidate(s) drained to research-execute`,
+          message: `${drained} decided candidate(s) drained to research-execute: ${drainedDetails.slice(0, 10).join(', ')}`,
           at: nowIso,
         },
         layout,

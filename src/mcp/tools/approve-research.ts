@@ -17,7 +17,7 @@ const InputSchema = z.object({
 export const definition = {
   name: 'approve_research',
   description:
-    'Approve a research candidate at the chosen depth (light/medium/heavy) or skip it. Updates the research queue at wiki/_system/research-queue.md.',
+    'Approve a research candidate at the chosen depth (light/medium/heavy) or skip it. Updates the research queue.',
   inputSchema: {
     type: 'object' as const,
     properties: {

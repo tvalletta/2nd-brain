@@ -189,6 +189,9 @@ describe('research-propose auto-drain (G1)', () => {
     const log = await vault.read('log.md');
     expect(log).toContain('research:drain');
     expect(log).toContain('1 decided candidate(s) drained');
+    // Matches the queue-capped/orphans-purged log lines' convention of
+    // naming the affected slug(s) rather than just a bare count.
+    expect(log).toContain('fsrs (medium)');
   });
 
   it('does not log research:drain on a no-op cycle (no decided pending candidates)', async () => {
@@ -380,8 +383,9 @@ body.`,
     expect(noConf).toBeDefined();
     expect(medConf).toBeDefined();
     // Both notes are otherwise identical (no mentions, no active-project
-    // membership, no half_life_domain, same recency), so before G4 an unset
-    // confidence would score 0.7 * 0.15 = 0.105 higher than the medium note.
+    // membership, identical half_life_domain: ai-research, same recency), so
+    // before G4 an unset confidence would score 0.7 * 0.15 = 0.105 higher
+    // than the medium note.
     expect(noConf!.score).toBe(medConf!.score);
   });
 });
@@ -666,6 +670,62 @@ last_research_at: 2026-05-01T00:00:00Z
     expect(data.last_research_depth).toBe('medium'); // updated from 'light'
     expect(body).toContain('Topic summary'); // new tldr replaced the old one
     expect(body).not.toContain('old summary');
+  });
+
+  it('a dual-homed slug (both a legacy concepts/ page AND a real topics/ page exist) updates the concept page in place, not the topic page', async () => {
+    // Simulates a slug that has a legacy individual concept page (kept by
+    // hand, or written by research-execute before this sub-project's fixes
+    // shipped) AND a genuinely real topic page under topics/ -- e.g. because
+    // a topic and a pre-B1 concept happened to share a slug. The routing
+    // logic in executeResearch() explicitly prefers an already-existing
+    // concepts/ page so an in-place update is never redirected out from
+    // under a page a human may be actively maintaining; the G3 write-guard
+    // must not fire either, since the concept page already exists (the
+    // guard only blocks *creating* a brand-new page in a glossary-
+    // consolidated folder, never updating one that's already there).
+    await vault.create(
+      'Curated/wiki/concepts/dual-homed.md',
+      `---
+type: concept
+title: Dual homed
+created_at: 2026-04-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+---
+# Dual homed
+
+%% begin:tldr %%
+> **TL;DR** — old concept summary
+%% end:tldr %%
+`,
+    );
+    await vault.create(
+      'Curated/wiki/topics/dual-homed.md',
+      `---
+type: topic
+title: Dual homed
+created_at: 2026-05-01T00:00:00Z
+updated_at: 2026-05-01T00:00:00Z
+---
+# Dual homed
+`,
+    );
+
+    const result = await executeResearch(
+      { vault, llm: llm(), config },
+      'dual-homed',
+      { depth: 'light', nowMs: Date.parse('2026-08-01T00:00:00Z') },
+    );
+
+    expect(result.notePath).toBe('Curated/wiki/concepts/dual-homed.md');
+    const concept = parseNote(await vault.read('Curated/wiki/concepts/dual-homed.md'));
+    expect(concept.data.type).toBe('concept'); // not clobbered
+    expect(concept.body).toContain('Topic summary'); // new synthesis landed here
+    expect(concept.body).not.toContain('old concept summary');
+
+    // The topic page must be completely untouched.
+    const topic = parseNote(await vault.read('Curated/wiki/topics/dual-homed.md'));
+    expect(topic.data.last_research_depth).toBeUndefined();
+    expect(topic.body.trim()).toBe('# Dual homed');
   });
 
   it('a genuinely orphaned/stale concept candidate (no backing page anywhere) is still refused', async () => {
