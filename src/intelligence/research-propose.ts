@@ -15,6 +15,7 @@
 import type { VaultAdapter } from '../vault/adapter.js';
 import type { KarpathyConfig } from '../config/schema.js';
 import type { EmbeddingStore } from '../embeddings/store.js';
+import type { JobCreateInput } from '../jobs/types.js';
 import { parseNote } from '../vault/frontmatter.js';
 import {
   type ResearchCandidate,
@@ -24,6 +25,9 @@ import {
 import { retrievability, defaultStability } from '../vault/half-life.js';
 import { appendLogEntry } from '../maintenance/vault-log.js';
 import { layoutFromConfig } from '../vault/paths.js';
+import { createLogger } from '../shared/logger.js';
+
+const log = createLogger('research-propose');
 
 function scanFolders(layout: ReturnType<typeof layoutFromConfig>): string[] {
   return [`${layout.wiki}/concepts`, `${layout.wiki}/topics`];
@@ -61,6 +65,14 @@ export interface ProposeDeps {
   vault: VaultAdapter;
   config: KarpathyConfig;
   store: EmbeddingStore;
+  /**
+   * Optional -- when provided and `intelligence.research.autoDrainEnabled`
+   * is true, decided-but-unexecuted candidates are auto-enqueued as
+   * research-execute jobs (G1). Same `JobCreateInput` shape as
+   * `JobContext.enqueue` and `decay-scan.ts`'s own `enqueue` dependency.
+   * Omitted in callers/tests that don't care about drain.
+   */
+  enqueue?: (input: JobCreateInput) => Promise<unknown>;
 }
 
 export interface ProposeResult {
@@ -192,6 +204,45 @@ export async function proposeResearch(deps: ProposeDeps, opts: ProposeOptions = 
     },
     layout,
   );
+
+  // G1: auto-drain decided-but-unexecuted candidates into research-execute
+  // jobs. Off by default (intelligence.research.autoDrainEnabled) -- see
+  // config/schema.ts for the rationale. Reuses the exact dedupeKey shape
+  // `karpathy intel research <slug> <depth>` already uses (intel-command.ts's
+  // 'research' case) so the job queue's existing dedup guarantees a
+  // candidate already queued/running never gets stacked a second time.
+  let drained = 0;
+  if (deps.config.intelligence.research.autoDrainEnabled && deps.enqueue) {
+    for (const c of trimmed) {
+      if (c.status !== 'pending' || !c.decision || c.decision === 'skip') continue;
+      try {
+        await deps.enqueue({
+          type: 'research-execute',
+          payload: { slug: c.slug, depth: c.decision },
+          priority: 80,
+          trigger: 'cascade',
+          dedupeKey: `research-execute:${c.slug}`,
+        });
+        drained++;
+      } catch (err) {
+        log.warn('research-drain: enqueue failed', {
+          slug: c.slug,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    if (drained > 0) {
+      await appendLogEntry(
+        deps.vault,
+        {
+          kind: 'research:drain',
+          message: `${drained} decided candidate(s) drained to research-execute`,
+          at: nowIso,
+        },
+        layout,
+      );
+    }
+  }
 
   return {
     scanned,

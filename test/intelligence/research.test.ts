@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -17,7 +17,7 @@ import {
 import { executeResearch } from '../../src/intelligence/research-execute.js';
 import { heuristicGate } from '../../src/intelligence/significance-gate.js';
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
-import { readResearchQueue } from '../../src/maintenance/research-queue.js';
+import { readResearchQueue, writeResearchQueue } from '../../src/maintenance/research-queue.js';
 import { parseNote } from '../../src/vault/frontmatter.js';
 import type { LLMClient } from '../../src/enrichment/llm-client.js';
 
@@ -93,6 +93,105 @@ body.`,
 
     const queue = await readResearchQueue(vault);
     expect(queue.candidates).toHaveLength(1);
+  });
+});
+
+describe('research-propose auto-drain (G1)', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  let store: ReturnType<typeof openEmbeddingStore>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-drain-'));
+    vault = createFsAdapter(dir);
+    store = openEmbeddingStore({
+      dbPath: join(dir, 'embeddings.sqlite'),
+      provider: createDeterministicProvider(),
+    });
+    await vault.ensureFolder('wiki/topics');
+  });
+  afterEach(async () => {
+    store.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('does not enqueue anything when autoDrainEnabled is false (default), even with decided pending candidates', async () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: dir });
+    await writeResearchQueue(vault, {
+      candidates: [
+        { slug: 'fsrs', title: 'FSRS', score: 0.6, reason: 'r', suggested: 'medium', decision: 'medium', status: 'pending', addedAt: '2026-06-01T00:00:00.000Z' },
+      ],
+    });
+    const enqueue = vi.fn(async () => ({}) as never);
+
+    await proposeResearch({ vault, config, store, enqueue }, { nowMs: Date.parse('2026-07-01T00:00:00Z') });
+
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('enqueues exactly one research-execute job per decided pending candidate when autoDrainEnabled is true, skipping "skip" and undecided candidates', async () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      intelligence: { research: { autoDrainEnabled: true } },
+    });
+    await writeResearchQueue(vault, {
+      candidates: [
+        { slug: 'fsrs', title: 'FSRS', score: 0.6, reason: 'r', suggested: 'medium', decision: 'medium', status: 'pending', addedAt: '2026-06-01T00:00:00.000Z' },
+        { slug: 'raptor', title: 'RAPTOR', score: 0.5, reason: 'r', suggested: 'light', decision: 'skip', status: 'pending', addedAt: '2026-06-01T00:00:00.000Z' },
+        { slug: 'undecided', title: 'Undecided', score: 0.4, reason: 'r', suggested: 'light', status: 'pending', addedAt: '2026-06-01T00:00:00.000Z' },
+      ],
+    });
+    const enqueue = vi.fn(async () => ({}) as never);
+
+    await proposeResearch({ vault, config, store, enqueue }, { nowMs: Date.parse('2026-07-01T00:00:00Z') });
+
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith({
+      type: 'research-execute',
+      payload: { slug: 'fsrs', depth: 'medium' },
+      priority: 80,
+      trigger: 'cascade',
+      dedupeKey: 'research-execute:fsrs',
+    });
+  });
+
+  it('logs research:drain only when something was actually drained', async () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      intelligence: { research: { autoDrainEnabled: true } },
+    });
+    await writeResearchQueue(vault, {
+      candidates: [
+        { slug: 'fsrs', title: 'FSRS', score: 0.6, reason: 'r', suggested: 'medium', decision: 'medium', status: 'pending', addedAt: '2026-06-01T00:00:00.000Z' },
+      ],
+    });
+    await proposeResearch(
+      { vault, config, store, enqueue: async () => ({}) as never },
+      { nowMs: Date.parse('2026-07-01T00:00:00Z') },
+    );
+
+    const log = await vault.read('log.md');
+    expect(log).toContain('research:drain');
+    expect(log).toContain('1 decided candidate(s) drained');
+  });
+
+  it('does not log research:drain on a no-op cycle (no decided pending candidates)', async () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      intelligence: { research: { autoDrainEnabled: true } },
+    });
+    await writeResearchQueue(vault, {
+      candidates: [
+        { slug: 'undecided', title: 'Undecided', score: 0.4, reason: 'r', suggested: 'light', status: 'pending', addedAt: '2026-06-01T00:00:00.000Z' },
+      ],
+    });
+    await proposeResearch(
+      { vault, config, store, enqueue: async () => ({}) as never },
+      { nowMs: Date.parse('2026-07-01T00:00:00Z') },
+    );
+
+    const log = await vault.read('log.md');
+    expect(log).not.toContain('research:drain');
   });
 });
 

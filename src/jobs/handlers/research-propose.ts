@@ -10,14 +10,20 @@ import {
   formatQueueDigest,
   sendSlackNotification,
 } from '../../intelligence/slack-notify.js';
-import { RESEARCH_QUEUE_PATH } from '../../maintenance/research-queue.js';
+import { researchQueuePath } from '../../maintenance/research-queue.js';
+import { layoutFromConfig } from '../../vault/paths.js';
 
 export const researchProposeHandler: JobHandler = {
   async execute(_job, ctx) {
     if (!ctx.config.intelligence.research.enabled) return;
     const store = openStoreFromConfig(ctx.config, ctx.projectRoot);
     try {
-      const result = await proposeResearch({ vault: ctx.vault, config: ctx.config, store });
+      const result = await proposeResearch({
+        vault: ctx.vault,
+        config: ctx.config,
+        store,
+        enqueue: ctx.enqueue, // G1: auto-drain, gated inside proposeResearch itself
+      });
       if (
         ctx.config.notifications.slack.enabled &&
         ctx.config.notifications.slack.webhookUrl
@@ -25,7 +31,14 @@ export const researchProposeHandler: JobHandler = {
         const message = formatQueueDigest({
           totalPending: result.proposed,
           topCandidates: result.topCandidates.filter((c) => !c.decision),
-          queuePath: RESEARCH_QUEUE_PATH,
+          // (found while implementing G1, same bug class as G0): this used
+          // to be the hardcoded legacy RESEARCH_QUEUE_PATH constant
+          // ('wiki/_system/...'), which would show the wrong path in the
+          // Slack message under any non-default layout.system. Dormant
+          // today (notifications.slack.enabled is false in the real
+          // config), but it's the same class of bug G0 fixes everywhere
+          // else, so fixed here too while this file is already being touched.
+          queuePath: researchQueuePath(layoutFromConfig(ctx.config)),
         });
         await sendSlackNotification(
           {

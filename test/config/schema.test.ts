@@ -109,3 +109,18 @@ describe('KarpathyConfigSchema — intelligence.lifecycle', () => {
     expect(config.intelligence.lifecycle.archiveQueueEnabled).toBe(true);
   });
 });
+
+describe('KarpathyConfigSchema — intelligence.research.autoDrainEnabled', () => {
+  it('defaults autoDrainEnabled to false', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.intelligence.research.autoDrainEnabled).toBe(false);
+  });
+
+  it('allows enabling it explicitly', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      intelligence: { research: { autoDrainEnabled: true } },
+    });
+    expect(config.intelligence.research.autoDrainEnabled).toBe(true);
+  });
+});
