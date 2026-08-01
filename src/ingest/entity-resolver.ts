@@ -8,6 +8,7 @@ import {
   type VaultLayout,
 } from '../vault/paths.js';
 import { createLogger } from '../shared/logger.js';
+import { stripHonorifics, firstNamesEquivalent, initialsMatch } from './name-variants.js';
 
 const log = createLogger('entity-resolver');
 
@@ -35,6 +36,7 @@ export interface EntityIndex {
   bySlug: Map<string, string>;
   byCanonicalName: Map<string, string>;
   byAlias: Map<string, string>;
+  byExternalId: Map<string, string>;
   allEntries: EntityIndexEntry[];
 }
 
@@ -46,6 +48,7 @@ export async function buildEntityIndex(
   const bySlug = new Map<string, string>();
   const byCanonicalName = new Map<string, string>();
   const byAlias = new Map<string, string>();
+  const byExternalId = new Map<string, string>();
   const allEntries: EntityIndexEntry[] = [];
 
   const kinds: EntityKind[] = ['person', 'project', 'concept', 'decision', 'tool', 'topic', 'organization'];
@@ -76,6 +79,10 @@ export async function buildEntityIndex(
         for (const alias of aliases) {
           byAlias.set(normalizeName(alias), filePath);
         }
+        const externalIds = (data.external_ids as string[]) ?? [];
+        for (const externalId of externalIds) {
+          byExternalId.set(externalId, filePath);
+        }
         allEntries.push({ name: canonicalName || fileName, path: filePath, aliases, slug });
       } catch (err) {
         log.warn('Failed to index entity file', { path: filePath, error: (err as Error).message });
@@ -83,17 +90,33 @@ export async function buildEntityIndex(
     }
   }
 
-  return { bySlug, byCanonicalName, byAlias, allEntries };
+  return { bySlug, byCanonicalName, byAlias, byExternalId, allEntries };
 }
 
 export function resolveEntity(
-  entity: { name: string; kind: EntityKind },
+  entity: { name: string; kind: EntityKind; externalIds?: string[] },
   index: EntityIndex,
   layout: VaultLayout = DEFAULT_LAYOUT,
 ): EntityResolution {
+  // Tier 0 (highest priority): exact external-ID match. Definitionally
+  // certain — no fuzziness, no honorific stripping needed.
+  for (const id of entity.externalIds ?? []) {
+    const match = index.byExternalId.get(id);
+    if (match) {
+      return {
+        entityName: entity.name,
+        entityKind: entity.kind,
+        status: 'matched',
+        matchedPath: match,
+        confidence: 1.0,
+      };
+    }
+  }
+
   const { name, kind } = entity;
-  const normalized = normalizeName(name);
-  const slug = slugify(name);
+  const normalizedInput = kind === 'person' ? stripHonorifics(name) : name;
+  const normalized = normalizeName(normalizedInput);
+  const slug = slugify(normalizedInput);
   const folder = kindToFolder(layout, kind);
 
   // 1. Exact slug match
@@ -121,7 +144,7 @@ export function resolveEntity(
   }
 
   // 5. Fuzzy matching
-  const fuzzyMatches = findFuzzyMatches(name, index.allEntries, folder);
+  const fuzzyMatches = findFuzzyMatches(normalizedInput, index.allEntries, folder, kind);
   if (fuzzyMatches.length === 1) {
     return {
       entityName: name,
@@ -171,6 +194,7 @@ function findFuzzyMatches(
   name: string,
   entries: EntityIndexEntry[],
   preferredFolder: string,
+  kind: EntityKind,
 ): Array<{ path: string; confidence: number }> {
   const normalized = normalizeName(name);
   const nameWords = new Set(normalized.split(/\s+/));
@@ -187,6 +211,33 @@ function findFuzzyMatches(
     if (nameWords.size >= 2 && entryWords.size >= 2 && setsEqual(nameWords, entryWords)) {
       results.push({ path: entry.path, confidence: 0.9 });
       continue;
+    }
+
+    // B2c: same/near-identical surname + nickname/initials-equivalent first
+    // name — person-only. Deliberately checked before the generic
+    // Levenshtein-distance tier below: for names like "Matt"/"Matthew" the
+    // full-string edit distance also happens to fall within that tier's
+    // generic threshold, but at a much lower, less meaningful confidence —
+    // the nickname-aware match should take priority when it applies.
+    if (kind === 'person') {
+      const entryTokens = entryNormalized.split(/\s+/);
+      const nameTokens = normalized.split(/\s+/);
+      if (nameTokens.length >= 2 && entryTokens.length >= 2) {
+        const lastName = nameTokens[nameTokens.length - 1];
+        const lastEntry = entryTokens[entryTokens.length - 1];
+        if (lastName === lastEntry || levenshtein(lastName, lastEntry) <= 1) {
+          const firstName = nameTokens[0];
+          const firstEntry = entryTokens[0];
+          if (
+            firstNamesEquivalent(firstName, firstEntry) ||
+            initialsMatch(firstName, firstEntry) ||
+            initialsMatch(firstEntry, firstName)
+          ) {
+            results.push({ path: entry.path, confidence: 0.8 });
+            continue;
+          }
+        }
+      }
     }
 
     // Levenshtein distance
