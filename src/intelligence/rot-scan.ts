@@ -8,6 +8,7 @@ import { parseNote } from '../vault/frontmatter.js';
 import { OPEN_TAG, CLOSE_TAG, getProtectedRegion } from '../vault/protected-regions.js';
 import { DEFAULT_LAYOUT, type VaultLayout } from '../vault/paths.js';
 import { REFRESH_TARGETS, isPlaceholderContent, type RefreshTarget } from './refresh-targets.js';
+import { refreshArchiveQueue, type ArchiveCandidate } from '../maintenance/archive-queue.js';
 
 /** Legacy: the default-layout path. Prefer `vaultHealthPath(layout)`. */
 export const VAULT_HEALTH_PATH = `${DEFAULT_LAYOUT.system}/vault-health.md`;
@@ -88,6 +89,11 @@ export interface RunRotScanOptions {
    *  neither of which is gated behind a config flag either; only the
    *  threshold is configurable. */
   staleDraftReportDays?: number;
+  /** G3: feed this scan's own rot candidates (unchanged stale+orphan+low-
+   *  confidence rule) into the archive queue. Defaults to false so every
+   *  pre-Sub-project-C call site (including every rot-scan test that
+   *  predates this feature) sees no behavior change. */
+  archiveQueueEnabled?: boolean;
 }
 
 async function scanStaleDraftSources(
@@ -181,6 +187,23 @@ export async function runRotScan(
   }
 
   candidates.sort((a, b) => b.ageDays - a.ageDays);
+
+  // G3: feed this scan's own rot candidates (unchanged stale+orphan+low-
+  // confidence rule) into the archive queue for human resolution via
+  // `karpathy archivist` / `resolve_archive_candidate`. Opt-in via options
+  // so every pre-Sub-project-C call site (including every test in this file
+  // predating this feature) sees no behavior change.
+  if (options.archiveQueueEnabled && candidates.length > 0) {
+    const archiveCandidates: ArchiveCandidate[] = candidates.map((c) => ({
+      path: c.path,
+      title: c.title,
+      reason: `rot-scan: age ${c.ageDays}d, confidence ${c.confidence}, inbound ${c.hasInboundMarker ? 'yes' : 'no'}`,
+      ageDays: c.ageDays,
+      confidence: c.confidence,
+      retrievability: c.retrievability,
+    }));
+    await refreshArchiveQueue(vault, archiveCandidates, layout);
+  }
 
   // G1: stale-draft source scan — a separate folder (layout.sources) and a
   // separate note `type` (source_summary) from the wiki-content rot rule

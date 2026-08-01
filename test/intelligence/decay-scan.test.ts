@@ -71,6 +71,33 @@ body content for old concept.`,
     expect(queue.candidates[0].slug).toBe('old');
   });
 
+  it('never writes archive_candidate (Sub-project C, G6: dead branch removed)', async () => {
+    await vault.create(
+      'wiki/concepts/very-stale.md',
+      `---
+id: vs1
+type: concept
+title: Very stale
+created_at: 2020-01-01T00:00:00Z
+updated_at: 2020-01-01T00:00:00Z
+last_verified: 2020-01-01T00:00:00Z
+stability: 10
+---
+body.`,
+    );
+
+    await runDecayScan({
+      vault,
+      config,
+      enqueue: async (i) => ({} as never),
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+    });
+
+    const { data } = parseNote(await vault.read('wiki/concepts/very-stale.md'));
+    expect(data.archive_candidate).toBeUndefined();
+    expect(typeof data.retrievability).toBe('number');
+  });
+
   it('does not enqueue refresh for fresh notes', async () => {
     const today = new Date().toISOString();
     await vault.create(
@@ -585,5 +612,39 @@ body.`,
     expect(customResult.staleDraftCandidates.map((c) => c.path)).toEqual([
       'outputs/source-summaries/six-days-old.md',
     ]);
+  });
+
+  it('feeds rot candidates into the archive queue only when archiveQueueEnabled is true (G3)', async () => {
+    await vault.create(
+      'wiki/concepts/dead-for-queue.md',
+      `---
+id: q1
+type: concept
+title: Dead for queue
+created_at: 2024-01-01T00:00:00Z
+updated_at: 2024-01-01T00:00:00Z
+confidence: low
+---
+body.`,
+    );
+
+    // Legacy call form (no options) — every existing pre-Sub-project-C call
+    // site — must see no behavior change: the queue file is never created.
+    const legacy = await runRotScan(vault, Date.parse('2026-05-06T00:00:00Z'));
+    expect(legacy.candidates.map((c) => c.path)).toContain('wiki/concepts/dead-for-queue.md');
+    expect(await vault.exists('wiki/_system/archive-queue.md')).toBe(false);
+
+    const withFeed = await runRotScan(vault, {
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+      archiveQueueEnabled: true,
+    });
+    expect(withFeed.candidates.map((c) => c.path)).toContain('wiki/concepts/dead-for-queue.md');
+
+    const { readArchiveQueue } = await import('../../src/maintenance/archive-queue.js');
+    const queue = await readArchiveQueue(vault);
+    const entry = queue.entries.find((e) => e.path === 'wiki/concepts/dead-for-queue.md');
+    expect(entry).toBeDefined();
+    expect(entry!.status).toBe('pending');
+    expect(entry!.reason).toContain('rot-scan: age');
   });
 });
