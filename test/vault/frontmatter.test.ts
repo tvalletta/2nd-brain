@@ -100,6 +100,31 @@ describe('validateFrontmatter', () => {
     expect(result.aliases).toEqual([]);
     expect(result.change_origin).toBe('human');
   });
+
+  it('archived_at/archived_reason are absent by default and round-trip when set (Sub-project C)', () => {
+    const withoutArchival = BaseFrontmatterSchema.parse({
+      id: 'archival-1',
+      type: 'source_summary',
+      title: 'No archival fields',
+      created_at: '2026-04-11T00:00:00.000Z',
+      updated_at: '2026-04-11T00:00:00.000Z',
+    });
+    expect(withoutArchival.archived_at).toBeUndefined();
+    expect(withoutArchival.archived_reason).toBeUndefined();
+
+    const withArchival = BaseFrontmatterSchema.parse({
+      id: 'archival-2',
+      type: 'source_summary',
+      title: 'Archived',
+      status: 'archived',
+      created_at: '2026-04-11T00:00:00.000Z',
+      updated_at: '2026-04-11T00:00:00.000Z',
+      archived_at: '2026-05-01T00:00:00.000Z',
+      archived_reason: 'stale-draft (34d at ingest_status: detected)',
+    });
+    expect(withArchival.archived_at).toBe('2026-05-01T00:00:00.000Z');
+    expect(withArchival.archived_reason).toBe('stale-draft (34d at ingest_status: detected)');
+  });
 });
 
 describe('type-specific schemas', () => {
