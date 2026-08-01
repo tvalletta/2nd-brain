@@ -116,6 +116,16 @@ export const reEnrichNoteHandler: JobHandler = {
       dedupeKey: `backlinks:${notePath}`,
     });
 
+    // Sub-project C (G7): a note that just received a genuine re-enrichment
+    // pass (past the <50-char no-op gate above) has demonstrably been
+    // re-engaged with — reverse any prior archival.
+    if (data.status === 'archived') {
+      data.status = 'active';
+      delete data.archived_at;
+      delete data.archived_reason;
+      log.info('Un-archived note on successful re-enrichment', { path: notePath });
+    }
+
     // Update frontmatter timestamps.
     data.last_verified = nowISO();
     data.updated_at = nowISO();
