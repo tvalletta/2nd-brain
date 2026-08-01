@@ -467,6 +467,10 @@ protected_regions: []
 pending_evidence: []          # [{ ref, reason?, at }] — unresolved evidence awaiting refresh
 pending_evidence_count: 0     # cached length of `pending_evidence`; threshold-gated by evaluate-refresh-candidates
 also_relevant_to: []          # absolute project paths that reference this concept (Phase 3 bridges)
+
+# --- Sub-project C: draft/archival lifecycle (§25) ---
+archived_at: undefined        # ISO timestamp the note transitioned to status: archived; cleared on un-archival
+archived_reason: undefined    # free text reason (e.g. "stale-draft (34d at ingest_status: detected)", "rot-scan: ...", "superseded")
 ---
 ```
 
@@ -532,6 +536,8 @@ Required fields:
 - `project_key`
 - `project_status`
 
+`project_status: archived`/`completed` (rendered by `indexes.ts`'s `renderProjectsCategory` since before Sub-project C) is now actually producible: the archive queue's `archive` decision (§25.3) sets `project_status: archived` in the same write as the base `status` field, for any target note where `type === 'project'`. This is the field's first real producer of a non-`active` value (see §25).
+
 #### `decision`
 
 Required fields:
@@ -558,6 +564,8 @@ Source ingest SHOULD follow this state flow:
 
 Failed ingest MAY transition to `failed` and SHOULD preserve diagnostic information.
 
+**Sub-project C, G0/G7:** the base `status` field (§10.1) is now wired to this flow for `source_summary` notes — every real call site that stamps `ingest_status: 'linked'` (`link-concepts.ts`, `compile-entities.ts` ×2 sites, `agent-ingest.ts`) also promotes `status: draft | archived -> active` in the same write, gated on `intelligence.lifecycle.enabled` (default `true`) and never overriding an explicit `status: rejected`. Before this, `status` was written once at note creation (`draft`) and never transitioned again for the lifetime of the note — see §25 for the full mechanism, including the deterministic, no-review auto-archival of drafts that never reach `linked` (G2).
+
 ### 11.2 Review state
 
 Reviewable notes SHOULD follow:
@@ -565,6 +573,8 @@ Reviewable notes SHOULD follow:
 `unreviewed -> reviewed -> approved`
 
 Rejected review outputs SHOULD transition to `rejected` and MUST remain auditable.
+
+**Sub-project C, G5:** `karpathy review approve`/`reject` (`src/review/review-queue.ts`) now also transition the base `status` field alongside `review_state` — `approve` sets `status: active`, `reject` sets `status: rejected` (this enum value's first real producer). Fixed in the same change: `approveReviewItem`/`rejectReviewItem` previously mutated frontmatter via regex (`/review_state: \w+/` etc.) against the raw file string, but `createReviewItem` (the sole real producer of `review/*.md` notes) serializes every scalar frontmatter value JSON-quoted (`status: "draft"`), which the unquoted-value regex could never match — `karpathy review approve`/`reject` had been silently no-op'ing on `review_state`/`resolution_state` against every real, production review item since the review workflow (Phase 5) shipped. Both functions now parse/mutate/serialize via `parseNote`/`serializeNote` (this project's standard frontmatter round-trip) instead of raw regex-replace, which sidesteps the quoting issue entirely and was the vehicle for adding the new `status` transition.
 
 ## 12. Overwrite and edit policy
 
@@ -775,6 +785,10 @@ MCP SHOULD begin with read-oriented operations. Expanded mutation behavior MAY b
 ### Phase 7: Hybrid search
 
 Replace the siloed `search_vault` (keyword) and `get_related` (semantic) tools with a single unified `search` tool backed by an FTS5 keyword index over the entire vault and an Ollama-powered semantic pool, fused via Reciprocal Rank Fusion. See §24.
+
+### Phase 8: Draft/archival lifecycle
+
+Make the base `status` field (§10.1) genuinely live: auto-promote `source_summary` notes out of `draft` the moment the pipeline actually processes them, auto-archive drafts that never do, give rot-scan's already-computed rot candidates a human-reviewed archive queue, and wire `NoteStatus`'s `rejected` value and `project_status`'s `archived`/`completed` buckets to their first real producers. See §25.
 
 ## 19. MCP scope
 
@@ -1037,4 +1051,66 @@ After implementation, an operator switching to Ollama:
 4. `karpathy maintenance --re-embed` — re-embed existing notes under the new provider id.
 5. `karpathy maintenance --prune-provider titan-v2-1024` — drop stale Bedrock rows.
 6. Configure intel tick cron at 5-minute cadence (see §24.3).
+
+## 25. Draft/archival lifecycle (Sub-project C)
+
+A real-vault audit found the base `status` field (§10.1) was write-once: every `source_summary` note (11,499 of 11,876 real files, 96.8%) was permanently `status: draft` because no code path anywhere transitioned it after note creation; `NoteStatus`'s `rejected` value and `project_status`'s `archived`/`completed` buckets had zero producers despite being fully rendered by existing UI/index code; and `superseded_by` had 215 real occurrences, all empty. This section makes `status` genuinely live without any physical file moves, deletions, or new LLM calls — every mechanism below is deterministic-lane (§7.1).
+
+### 25.1 Draft → active promotion (G0)
+
+The three (four, counting `agent-ingest.ts`'s completion path) real call sites that stamp `data.ingest_status = 'linked'` (`link-concepts.ts`, `compile-entities.ts` ×2 sites, `agent-ingest.ts`) also promote `status: draft | archived -> active` in the same write — reaching `'linked'` is proof the pipeline extracted real value from the source (or correctly decided there was nothing further to compile, for a self-referential source). The promotion:
+
+- Is gated on `intelligence.lifecycle.enabled` (default `true`).
+- MUST NOT override an explicit `status: rejected` — a human rejection is a stronger signal than pipeline progress.
+- Clears `archived_at`/`archived_reason` when recovering from `archived` (this is also G7's un-archival path for `source_summary` notes — see §25.4).
+
+### 25.2 Stale-draft visibility and auto-archival (G1, G2)
+
+`rot-scan.ts` (§8.5) gains an independent scan pass over `layout.sources` — deliberately **not** folded into the existing stale+orphan+low-confidence rot rule, which is tuned for wiki content and would flag nearly every source note under a rule not built for this shape of content. The pass reports every `source_summary` still `status: draft` past `intelligence.lifecycle.staleDraftReportDays` (default 14) in a "Stale draft sources" table in `vault-health.md` — reporting-only, runs unconditionally (like the pre-existing thin-content/bare-identity passes), no note mutation.
+
+A separate, scheduled `archive-stale-drafts` job (daily, priority 90) auto-archives (`status: draft -> archived`, plus `archived_at`/`archived_reason`) any `source_summary` still `draft` past `intelligence.lifecycle.staleDraftArchiveDays` (default 30). This is deterministic and has no human review — per §12.2, `status` here is a deterministic field: nothing is deleted, `raw/` and the note body are untouched, and the transition is fully reversible (manual edit, or automatically the moment the source is actually processed — §25.1's guard already flips a previously-archived note back to `active`).
+
+**`intelligence.lifecycle.staleDraftArchiveEnabled` defaults to `false`** and is a second, independent gate on top of `intelligence.lifecycle.enabled` — both MUST be `true` for the job to archive anything. This is a deliberate safety decision, not an oversight: with a real vault's worth of already-stale drafts past the default 30-day threshold, defaulting this on would silently archive the large majority of `Curated/sources/` the moment the daily job first runs after deploy. G0/G1/G3-G5 and the reporting table are fully enabled by default and work identically regardless of this flag; only G2's actual auto-archival stays off until an operator explicitly opts in.
+
+### 25.3 Archive queue (G3, G4)
+
+Mirrors the curator reconciliation queue (§22) exactly in shape — a detector produces candidates, a human resolves them at their own pace, resolutions persist and are never re-proposed — as a separate mechanism (single-note candidates, not pairs; `archive`/`keep`/`supersede`/`skip` decisions, not `merge`/`rename`).
+
+The queue persists at `{layout.system}/archive-queue.md` inside a protected region. Each entry carries `id`, `status` (`pending`/`resolved`/`skipped`), `path`, `title`, `reason`, `ageDays`, `confidence`, `retrievability?`, `decision?`, `supersededByPath?`, `resolvedAt?`.
+
+**Detection:** `rot-scan`'s already-computed, already-displayed `candidates` list (the unchanged stale+orphan+low-confidence rule) is fed into the queue via `refreshArchiveQueue()`, deduplicated by `path` — an existing entry in ANY status (including `resolved`/`skipped`) blocks re-addition, so a `keep`/`skip` decision permanently silences that candidate against future weekly rescans. Gated on `intelligence.lifecycle.archiveQueueEnabled` (default `true`), independent of `maintenance.reviewEnabled` — `rot-scan` runs unconditionally weekly regardless of that flag.
+
+**Resolution paths** (both apply decisions through one shared `applyArchiveDecision()` helper, so the mutation logic lives in exactly one place):
+
+- **CLI (`karpathy archivist`)** — interactive walk-through, one entry at a time: `[a]rchive [k]eep [S]upersede [s]kip [q]uit`.
+- **MCP (`resolve_archive_candidate`)** — no arguments returns up to 10 pending entries; `{ id, decision, supersededByPath? }` applies one decision to one entry.
+
+Per-decision effect on the target note:
+
+| Decision | Target note changes | Queue entry |
+|---|---|---|
+| `archive` | `status: archived`, `archived_at`, `archived_reason`; `project_status: archived` too if `type === 'project'` (§10.3) | `resolved` |
+| `keep` | none | `resolved` |
+| `supersede` | `status: archived`, `archived_at`, `archived_reason: 'superseded'`, `superseded_by` gains the replacement path (deduped) — this field's first real writer anywhere in the codebase | `resolved`, `supersededByPath` set |
+| `skip` | none | `skipped` |
+
+Both `karpathy archivist` and `resolve_archive_candidate` operate on exactly one queue entry per invocation — there is no batch-apply path, by construction (matching §22.4's equivalent constraint for the reconciliation queue).
+
+Decay-scan's prior dead `archive_candidate` frontmatter write (no consumer, no clear-on-recovery branch, no test coverage) is removed (G6); rot-scan's archive-queue feed above is its replacement.
+
+### 25.4 Un-archival on re-engagement (G7)
+
+Archival is never a one-way trap. Beyond §25.1's `source_summary` recovery, a note archived via the queue (§25.3) automatically flips back to `status: active` (clearing `archived_at`/`archived_reason`) the instant it's genuinely re-engaged with:
+
+- `refreshTopic()` (`src/intelligence/topic-refresh.ts`), after a successful protected-region rewrite — not on either of its no-op branches (unsupported type; zero retrieval hits).
+- `re-enrich-note` job, after a successful (non-no-op) re-enrichment pass — the existing "fewer than 50 characters of human-authored content" no-op gate (§23.2) still short-circuits before this check.
+
+Manual `status: archived -> active` frontmatter edits remain available at all times regardless of this mechanism.
+
+### 25.5 Constraints
+
+- Auto-archival of `source_summary` drafts (§25.2) MUST NOT run unless both `intelligence.lifecycle.enabled` and `intelligence.lifecycle.staleDraftArchiveEnabled` are `true` — no code path in this mechanism sets `staleDraftArchiveEnabled` to `true` or bypasses reading it from config.
+- Wiki content (entity/concept/project/decision/topic pages) MUST NOT be auto-archived without human review — always queue-and-decide (§25.3), matching FR-6's spirit and §22's precedent.
+- No note is ever deleted. Archival is a status flip plus two optional metadata fields — never a body change, never a file move.
+- `karpathy reprocess-agent` and any future call site that stamps `ingest_status: 'linked'` for a `source_summary` MUST apply the same §25.1 promotion guard.
 

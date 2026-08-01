@@ -1,5 +1,5 @@
 import type { VaultAdapter } from '../vault/adapter.js';
-import { parseNote } from '../vault/frontmatter.js';
+import { parseNote, serializeNote } from '../vault/frontmatter.js';
 import { updateProtectedRegion, getProtectedRegion } from '../vault/protected-regions.js';
 import { nowISO } from '../shared/date-utils.js';
 import { createLogger } from '../shared/logger.js';
@@ -35,37 +35,43 @@ export async function listReviewItems(vault: VaultAdapter): Promise<ReviewItem[]
 
 export async function approveReviewItem(vault: VaultAdapter, path: string): Promise<void> {
   const content = await vault.read(path);
-  let updated = content
-    .replace(/review_state: \w+/, 'review_state: approved')
-    .replace(/updated_at: ".*?"/, `updated_at: "${nowISO()}"`);
+  const { data, body } = parseNote(content);
+  const now = nowISO();
 
-  updated = updateProtectedRegion(
-    updated,
+  data.review_state = 'approved';
+  data.status = 'active'; // Sub-project C (G5)
+  data.updated_at = now;
+
+  const updatedBody = updateProtectedRegion(
+    body,
     'analysis',
-    (extractAnalysis(updated) + '\n\n**Approved** at ' + nowISO()).trim(),
+    (extractAnalysis(body) + '\n\n**Approved** at ' + now).trim(),
   );
 
-  await vault.write(path, updated);
+  await vault.write(path, serializeNote(data, updatedBody));
   log.info('Review item approved', { path });
 }
 
 export async function rejectReviewItem(vault: VaultAdapter, path: string): Promise<void> {
   const content = await vault.read(path);
-  let updated = content
-    .replace(/review_state: \w+/, 'review_state: rejected')
-    .replace(/resolution_state: \w+/, 'resolution_state: dismissed')
-    .replace(/updated_at: ".*?"/, `updated_at: "${nowISO()}"`);
+  const { data, body } = parseNote(content);
+  const now = nowISO();
 
-  updated = updateProtectedRegion(
-    updated,
+  data.review_state = 'rejected';
+  data.resolution_state = 'dismissed';
+  data.status = 'rejected'; // Sub-project C (G5) — NoteStatus's 4th enum value, first real producer
+  data.updated_at = now;
+
+  const updatedBody = updateProtectedRegion(
+    body,
     'analysis',
-    (extractAnalysis(updated) + '\n\n**Rejected** at ' + nowISO()).trim(),
+    (extractAnalysis(body) + '\n\n**Rejected** at ' + now).trim(),
   );
 
-  await vault.write(path, updated);
+  await vault.write(path, serializeNote(data, updatedBody));
   log.info('Review item rejected', { path });
 }
 
-function extractAnalysis(content: string): string {
-  return getProtectedRegion(content, 'analysis') ?? '';
+function extractAnalysis(body: string): string {
+  return getProtectedRegion(body, 'analysis') ?? '';
 }

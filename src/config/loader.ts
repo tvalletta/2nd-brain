@@ -41,6 +41,31 @@ function mergeOverride(
   return result;
 }
 
+/**
+ * Sub-project C: warn (never throw) when the auto-archive threshold is set
+ * below the reporting threshold — a draft should always be surfaced in
+ * vault-health.md's "Stale draft sources" table before it's silently
+ * auto-archived. Exported as a pure function (not inlined into
+ * loadConfig/loadConfigOrNull) so it's independently unit-testable without
+ * touching the real, homedir-based GLOBAL_CONFIG_PATH those two functions
+ * read from — there is no existing cross-field validation anywhere in this
+ * file to follow a precedent from (the analogous
+ * `decay.retrievabilityRefresh > decay.retrievabilityArchive` relationship
+ * is itself unenforced today).
+ */
+export function lifecycleConfigWarnings(config: KarpathyConfig): string[] {
+  const warnings: string[] = [];
+  const { staleDraftArchiveDays, staleDraftReportDays } = config.intelligence.lifecycle;
+  if (staleDraftArchiveDays < staleDraftReportDays) {
+    warnings.push(
+      `intelligence.lifecycle.staleDraftArchiveDays (${staleDraftArchiveDays}) is less than ` +
+        `staleDraftReportDays (${staleDraftReportDays}) — a draft would be auto-archived before ` +
+        `it is ever reported as stale in vault-health.md.`,
+    );
+  }
+  return warnings;
+}
+
 async function readGlobalConfig(): Promise<
   ReturnType<typeof GlobalConfigSchema.parse> | null
 > {
@@ -99,6 +124,10 @@ export async function loadConfigOrNull(
     );
   }
 
+  for (const warning of lifecycleConfigWarnings(result.data)) {
+    console.warn(`[karpathy config] ${warning}`);
+  }
+
   return {
     ...result.data,
     projectRoot: root,
@@ -139,6 +168,10 @@ export async function loadConfig(projectRoot?: string): Promise<KarpathyConfig> 
     throw new ConfigError(
       `Resolved config for ${root} is invalid:\n${issues}`,
     );
+  }
+
+  for (const warning of lifecycleConfigWarnings(result.data)) {
+    console.warn(`[karpathy config] ${warning}`);
   }
 
   return {

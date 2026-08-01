@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { createFsAdapter } from '../../src/vault/fs-adapter.js';
 import { createSessionLogManager } from '../../src/session/session-log.js';
 import { createHotCacheManager } from '../../src/session/hot-cache.js';
-import { serializeNote } from '../../src/vault/frontmatter.js';
+import { serializeNote, parseNote } from '../../src/vault/frontmatter.js';
 import type { MCPContext } from '../../src/mcp/context.js';
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
 
@@ -28,6 +28,8 @@ import { handle as handleVaultStatus } from '../../src/mcp/tools/vault-status.js
 import { handle as handleSearchByTags } from '../../src/mcp/tools/search-by-tags.js';
 import { handle as handleReconcileEntities } from '../../src/mcp/tools/reconcile-entities.js';
 import { writeReconciliationQueue } from '../../src/maintenance/reconciliation-queue.js';
+import { handle as handleResolveArchiveCandidate } from '../../src/mcp/tools/resolve-archive-candidate.js';
+import { refreshArchiveQueue, readArchiveQueue } from '../../src/maintenance/archive-queue.js';
 
 const SAMPLE_CLAUDE_MD = `# Karpathy Second Memory
 
@@ -755,5 +757,93 @@ describe('reconcile_entities — non-default layout.wiki (whole-branch-review re
 
     const resultJson = JSON.parse(result.content[0].text);
     expect(resultJson.wikilinksRewritten).toBe(1);
+  });
+});
+
+describe('resolve_archive_candidate', () => {
+  let tempDir: string;
+  let ctx: MCPContext;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'karpathy-mcp-archive-'));
+    const vault = createFsAdapter(tempDir);
+    const config = KarpathyConfigSchema.parse({ vaultPath: tempDir, projectRoot: tempDir });
+    ctx = {
+      config,
+      vault,
+      sessionLog: createSessionLogManager(vault, config.layout),
+      hotCache: createHotCacheManager(join(tempDir, 'CLAUDE.md')),
+      usageLogPath: join(tempDir, '.karpathy', 'logs', 'mcp-usage.jsonl'),
+      enqueueJob: async () => {},
+      runDeterministicJobs: async () => 0,
+    };
+
+    await mkdir(join(tempDir, 'wiki/concepts'), { recursive: true });
+    await mkdir(join(tempDir, 'wiki/_system'), { recursive: true });
+
+    const note = serializeNote(
+      { id: 'c1', type: 'concept', title: 'Old concept', status: 'draft', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' },
+      '# Old concept\n',
+    );
+    await vault.create('wiki/concepts/old-concept.md', note);
+
+    await refreshArchiveQueue(vault, [{
+      path: 'wiki/concepts/old-concept.md',
+      title: 'Old concept',
+      reason: 'rot-scan: age 400d, confidence low, inbound no',
+      ageDays: 400,
+      confidence: 'low',
+    }], config.layout);
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns pending entries when called with no arguments', async () => {
+    const result = await handleResolveArchiveCandidate({}, ctx);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.pending).toBe(1);
+    expect(parsed.entries[0].path).toBe('wiki/concepts/old-concept.md');
+  });
+
+  it('archives the target note and resolves the entry', async () => {
+    const queue = await readArchiveQueue(ctx.vault, ctx.config.layout);
+    const id = queue.entries[0].id;
+
+    const result = await handleResolveArchiveCandidate({ id, decision: 'archive' }, ctx);
+    expect(result.isError).toBeFalsy();
+
+    const { data } = parseNote(await ctx.vault.read('wiki/concepts/old-concept.md'));
+    expect(data.status).toBe('archived');
+    expect(data.archived_at).toBeDefined();
+    expect(data.archived_reason).toContain('rot-scan');
+
+    const resolvedQueue = await readArchiveQueue(ctx.vault, ctx.config.layout);
+    expect(resolvedQueue.entries[0].status).toBe('resolved');
+  });
+
+  it('errors when decision is "supersede" without supersededByPath', async () => {
+    const queue = await readArchiveQueue(ctx.vault, ctx.config.layout);
+    const id = queue.entries[0].id;
+
+    const result = await handleResolveArchiveCandidate({ id, decision: 'supersede' }, ctx);
+    expect(result.isError).toBe(true);
+  });
+
+  it('errors when supersededByPath does not exist', async () => {
+    const queue = await readArchiveQueue(ctx.vault, ctx.config.layout);
+    const id = queue.entries[0].id;
+
+    const result = await handleResolveArchiveCandidate(
+      { id, decision: 'supersede', supersededByPath: 'wiki/concepts/nonexistent.md' },
+      ctx,
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  it('errors for an unknown id', async () => {
+    const result = await handleResolveArchiveCandidate({ id: 'nope', decision: 'keep' }, ctx);
+    expect(result.isError).toBe(true);
   });
 });

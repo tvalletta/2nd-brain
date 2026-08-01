@@ -97,6 +97,74 @@ describe('compile-entities handler — self-reference filtering', () => {
 
     expect(await vault.exists('wiki/concepts/glossary.md')).toBe(true);
   });
+
+  it('promotes a draft self-referential source to active on the early-return path (Sub-project C, G0)', async () => {
+    const { slugify } = await import('../../../src/vault/paths.js');
+    const selfSlug = slugify(dir.split('/').pop()!);
+
+    const summaryPath = 'sources/self-draft.md';
+    await vault.ensureFolder('sources');
+    await vault.create(
+      summaryPath,
+      serializeNote(
+        { id: 's3', type: 'source_summary', title: 'Self session', status: 'draft', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: selfSlug },
+        '\nBody.\n',
+      ),
+    );
+
+    await compileEntitiesHandler.execute(makeJob(summaryPath, {}), makeCtx());
+
+    const { data } = parseNote(await vault.read(summaryPath));
+    expect(data.ingest_status).toBe('linked');
+    expect(data.status).toBe('active');
+  });
+
+  it('recovers an archived self-referential source to active on the early-return path (G7)', async () => {
+    const { slugify } = await import('../../../src/vault/paths.js');
+    const selfSlug = slugify(dir.split('/').pop()!);
+
+    const summaryPath = 'sources/self-archived.md';
+    await vault.ensureFolder('sources');
+    await vault.create(
+      summaryPath,
+      serializeNote(
+        {
+          id: 's4', type: 'source_summary', title: 'Self session', status: 'archived',
+          archived_at: '2026-04-01T00:00:00Z', archived_reason: 'stale-draft (40d at ingest_status: detected)',
+          created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: selfSlug,
+        },
+        '\nBody.\n',
+      ),
+    );
+
+    await compileEntitiesHandler.execute(makeJob(summaryPath, {}), makeCtx());
+
+    const { data } = parseNote(await vault.read(summaryPath));
+    expect(data.status).toBe('active');
+    expect(data.archived_at).toBeUndefined();
+    expect(data.archived_reason).toBeUndefined();
+  });
+
+  it('never overrides an explicit rejected status on the early-return path (G0/G7 guard)', async () => {
+    const { slugify } = await import('../../../src/vault/paths.js');
+    const selfSlug = slugify(dir.split('/').pop()!);
+
+    const summaryPath = 'sources/self-rejected.md';
+    await vault.ensureFolder('sources');
+    await vault.create(
+      summaryPath,
+      serializeNote(
+        { id: 's6', type: 'source_summary', title: 'Self session', status: 'rejected', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: selfSlug },
+        '\nBody.\n',
+      ),
+    );
+
+    await compileEntitiesHandler.execute(makeJob(summaryPath, {}), makeCtx());
+
+    const { data } = parseNote(await vault.read(summaryPath));
+    expect(data.ingest_status).toBe('linked');
+    expect(data.status).toBe('rejected');
+  });
 });
 
 describe('compile-entities handler — glossary synthesis threshold', () => {
@@ -130,12 +198,17 @@ describe('compile-entities handler — glossary synthesis threshold', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  async function makeSummary(path: string): Promise<void> {
+  // `id` defaults to 's1' to preserve existing call sites verbatim. Pass an
+  // explicit, unique id for any new test in this block — gray-matter caches
+  // parsed results keyed by the raw content string, and two fixtures with
+  // identical frontmatter+body would otherwise share a mutable `data` object
+  // across unrelated test cases within this file.
+  async function makeSummary(path: string, id = 's1', status?: string): Promise<void> {
     await vault.ensureFolder('sources');
     await vault.create(
       path,
       serializeNote(
-        { id: 's1', type: 'source_summary', title: 'S', created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: 'some-project' },
+        { id, type: 'source_summary', title: 'S', ...(status ? { status } : {}), created_at: '2025-01-01T00:00:00Z', updated_at: '2025-01-01T00:00:00Z', project_slug: 'some-project' },
         '\nBody.\n',
       ),
     );
@@ -169,5 +242,31 @@ describe('compile-entities handler — glossary synthesis threshold', () => {
     );
 
     expect(enqueued.filter((j) => j.type === 'glossary-synthesize')).toHaveLength(0);
+  });
+
+  it('promotes a draft source to active on the normal completion path (Sub-project C, G0)', async () => {
+    const ctx = makeCtx();
+    await makeSummary('sources/normal-draft.md', 's5');
+    await compileEntitiesHandler.execute(
+      makeJob('sources/normal-draft.md', { concepts: [{ name: 'Some Concept', definition: 'x', confidence: 0.9 }] }),
+      ctx,
+    );
+
+    const { data } = parseNote(await vault.read('sources/normal-draft.md'));
+    expect(data.ingest_status).toBe('linked');
+    expect(data.status).toBe('active');
+  });
+
+  it('never overrides an explicit rejected status on the normal completion path (G0/G7 guard)', async () => {
+    const ctx = makeCtx();
+    await makeSummary('sources/normal-rejected.md', 's6', 'rejected');
+    await compileEntitiesHandler.execute(
+      makeJob('sources/normal-rejected.md', { concepts: [{ name: 'Some Concept', definition: 'x', confidence: 0.9 }] }),
+      ctx,
+    );
+
+    const { data } = parseNote(await vault.read('sources/normal-rejected.md'));
+    expect(data.ingest_status).toBe('linked');
+    expect(data.status).toBe('rejected');
   });
 });

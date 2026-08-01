@@ -174,6 +174,56 @@ describe('re-enrich-note handler', () => {
     const updated = await vault.read(notePath);
     expect(updated).toContain(machineContent);
   });
+
+  it('un-archives a note on a real (non-no-op) re-enrichment pass (Sub-project C, G7)', async () => {
+    const notePath = 'wiki/entities/people/dave.md';
+    const fm = {
+      id: 'dave',
+      type: 'entity',
+      title: 'Dave',
+      status: 'archived',
+      archived_at: '2026-04-01T00:00:00Z',
+      archived_reason: 'rot-scan: age 300d, confidence low, inbound no',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const body =
+      `${OPEN_TAG('summary')}\nMachine content here.\n${CLOSE_TAG('summary')}\n\n` +
+      'Dave recently rejoined the platform team and has been mentoring engineers on service mesh work.';
+    await vault.create(notePath, serializeNote(fm, body));
+
+    const fakeEntities = { people: [], projects: [], concepts: [], topics: [], decisions: [], tools: [], organizations: [] };
+    const ctx = makeCtx(fakeEntities);
+    await reEnrichNoteHandler.execute(makeJob(notePath), ctx);
+
+    const { data } = parseNote(await vault.read(notePath));
+    expect(data.status).toBe('active');
+    expect(data.archived_at).toBeUndefined();
+    expect(data.archived_reason).toBeUndefined();
+  });
+
+  it('does not un-archive through the <50-char no-op gate (regression)', async () => {
+    const notePath = 'wiki/entities/people/erin.md';
+    const fm = {
+      id: 'erin',
+      type: 'entity',
+      title: 'Erin',
+      status: 'archived',
+      archived_at: '2026-04-01T00:00:00Z',
+      archived_reason: 'rot-scan: age 300d, confidence low, inbound no',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const body = `${OPEN_TAG('summary')}\nMachine content.\n${CLOSE_TAG('summary')}`;
+    await vault.create(notePath, serializeNote(fm, body));
+
+    const ctx = makeCtx({});
+    await reEnrichNoteHandler.execute(makeJob(notePath), ctx);
+
+    const { data } = parseNote(await vault.read(notePath));
+    expect(data.status).toBe('archived');
+    expect(data.archived_at).toBeDefined();
+  });
 });
 
 describe('re-enrich-note handler — transient error propagation', () => {

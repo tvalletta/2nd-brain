@@ -4,6 +4,10 @@ import { layoutFromConfig } from '../../vault/paths.js';
 
 export const rotScanHandler: JobHandler = {
   async execute(_job, ctx) {
-    await runRotScan(ctx.vault, { layout: layoutFromConfig(ctx.config) });
+    await runRotScan(ctx.vault, {
+      layout: layoutFromConfig(ctx.config),
+      staleDraftReportDays: ctx.config.intelligence.lifecycle.staleDraftReportDays,
+      archiveQueueEnabled: ctx.config.intelligence.lifecycle.archiveQueueEnabled,
+    });
   },
 };

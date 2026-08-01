@@ -1,10 +1,14 @@
 // C1: Decay scan.
 //
 // Computes retrievability `R = exp(-Δt / S)` per note. Notes below the refresh
-// threshold are enqueued for `topic:refresh`; below the archive threshold AND
-// no inbound links → flagged for review. Also emits stale concept notes as
-// research candidates (D1) when retrievability is very low and the note has
-// confidence < 0.5.
+// threshold are enqueued for `topic:refresh`. Also emits stale concept/topic
+// notes as research candidates (D1) when retrievability is below the refresh
+// threshold and the note is either low-confidence or below the archive
+// threshold too. (Sub-project C, G6: this file previously also flagged notes
+// below the archive threshold with no inbound links via a dead, untested
+// `archive_candidate` frontmatter write — removed; rot-scan's archive-queue
+// feed, Sub-project C G3, is the real "detection with no action" fix for
+// archival candidates now.)
 
 import type { VaultAdapter } from '../vault/adapter.js';
 import type { KarpathyConfig } from '../config/schema.js';
@@ -33,7 +37,6 @@ export interface DecayScanResult {
   scanned: number;
   refreshEnqueued: number;
   thinContentEnqueued: number;
-  archiveCandidates: string[];
   researchCandidates: number;
 }
 
@@ -61,10 +64,14 @@ export async function runDecayScan(deps: DecayScanDeps): Promise<DecayScanResult
     scanned: 0,
     refreshEnqueued: 0,
     thinContentEnqueued: 0,
-    archiveCandidates: [],
     researchCandidates: 0,
   };
   const refreshThreshold = deps.config.intelligence.decay.retrievabilityRefresh;
+  // Sub-project C (G6) removed the dead `if (r < archiveThreshold && inbound
+  // === 0)` archive_candidate write below, but `archiveThreshold` itself is
+  // NOT dead config: it's still read a few lines further down, in the
+  // low-confidence research-candidate gate (`r < refreshThreshold &&
+  // (lowConfidence || r < archiveThreshold)`). Kept.
   const archiveThreshold = deps.config.intelligence.decay.retrievabilityArchive;
   const nowMs = deps.nowMs ?? Date.now();
   const nowIso = new Date(nowMs).toISOString();
@@ -93,16 +100,12 @@ export async function runDecayScan(deps: DecayScanDeps): Promise<DecayScanResult
         nowMs,
       });
 
-      // Persist the score for downstream consumers (research-queue, indexes).
+      // Persist the score for downstream consumers (research-queue, indexes,
+      // and rot-scan's RotEntry.retrievability display field — that path is
+      // unaffected by the G6 removal below, since it reads this same
+      // fm.retrievability stamp, not the deleted archive-candidate branch).
       fm.retrievability = Number(r.toFixed(4));
       fm.retrievability_checked_at = nowIso;
-      const inbound = countInboundLinks(body);
-
-      if (r < archiveThreshold && inbound === 0) {
-        result.archiveCandidates.push(path);
-        fm.review_state = 'unreviewed';
-        fm.archive_candidate = true;
-      }
 
       const target = (REFRESH_TARGETS as Record<string, RefreshTarget>)[type];
       // Gated on intelligence.richness.enabled: this is the thin-content
@@ -158,14 +161,6 @@ export async function runDecayScan(deps: DecayScanDeps): Promise<DecayScanResult
     }
   }
   return result;
-}
-
-function countInboundLinks(body: string): number {
-  // Cheap heuristic; full backlinks live elsewhere. We just check whether
-  // any obvious inbound markers exist within the note body itself (e.g.
-  // it's referenced in a backlinks region). Detailed accounting can be
-  // added once backlinks scanner exposes a query API.
-  return (body.match(/%% begin:backlinks %%[\s\S]*?\[\[/g) ?? []).length;
 }
 
 function clamp01(n: number): number {

@@ -20,14 +20,23 @@ export const compileEntitiesHandler: JobHandler = {
     if (!sourceSummaryPath) throw new Error('compile-entities: no targetPath');
 
     const summaryContentEarly = await context.vault.read(sourceSummaryPath);
-    const { data: summaryDataEarly } = parseNote(summaryContentEarly);
+    const { data: summaryDataEarly, body: summaryBodyEarly } = parseNote(summaryContentEarly);
     const projectSlug = (summaryDataEarly.project_slug as string | undefined) ?? '_general';
     const selfSlug = slugify(basename(context.projectRoot));
 
     if (projectSlug === selfSlug) {
       log.debug('Skipping entity creation for self-referential source', { sourceSummaryPath, projectSlug });
-      const updated = { ...summaryDataEarly, ingest_status: 'linked', updated_at: nowISO() };
-      await context.vault.atomicWrite(sourceSummaryPath, serializeNote(updated, parseNote(summaryContentEarly).body));
+      const updated: Record<string, unknown> = { ...summaryDataEarly, ingest_status: 'linked', updated_at: nowISO() };
+      // Sub-project C (G0/G7): the self-referential no-op branch still
+      // counts as "genuinely processed" — the pipeline correctly decided
+      // there's nothing further to compile. Same guard as the normal
+      // completion path below.
+      if (context.config.intelligence.lifecycle.enabled && updated.status !== 'active' && updated.status !== 'rejected') {
+        updated.status = 'active';
+        delete updated.archived_at;
+        delete updated.archived_reason;
+      }
+      await context.vault.atomicWrite(sourceSummaryPath, serializeNote(updated, summaryBodyEarly));
       return;
     }
 
@@ -179,6 +188,12 @@ export const compileEntitiesHandler: JobHandler = {
     const allPages = [...result.created, ...result.updated];
     data.links = [...new Set([...(data.links as string[] ?? []), ...allPages])];
     data.ingest_status = 'linked';
+    // Sub-project C (G0/G7): same promotion guard as link-concepts.ts.
+    if (context.config.intelligence.lifecycle.enabled && data.status !== 'active' && data.status !== 'rejected') {
+      data.status = 'active';
+      delete data.archived_at;
+      delete data.archived_reason;
+    }
     data.updated_at = nowISO();
     const updated = serializeNote(data, body);
     await context.vault.atomicWrite(sourceSummaryPath, updated);

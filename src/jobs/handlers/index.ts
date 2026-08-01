@@ -27,6 +27,7 @@ import { digestWeeklyHandler } from './digest-weekly.js';
 import { topicRefreshHandler } from './topic-refresh.js';
 import { decayScanHandler } from './decay-scan.js';
 import { rotScanHandler } from './rot-scan.js';
+import { archiveStaleDraftsHandler } from './archive-stale-drafts.js';
 import { researchProposeHandler } from './research-propose.js';
 import { researchExecuteHandler } from './research-execute.js';
 import { evaluateRefreshCandidatesHandler } from './evaluate-refresh-candidates.js';
@@ -67,6 +68,7 @@ export function createHandlerRegistry(): Map<JobType, JobHandler> {
   map.set('topic-refresh', topicRefreshHandler);
   map.set('decay-scan', decayScanHandler);
   map.set('rot-scan', rotScanHandler);
+  map.set('archive-stale-drafts', archiveStaleDraftsHandler);
   map.set('research-propose', researchProposeHandler);
   map.set('research-execute', researchExecuteHandler);
   map.set('evaluate-refresh-candidates', evaluateRefreshCandidatesHandler);

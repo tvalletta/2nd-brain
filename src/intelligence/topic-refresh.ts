@@ -282,6 +282,19 @@ export async function refreshTopic(
   fm.pending_evidence = [];
   fm.pending_evidence_count = 0;
 
+  // Sub-project C (G7): a note that just received a genuine synthesis
+  // rewrite has demonstrably been re-engaged with — reverse any prior
+  // archival. Only reached after a successful LLM synthesis; the two
+  // early-return no-op branches above (unsupported type; zero retrieval
+  // hits) bail out before this point without rewriting the body, so they
+  // correctly do NOT un-archive.
+  if (fm.status === 'archived') {
+    fm.status = 'active';
+    delete fm.archived_at;
+    delete fm.archived_reason;
+    log.info('Un-archived note on successful refresh', { path: notePath });
+  }
+
   await deps.vault.atomicWrite(notePath, serializeNote(fm, nextBody));
   const { layoutFromConfig } = await import('../vault/paths.js');
   await appendLogEntry(

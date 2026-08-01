@@ -117,6 +117,112 @@ Initial framing — combine cosine sim with time decay.
     expect(Array.isArray(data.protected_regions)).toBe(true);
   });
 
+  it('un-archives a note on a successful synthesis, clearing archived_at/archived_reason (Sub-project C, G7)', async () => {
+    const topicPath = 'wiki/topics/archived-topic.md';
+    await vault.create(
+      topicPath,
+      `---
+id: t2
+type: topic
+title: Archived topic
+status: archived
+archived_at: 2026-04-01T00:00:00Z
+archived_reason: "rot-scan: age 400d, confidence low, inbound no"
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+last_verified: 2026-04-01T00:00:00Z
+stability: 30
+half_life_domain: topic
+---
+# Archived topic
+
+%% begin:current-understanding %%
+Old framing.
+%% end:current-understanding %%
+`,
+    );
+
+    await store.upsert([
+      {
+        doc_id: 'wiki/sessions/2026-04-15.md',
+        chunk_index: 0,
+        chunk_hash: 'h1',
+        text: 'New evidence about the archived topic surfaced recently.',
+        metadata: { type: 'session_summary' },
+      },
+    ]);
+
+    await refreshTopic({ vault, llm: fakeLLM({
+      primary: 'Updated framing incorporating the new evidence.',
+      contradictions: [],
+      new_sources: [],
+    }), store, config }, topicPath);
+
+    const { data } = parseNote(await vault.read(topicPath));
+    expect(data.status).toBe('active');
+    expect(data.archived_at).toBeUndefined();
+    expect(data.archived_reason).toBeUndefined();
+  });
+
+  it('does not un-archive when no supporting evidence is retrieved (no-op branch)', async () => {
+    const topicPath = 'wiki/topics/archived-no-evidence.md';
+    await vault.create(
+      topicPath,
+      `---
+id: t3
+type: topic
+title: Archived, no evidence
+status: archived
+archived_at: 2026-04-01T00:00:00Z
+archived_reason: "rot-scan: age 400d, confidence low, inbound no"
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+last_verified: 2026-04-01T00:00:00Z
+stability: 30
+half_life_domain: topic
+---
+# Archived, no evidence
+
+%% begin:current-understanding %%
+Old framing.
+%% end:current-understanding %%
+`,
+    );
+
+    // No embeddings upserted — retrieve() will find zero hits.
+    await refreshTopic({ vault, llm: fakeLLM({ primary: '', contradictions: [], new_sources: [] }), store, config }, topicPath);
+
+    const { data } = parseNote(await vault.read(topicPath));
+    expect(data.status).toBe('archived');
+    expect(data.archived_at).toBeDefined();
+    expect(data.archived_reason).toBeDefined();
+  });
+
+  it('does not un-archive for an unsupported note type (no-op branch)', async () => {
+    await vault.ensureFolder('wiki/misc');
+    const notePath = 'wiki/misc/archived-unsupported.md';
+    await vault.create(
+      notePath,
+      `---
+id: t4
+type: tool
+title: Archived unsupported type
+status: archived
+archived_at: 2026-04-01T00:00:00Z
+archived_reason: "manual"
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-04-01T00:00:00Z
+---
+# Archived unsupported type
+`,
+    );
+
+    await refreshTopic({ vault, llm: fakeLLM({ primary: '', contradictions: [], new_sources: [] }), store, config }, notePath);
+
+    const { data } = parseNote(await vault.read(notePath));
+    expect(data.status).toBe('archived');
+  });
+
   it('halves stability and records contradictions when the LLM reports them', async () => {
     const topicPath = 'wiki/topics/x.md';
     await vault.create(

@@ -99,6 +99,12 @@ export const BaseFrontmatterSchema = z.object({
    * reference this concept. Maintained by `detect-bridges`.
    */
   also_relevant_to: z.array(z.string()).default([]),
+
+  // --- Sub-project C: draft/archival lifecycle ---
+  /** ISO timestamp this note transitioned to status: archived. Deleted (not set to undefined — gray-matter's stringifier throws on undefined values) on un-archival. */
+  archived_at: z.string().optional(),
+  /** Free-text reason the note was archived, e.g. "stale-draft (34d at ingest_status: detected)", "rot-scan: age 9999d, confidence unknown, inbound no", "superseded". Deleted on un-archival. */
+  archived_reason: z.string().optional(),
 });
 export type BaseFrontmatter = z.infer<typeof BaseFrontmatterSchema>;
 
