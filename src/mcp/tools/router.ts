@@ -20,6 +20,7 @@ import { handle as searchByTags } from './search-by-tags.js';
 import { handle as getRelated } from './get-related.js';
 import { handle as approveResearch } from './approve-research.js';
 import { handle as reconcileEntities } from './reconcile-entities.js';
+import { handle as resolveArchiveCandidate } from './resolve-archive-candidate.js';
 import { handle as reEnrichNote } from './re-enrich-note.js';
 import { handle as search } from './search.js';
 import { createLogger } from '../../shared/logger.js';
@@ -52,6 +53,7 @@ const handlers: Record<string, ToolHandler> = {
   get_related: getRelated,
   approve_research: approveResearch,
   reconcile_entities: reconcileEntities,
+  resolve_archive_candidate: resolveArchiveCandidate,
   re_enrich_note: reEnrichNote,
 };
 

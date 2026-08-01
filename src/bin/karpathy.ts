@@ -47,6 +47,11 @@ import {
   resolveEntry,
   pendingEntries,
 } from '../maintenance/reconciliation-queue.js';
+import {
+  readArchiveQueue,
+  pendingArchiveEntries,
+  applyArchiveDecision,
+} from '../maintenance/archive-queue.js';
 import { buildEntityIndex, resolveEntity } from '../ingest/entity-resolver.js';
 import type { EntityKind } from '../ingest/entity-resolver.js';
 import { rebuildAllBacklinks } from '../maintenance/backlinks.js';
@@ -1451,6 +1456,79 @@ async function curatorCommand(): Promise<void> {
   }
 }
 
+async function archivistCommand(): Promise<void> {
+  const config = await loadConfig();
+  const vault = createFsAdapter(config.vaultPath);
+  const layout = config.layout;
+
+  const queue = await readArchiveQueue(vault, layout);
+  const pending = pendingArchiveEntries(queue);
+
+  if (pending.length === 0) {
+    process.stdout.write('Archive queue is empty — no pending candidates.\n');
+    return;
+  }
+
+  process.stdout.write(`\nArchive queue: ${pending.length} pending candidate(s).\n`);
+  process.stdout.write('Decisions: [a]rchive  [k]eep  [S]upersede  [s]kip  [q]uit\n\n');
+
+  const readline = await import('node:readline');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const question = (prompt: string): Promise<string> =>
+    new Promise((resolve) => rl.question(prompt, resolve));
+
+  let processed = 0;
+
+  for (const entry of pending) {
+    process.stdout.write(
+      `\n─────────────────────────────────────────\n` +
+      `  Note:    "${entry.title}"\n` +
+      `           ${entry.path}\n` +
+      `  Reason:  ${entry.reason}\n`,
+    );
+
+    const answer = (await question('Decision [a/k/S/s/q]: ')).trim();
+
+    if (answer.toLowerCase() === 'q') {
+      process.stdout.write('Exiting archivist. Remaining entries stay pending.\n');
+      break;
+    }
+
+    if (answer === 'a') {
+      await applyArchiveDecision(vault, entry, 'archive', undefined, layout);
+      process.stdout.write(`  Archived "${entry.title}".\n`);
+      processed++;
+    } else if (answer === 'k') {
+      await applyArchiveDecision(vault, entry, 'keep', undefined, layout);
+      process.stdout.write('  Kept — will not be re-flagged.\n');
+    } else if (answer === 'S') {
+      const supersededByPath = (await question('  Replacement note path: ')).trim();
+      if (!supersededByPath || !(await vault.exists(supersededByPath))) {
+        process.stdout.write('  Skipping — replacement path not found.\n');
+        continue;
+      }
+      await applyArchiveDecision(vault, entry, 'supersede', supersededByPath, layout);
+      process.stdout.write(`  Superseded by "${supersededByPath}".\n`);
+      processed++;
+    } else if (answer === 's') {
+      await applyArchiveDecision(vault, entry, 'skip', undefined, layout);
+      process.stdout.write('  Skipped.\n');
+    } else {
+      process.stdout.write('  Unknown input — skipping.\n');
+    }
+  }
+
+  rl.close();
+
+  if (processed > 0) {
+    process.stdout.write('\nRebuilding indexes...\n');
+    await rebuildAllIndexes(vault, layout);
+    process.stdout.write(`Done. ${processed} decision(s) applied.\n`);
+  } else {
+    process.stdout.write('\nNo archival changes applied.\n');
+  }
+}
+
 async function touchCommand(args: string[]): Promise<void> {
   const notePath = args[0];
   if (!notePath) {
@@ -1803,6 +1881,9 @@ async function main(): Promise<void> {
     case 'curator':
       await curatorCommand();
       break;
+    case 'archivist':
+      await archivistCommand();
+      break;
     case 'touch':
       await touchCommand(args.slice(1));
       break;
@@ -1854,6 +1935,7 @@ async function main(): Promise<void> {
           '  spec-versions       List superseded spec versions',
           '  spec-versions archive [description]  Archive current spec',
           '  curator             Interactive entity reconciliation queue walkthrough',
+          '  archivist           Interactive archive-queue walkthrough (rot-scan candidates)',
           '  touch <note-path>   Re-run entity extraction on a wiki note you edited',
           '  entity-aliases      Interactive walkthrough to fill in aliases for every entity note',
           '  intel <subcommand>  Intelligence pipeline (run "intel help" for subcommands)',

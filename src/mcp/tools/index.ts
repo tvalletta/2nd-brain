@@ -19,6 +19,7 @@ import { definition as searchByTags } from './search-by-tags.js';
 import { definition as getRelated } from './get-related.js';
 import { definition as approveResearch } from './approve-research.js';
 import { definition as reconcileEntities } from './reconcile-entities.js';
+import { definition as resolveArchiveCandidate } from './resolve-archive-candidate.js';
 import { definition as reEnrichNote } from './re-enrich-note.js';
 import { definition as search } from './search.js';
 
@@ -45,5 +46,6 @@ export const TOOL_DEFINITIONS = [
   getRelated,
   approveResearch,
   reconcileEntities,
+  resolveArchiveCandidate,
   reEnrichNote,
 ];
