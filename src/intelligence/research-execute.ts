@@ -107,7 +107,41 @@ export async function executeResearch(
 
   const layout = layoutFromConfig(deps.config);
   const conceptsFolder = `${layout.wiki}/concepts`;
-  const notePath = options.notePath ?? `${conceptsFolder}/${slug}.md`;
+  const topicsFolder = `${layout.wiki}/topics`;
+
+  // Resolve the write target. Neither the job handler
+  // (src/jobs/handlers/research-execute.ts) nor the CLI
+  // (`karpathy intel research <slug> <depth>`) nor G1's auto-drain ever pass
+  // `options.notePath` -- so this default resolution is what every real
+  // invocation goes through. Since G3 (Task 5) permanently restricted
+  // research-propose.ts's scanFolders() to `${layout.wiki}/topics`, every
+  // candidate that reaches execution today already has a real backing page
+  // under `topics/`, not `concepts/` -- hardcoding the concepts folder here
+  // (as before) meant the existence check below always looked at the wrong
+  // path for a topic slug, causing both fresh and repeat topic research to
+  // misbehave. Resolve against whichever folder actually backs the slug,
+  // preferring an existing concepts page (pre-B1-style vaults, or a legacy
+  // individual concept page a user still maintains by hand) so an in-place
+  // update is never redirected; only fall through to the concepts-folder
+  // default when neither a concept nor a topic page exists yet, which
+  // preserves the G3 write-guard's defense-in-depth behavior for a stale or
+  // manually-typed slug with no real backing page anywhere.
+  let notePath: string;
+  let targetFolder: string;
+  if (options.notePath) {
+    notePath = options.notePath;
+    targetFolder = notePath.startsWith(`${topicsFolder}/`) ? topicsFolder : conceptsFolder;
+  } else {
+    const conceptPath = `${conceptsFolder}/${slug}.md`;
+    const topicPath = `${topicsFolder}/${slug}.md`;
+    if (!(await deps.vault.exists(conceptPath)) && (await deps.vault.exists(topicPath))) {
+      notePath = topicPath;
+      targetFolder = topicsFolder;
+    } else {
+      notePath = conceptPath;
+      targetFolder = conceptsFolder;
+    }
+  }
   const titleHint = await loadTitleHint(deps.vault, notePath, slug);
 
   // Round-based query loop with coverage check.
@@ -166,6 +200,7 @@ export async function executeResearch(
     sources: allSources,
     nowIso,
     depth: options.depth,
+    targetFolder,
     conceptsFolder,
   });
 
@@ -269,20 +304,29 @@ interface WriteArgs {
   sources: SearchResult[];
   nowIso: string;
   depth: ResearchDepth;
+  /** The folder `notePath` actually lives in -- `concepts` or `topics`. */
+  targetFolder: string;
+  /** Always `${layout.wiki}/concepts`, independent of `targetFolder` -- used
+   *  only by the G3 guard below to check for glossary-consolidation. */
   conceptsFolder: string;
 }
 
 async function writeConceptNote(deps: ResearchExecuteDeps, args: WriteArgs): Promise<void> {
-  await deps.vault.ensureFolder(args.conceptsFolder);
+  await deps.vault.ensureFolder(args.targetFolder);
   const exists = await deps.vault.exists(args.notePath);
 
   // G3: refuse to (re)create an individual concept page inside a
-  // glossary-consolidated folder. If the target doesn't exist AND the
-  // concepts folder already has a glossary.md, the concept has been
-  // consolidated (B1) -- writing a new individual page here would silently
-  // fork a duplicate, disconnected representation of the same concept.
+  // glossary-consolidated folder. Only applies when the resolved write
+  // target IS the concepts folder -- a topic candidate (the only kind
+  // research-propose.ts's scanFolders() emits post-G3) is routed to
+  // `targetFolder === topicsFolder` upstream and is never subject to this
+  // check, regardless of whether `concepts/glossary.md` happens to exist.
+  // If the target doesn't exist AND the concepts folder already has a
+  // glossary.md, the concept has been consolidated (B1) -- writing a new
+  // individual page here would silently fork a duplicate, disconnected
+  // representation of the same concept.
   const glossaryPath = `${args.conceptsFolder}/glossary.md`;
-  if (!exists && (await deps.vault.exists(glossaryPath))) {
+  if (!exists && args.targetFolder === args.conceptsFolder && (await deps.vault.exists(glossaryPath))) {
     throw new Error(
       `Refusing to create ${args.notePath}: ${args.conceptsFolder} is glossary-consolidated ` +
         `(${glossaryPath} exists). This concept should be researched as a topic, or its ` +

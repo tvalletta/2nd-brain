@@ -550,6 +550,142 @@ updated_at: 2026-01-01T00:00:00Z
   });
 });
 
+describe('research executor — topic candidate routing against real production vault shape', () => {
+  // Reproduces the exact real call path: src/jobs/handlers/research-execute.ts
+  // (the auto-drain / manual `karpathy intel research <slug> <depth>` handler)
+  // never passes `notePath` -- executeResearch must resolve the target
+  // folder itself. Since Task 5 (bfa9460) restricted research-propose.ts's
+  // scanFolders() to `${layout.wiki}/topics` only, every real candidate that
+  // reaches execution today is a topic, not a concept -- these tests run
+  // against a post-B1 vault (glossary.md present in concepts/) with a real,
+  // non-default `Curated/`-style layout, matching the real production vault.
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  const config = KarpathyConfigSchema.parse({
+    vaultPath: '/tmp',
+    layout: {
+      wiki: 'Curated/wiki',
+      system: 'Curated/_system',
+      sources: 'Curated/sources',
+      review: 'Curated/review',
+      aiConversations: 'AI Conversations',
+      aiSummaries: 'AI Conversations/_summaries',
+      aiLegacy: 'AI Conversations/_legacy',
+      digests: 'Curated/wiki/digests',
+    },
+  });
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-topic-routing-'));
+    vault = createFsAdapter(dir);
+    await vault.ensureFolder('Curated/wiki/concepts');
+    await vault.create(
+      'Curated/wiki/concepts/glossary.md',
+      `---
+type: index
+title: Concept glossary
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+# Concept glossary
+`,
+    );
+    await vault.ensureFolder('Curated/wiki/topics');
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const llm = () =>
+    fakeLLM({
+      tldr: 'Topic summary.',
+      body: '## What it is\nSomething.\n\n## Why it matters\nBenefits.',
+      claims: [{ claim: 'a claim', confidence: 'medium' }],
+      contradictions: [],
+      coverage: { 'what-is': true, 'why-it-matters': true, 'how-it-works': false, alternatives: false, 'recent-changes': false },
+    });
+
+  it('a genuinely new (never-yet-researched) topic candidate executes via the job-handler call pattern (no notePath)', async () => {
+    await vault.create(
+      'Curated/wiki/topics/architectural-best-practices.md',
+      `---
+type: topic
+title: Architectural best practices
+created_at: 2026-05-01T00:00:00Z
+updated_at: 2026-05-01T00:00:00Z
+---
+# Architectural best practices
+`,
+    );
+
+    // Mirrors the exact payload shape src/jobs/handlers/research-execute.ts
+    // builds from a drained/CLI-enqueued job: { slug, depth } only, no notePath.
+    const result = await executeResearch(
+      { vault, llm: llm(), config },
+      'architectural-best-practices',
+      { depth: 'light', nowMs: Date.parse('2026-08-01T00:00:00Z') },
+    );
+
+    expect(result.notePath).toBe('Curated/wiki/topics/architectural-best-practices.md');
+    const { data, body } = parseNote(await vault.read(result.notePath));
+    expect(data.type).toBe('topic'); // frontmatter type preserved, not clobbered to 'concept'
+    expect(data.last_research_depth).toBe('light');
+    expect(body).toContain('%% begin:research %%');
+    // The concepts folder must be untouched by this write.
+    expect(await vault.exists('Curated/wiki/concepts/architectural-best-practices.md')).toBe(false);
+  });
+
+  it('an update to an already-researched, existing topic page executes via the job-handler call pattern (no notePath)', async () => {
+    await vault.create(
+      'Curated/wiki/topics/feedback.md',
+      `---
+type: topic
+title: Feedback
+created_at: 2026-05-01T00:00:00Z
+updated_at: 2026-05-01T00:00:00Z
+last_research_depth: light
+last_research_at: 2026-05-01T00:00:00Z
+---
+# Feedback
+
+%% begin:tldr %%
+> **TL;DR** — old summary
+%% end:tldr %%
+`,
+    );
+
+    const result = await executeResearch(
+      { vault, llm: llm(), config },
+      'feedback',
+      { depth: 'medium', nowMs: Date.parse('2026-08-01T00:00:00Z') },
+    );
+
+    expect(result.notePath).toBe('Curated/wiki/topics/feedback.md');
+    const { data, body } = parseNote(await vault.read(result.notePath));
+    expect(data.type).toBe('topic');
+    expect(data.last_research_depth).toBe('medium'); // updated from 'light'
+    expect(body).toContain('Topic summary'); // new tldr replaced the old one
+    expect(body).not.toContain('old summary');
+  });
+
+  it('a genuinely orphaned/stale concept candidate (no backing page anywhere) is still refused', async () => {
+    // No file at either Curated/wiki/concepts/orphaned-concept.md or
+    // Curated/wiki/topics/orphaned-concept.md -- simulating a stale decision
+    // for a pre-B1 concept slug that slipped past research-propose.ts's
+    // orphan purge and reached execution anyway. The G3 guard must still
+    // refuse this, exactly as before the routing fix.
+    await expect(
+      executeResearch({ vault, llm: llm(), config }, 'orphaned-concept', {
+        depth: 'light',
+        nowMs: Date.parse('2026-08-01T00:00:00Z'),
+      }),
+    ).rejects.toThrow(/glossary-consolidated/);
+
+    expect(await vault.exists('Curated/wiki/concepts/orphaned-concept.md')).toBe(false);
+    expect(await vault.exists('Curated/wiki/topics/orphaned-concept.md')).toBe(false);
+  });
+});
+
 describe('significance gate (D4)', () => {
   it('drops too-short or stop-word names', () => {
     expect(heuristicGate({ name: 'X', kind: 'concept' }, []).action).toBe('drop');
