@@ -983,8 +983,8 @@ async function mergeCommand(args: string[]): Promise<void> {
 
     // Rebuild backlinks and indexes after merges
     process.stdout.write('Rebuilding backlinks and indexes...\n');
-    await rebuildAllBacklinks(vault);
-    await rebuildAllIndexes(vault);
+    await rebuildAllBacklinks(vault, config.layout);
+    await rebuildAllIndexes(vault, config.layout);
     process.stdout.write('Done.\n');
     return;
   }
@@ -1050,8 +1050,8 @@ async function mergeCommand(args: string[]): Promise<void> {
 
   // Rebuild backlinks and indexes
   process.stdout.write('Rebuilding backlinks and indexes...\n');
-  await rebuildAllBacklinks(vault);
-  await rebuildAllIndexes(vault);
+  await rebuildAllBacklinks(vault, config.layout);
+  await rebuildAllIndexes(vault, config.layout);
   process.stdout.write('Done.\n');
 }
 
@@ -1443,8 +1443,8 @@ async function curatorCommand(): Promise<void> {
 
   if (processed > 0) {
     process.stdout.write('\nRebuilding backlinks and indexes...\n');
-    await rebuildAllBacklinks(vault);
-    await rebuildAllIndexes(vault);
+    await rebuildAllBacklinks(vault, layout);
+    await rebuildAllIndexes(vault, layout);
     process.stdout.write(`Done. ${processed} merge(s) applied.\n`);
   } else {
     process.stdout.write('\nNo merges applied.\n');
