@@ -27,7 +27,7 @@ export interface HookContext {
   sessionLog: ReturnType<typeof createSessionLogManager>;
   hotCache: ReturnType<typeof createHotCacheManager>;
   queue: JobQueue;
-  backgroundDrain: () => void;
+  backgroundDrain: () => void | Promise<void>;
   runDeterministicJobs: () => Promise<number>;
 }
 
@@ -46,7 +46,12 @@ function buildContext(config: KarpathyConfig): HookContext {
     sessionLog,
     hotCache,
     queue,
-    backgroundDrain: spawnBackgroundDrain,
+    backgroundDrain: () =>
+      spawnBackgroundDrain({
+        lockDir,
+        stateDir,
+        minIntervalMs: config.ingest.stopDrainMinIntervalMs,
+      }),
     async runDeterministicJobs() {
       // Lazy-init: only create heavy infrastructure when actually draining
       const lock = createFileLock(lockDir);

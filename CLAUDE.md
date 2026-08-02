@@ -6,13 +6,13 @@ This is a local-first knowledge system that captures Claude Code sessions and ra
 
 ## Specification
 
-The authoritative design spec lives at `specs/specification.md`. Consult it before implementing features or making non-trivial changes. See sections 6-8 for the memory model, architectural lanes, and job system; section 9 for functional requirements; section 10 for the data model; section 12 for overwrite policy; section 18 for implementation phases; section 22 for the curator reconciliation workflow; section 25 for the draft/archival lifecycle; section 26 for the research queue redesign.
+The authoritative design spec lives at `specs/specification.md`. Consult it before implementing features or making non-trivial changes. See sections 6-8 for the memory model, architectural lanes, and job system; section 9 for functional requirements; section 10 for the data model; section 12 for overwrite policy; section 18 for implementation phases; section 22 for the curator reconciliation workflow; section 25 for the draft/archival lifecycle; section 26 for the research queue redesign; section 27 for resource-boundedness fixes (multi-instance MCP server).
 
 ## Build & Test
 
 ```bash
 pnpm build            # Build with tsup → dist/
-pnpm test             # Vitest, 1267 tests across 154 files
+pnpm test             # Vitest, 1282 tests across 156 files
 pnpm lint             # tsc --noEmit (strict mode)
 ```
 
@@ -200,6 +200,9 @@ Implements [specs/intelligence-plan.md](specs/intelligence-plan.md). Hot paths:
     }
   },
   "notifications": { "slack": { "enabled": false, "webhookUrl": "...", "target": "#channel" } },
+  "ingest": {
+    "stopDrainMinIntervalMs": 30000 // Fix B: min ms between Stop/PostCompact-hook-spawned background drains; scheduled intel tick still drains every 5 min regardless
+  },
   "enrichment": {
     "significanceGate": "heuristic" | "off" | "llm",  // default: "llm"
     "significanceGateDropConfidence": 0.7, // below this, an LLM "drop" verdict still creates the page (flagged for review) instead of discarding it
@@ -228,6 +231,15 @@ Hooks are configured as `type: "command"` in `~/.claude/settings.json`. They cal
   4. File watcher (`src/ingest/watcher.ts`) handles `add`/`change`/`unlink` events; the MCP server enqueues per-file FTS sync jobs.
 - **Maintenance CLI** — `karpathy maintenance --populate-fts` (one-shot full FTS seed), `--re-embed` (refresh embeddings under current provider), `--prune-provider <id>` (drop stale provider rows).
 - **Ollama provider** — `createOllamaProvider({ baseUrl, model, dimensions, timeoutMs })` in `src/embeddings/ollama.ts`. POSTs to `/api/embeddings`, returns L2-normalized `Float32Array`. Companion `isOllamaAvailable(baseUrl, timeoutMs)` is a non-throwing probe used by `HybridStore.search` before fanning out semantic queries.
+
+## Resource boundedness (§27)
+
+A root-cause audit found 16 concurrently-running Claude Code windows each spawning an independent MCP server, each running its own chokidar watcher over the same OneDrive-backed vault folders — driving `fileproviderd`/OneDrive CPU usage to the point of crashing the machine. Four fixes:
+
+- **Single-watcher lock** — `src/ingest/watcher.ts`'s `acquireWatcherLock(lockDir)` wraps the existing `createFileLock` (`src/jobs/lock.ts`, unchanged) keyed `'watcher'`. `src/mcp/server.ts` acquires it before starting the chokidar watcher; a live holder elsewhere means this instance skips starting a watcher entirely (relies on the holder's watcher + the 5-min `intel tick` FTS sync instead). Released — and the watcher stopped — in the server's existing `shutdown()` path (stdin-close/SIGTERM/SIGHUP/`server.onclose`).
+- **Stop/PostCompact drain throttle** — `src/hooks/background-drain.ts`'s `spawnBackgroundDrain` is now async, taking `{ lockDir, stateDir, minIntervalMs? }` (wired via `src/hooks/dispatch.ts`). Skips spawning when the job runner's global `__drain__` lock is held by a live PID, or when the last spawn was within `ingest.stopDrainMinIntervalMs` (default 30000ms, recorded in `<stateDir>/last-drain.json`). The scheduled `intel tick` still drains every 5 min regardless, so a skip never strands work.
+- **`enqueueJob` flush fix** — `src/mcp/context.ts`'s `enqueueJob` previously called `queue.enqueue()` without `queue.flush()`, silently dropping watcher-triggered `sync-fts-index` jobs before they reached `job-queue.json`. Fixed via the extracted, directly-testable `enqueueAndPersist(queue, input)`.
+- **Websearch subprocess reaping** — `src/intelligence/web-search.ts`'s per-call MCP search client tracks `StdioClientTransport.pid` and, after the SDK's own `close()`, walks and reaps any surviving process-tree descendants via `pgrep -P` (`reapProcessDescendants`) — the SDK's own close() only SIGKILLs the direct command PID, leaking Puppeteer/Chromium grandchildren a websearch MCP server spawns via `npx`. The live operator config's `intelligence.research.search.provider` was also flipped from `mcp` to `noop` (inert, unused path).
 
 ## Common Tasks
 

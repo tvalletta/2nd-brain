@@ -82,10 +82,12 @@ export async function handleStop(
   });
   await ctx.queue.flush();
 
-  // Drain the job queue in a background process (non-blocking)
-  ctx.backgroundDrain();
+  // Drain the job queue in a background process (non-blocking). May be a
+  // no-op skip (see src/hooks/background-drain.ts) when a drain is already
+  // in progress or one was spawned within the throttle interval.
+  await ctx.backgroundDrain();
 
-  log.info('Session stopped (background drain spawned)', {
+  log.info('Session stopped (background drain requested)', {
     sessionId: parsed.session_id,
   });
 

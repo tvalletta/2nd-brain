@@ -41,6 +41,14 @@ export const IngestConfigSchema = z.object({
   debounceMs: z.number().int().nonnegative().default(2000),
   /** §23.1: When true, the file watcher also monitors {vaultPath}/{layout.clippings}. */
   watchClippings: z.boolean().default(false),
+  /**
+   * Fix B (resource-boundedness): minimum time in ms between Stop/PostCompact-
+   * hook-spawned background drains (`src/hooks/background-drain.ts`). A spawn
+   * within this window of the last one is skipped — the scheduled `intel
+   * tick` (every 5 min) still drains the queue regardless, so skipping never
+   * strands work for long.
+   */
+  stopDrainMinIntervalMs: z.number().int().nonnegative().default(30_000),
 });
 
 export const MaintenanceConfigSchema = z.object({

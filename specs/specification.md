@@ -1159,3 +1159,38 @@ Every research-queue-adjacent test fixture previously constructed its config via
 - `research-execute` MUST reserve a budget slot before performing any LLM call, and MUST NOT mark a queue candidate `completed` if that reservation is refused.
 - `writeConceptNote()` MUST NOT create a new individual page under a glossary-consolidated `concepts/` folder; it MAY update an existing page there in place.
 
+## 27. Resource-boundedness fixes (multi-instance MCP server)
+
+A root-cause audit of repeated machine crashes under resource pressure found that every Claude Code window spawns its own MCP server process (`src/mcp/server.ts`), and — with 16 windows open concurrently — each independently ran a chokidar file watcher over the same OneDrive-backed vault folders, driving `fileproviderd` to 119% CPU and OneDrive's sync daemon to 70% CPU purely from N-fold redundant filesystem event/polling activity. Three further contributors compounded this: an unconditional background-drain spawn on every Stop/PostCompact hook (across every session, every turn), a data-loss bug that silently dropped watcher-triggered jobs before they ever reached disk, and a leaked Puppeteer/Chromium grandchild process per per-call websearch MCP invocation. This section fixes all four without weakening any existing job's correctness or the human-in-the-loop gates elsewhere in the intelligence layer.
+
+### 27.1 Single-watcher advisory lock
+
+`src/ingest/watcher.ts` exports `acquireWatcherLock(lockDir)`, a thin wrapper over the existing `createFileLock` (`src/jobs/lock.ts`) — no changes to `lock.ts` itself, since its cross-process staleness rule (a lock file whose recorded PID fails `process.kill(pid, 0)`) already implements "a dead holder's lock is free to take over." `src/mcp/server.ts` calls it, keyed `'watcher'`, before starting the chokidar watcher: if acquired, the watcher starts as before and the release function is retained; if a live MCP server instance already holds the lock, this instance skips starting a watcher entirely and relies on the lock-holder's watcher plus the every-5-min launchd `intel tick` FTS sync — no functionality is lost, only the redundant process. The lock is released (and the watcher stopped) from the server's existing `shutdown()` path, now also invoked from `server.onclose` so the lock is never held past the process's actual lifetime longer than the existing PID-staleness check would otherwise require.
+
+### 27.2 Stop/PostCompact-hook drain throttle
+
+`src/hooks/background-drain.ts`'s `spawnBackgroundDrain` is now async and takes `{ lockDir, stateDir, minIntervalMs? }` (wired from `src/hooks/dispatch.ts`'s shared `HookContext.backgroundDrain` closure, consumed identically by both `stop.ts` and `post-compact.ts`). Before spawning, it skips when either is true:
+
+- the job runner's existing global `__drain__` lock (acquired by `drainQueueCommand()` in `src/bin/karpathy.ts`) is currently held by a live PID — that process will drain the whole queue itself;
+- the last spawn happened within `ingest.stopDrainMinIntervalMs` (default 30000ms), recorded in `<stateDir>/last-drain.json` (same directory `job-queue.json` lives in).
+
+Neither check risks stranding work: the scheduled `intel tick` (launchd, every 5 min) drains the queue unconditionally regardless of what a Stop/PostCompact hook decided.
+
+### 27.3 `enqueueJob` flush fix
+
+`src/mcp/context.ts`'s `enqueueJob` called `queue.enqueue(input)` without a following `queue.flush()` — `enqueue()` only mutates in-memory state, so an "enqueued" job never reached `job-queue.json` and was silently lost the moment the MCP server process exited. This hit watcher-triggered `sync-fts-index` jobs particularly hard (§24.3's layer 4): they fired on every file change but never survived to the next drain. Fixed by extracting `enqueueAndPersist(queue, input)` — `load()` then `enqueue()` then `flush()` — which `enqueueJob` now delegates to; exported standalone so it's directly testable without booting a full `MCPContext`.
+
+### 27.4 Websearch subprocess reaping
+
+`src/intelligence/web-search.ts`'s per-call MCP search client (`createMcpSearch`, the `lifecycle: 'per-call'` path used by `createWebSearchFromConfig` for `intelligence.research.search.provider: 'mcp'`) spawns through the SDK's `StdioClientTransport`, which shells out via `cross-spawn` with no `detached`/process-group option — so a grandchild the spawned command forks (e.g. Puppeteer's Chromium, spawned by a websearch MCP server run via `npx`) is never made a process-group leader, and the SDK's own `close()` only SIGTERM/SIGKILLs the direct command PID, leaking the grandchild.
+
+What's reachable: `StdioClientTransport.pid` (SDK ≥1.29), the directly-spawned command's PID, available after `connect()`. What's NOT reachable: any way to make the SDK spawn its own process group — `StdioServerParameters` has no `detached` field — so signaling the negated PID (`-pid`) is unsafe here (the child was never made a group leader, so `-pid` would resolve to this process's own shared group). Best-available fix: after the SDK's own `close()`, `reapProcessDescendants(pid)` walks the process tree rooted at that PID via `pgrep -P` (macOS/BSD and Linux), SIGTERMs every descendant, waits a grace period, then SIGKILLs survivors — never touching the shared process group, so it can't collaterally kill unrelated processes. No-op (fast) when there are no descendants.
+
+Companion config fix: the live operator config (`~/.karpathy/config.json`) had `defaults.intelligence.research.search.provider: "mcp"` (spawning `npx -y @mzxrai/mcp-webresearch@latest` on every research-execute call) despite `intelligence.research.autoDrainEnabled` being off and this path never having executed against real traffic — flipped to `"noop"` (backed up to `config.json.bak` first) since it was inert risk with no offsetting benefit until auto-drain is deliberately enabled.
+
+### 27.5 Constraints
+
+- The single-watcher lock MUST NOT block MCP server startup — a contested lock, or any acquire failure other than "already held live," only skips watcher startup, never context/tool/resource initialization.
+- Skipping a Stop/PostCompact-hook drain MUST NOT strand the job queue indefinitely — the scheduled `intel tick` (5 min) drains regardless of the throttle/lock outcome.
+- Process-tree reaping MUST only ever signal descendants of the tracked per-call subprocess PID — never a process group that could include the parent Karpathy/Claude Code process itself.
+

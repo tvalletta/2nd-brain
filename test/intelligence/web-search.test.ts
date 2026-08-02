@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { spawn } from 'node:child_process';
 import {
   createNoopSearch,
   createDuckDuckGoSearch,
   parseMcpResults,
   createWebSearchFromConfig,
+  findDescendantPids,
+  reapProcessDescendants,
 } from '../../src/intelligence/web-search.js';
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
 
@@ -183,3 +186,68 @@ describe('web-search adapters', () => {
     });
   });
 });
+
+// Fix L: the MCP SDK's StdioClientTransport.close() only SIGKILLs the
+// directly-spawned command PID (e.g. `npx`), leaking any grandchild it forks
+// (e.g. Puppeteer's Chromium). These tests exercise the real process-tree
+// walk/reap against an actual spawned process tree (a shell backgrounding a
+// child), standing in for `npx` forking a search-server grandchild.
+describe('process-tree reaping (Fix L)', () => {
+  it('findDescendantPids discovers a live grandchild process', async () => {
+    const shell = spawn('sh', ['-c', 'sleep 30 & wait'], { stdio: 'ignore' });
+    try {
+      const grandchildPid = await waitForDescendant(shell.pid!);
+      expect(isAlive(grandchildPid)).toBe(true);
+    } finally {
+      killTree(shell.pid!);
+    }
+  });
+
+  it('reapProcessDescendants terminates a live grandchild process', async () => {
+    const shell = spawn('sh', ['-c', 'sleep 30 & wait'], { stdio: 'ignore' });
+    const parentPid = shell.pid!;
+    try {
+      const grandchildPid = await waitForDescendant(parentPid);
+      expect(isAlive(grandchildPid)).toBe(true);
+
+      await reapProcessDescendants(parentPid, 100);
+
+      expect(isAlive(grandchildPid)).toBe(false);
+    } finally {
+      killTree(parentPid);
+    }
+  });
+
+  it('is a no-op that resolves cleanly when the pid has no descendants', async () => {
+    const shell = spawn('sh', ['-c', 'true'], { stdio: 'ignore' });
+    await new Promise((resolve) => shell.on('exit', resolve));
+    await expect(reapProcessDescendants(shell.pid!, 50)).resolves.toBeUndefined();
+  });
+});
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForDescendant(parentPid: number, timeoutMs = 3000): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const descendants = await findDescendantPids(parentPid);
+    if (descendants.length > 0) return descendants[0];
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(`No descendant of pid ${parentPid} appeared within ${timeoutMs}ms`);
+}
+
+function killTree(pid: number): void {
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    // already gone
+  }
+}
