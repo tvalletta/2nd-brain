@@ -177,4 +177,64 @@ content beta for indexing test.`,
       store.close();
     }
   });
+
+  it('chunks using the configured embeddings.maxChunkChars instead of a hardcoded cap (Fix K)', async () => {
+    // One long unbroken paragraph (no blank lines) so chunkText's hardSplit
+    // path is exercised. maxChunkChars (1500) is deliberately kept ABOVE the
+    // handler's fixed targetChars (1200, unchanged) — same relative
+    // ordering as production defaults (2048 > 1200) — since chunkText's
+    // buffering re-joins hard-split pieces up to targetChars first; a
+    // maxChars below targetChars is not a configuration this handler uses.
+    const longParagraph = 'word '.repeat(800).trim(); // ~4000 chars, no paragraph breaks
+    const note = `---
+id: long
+type: concept
+title: Long
+created_at: 2026-01-01T00:00:00Z
+updated_at: 2026-01-01T00:00:00Z
+---
+
+${longParagraph}`;
+    await vault.create('wiki/concepts/long.md', note);
+
+    const customConfig = KarpathyConfigSchema.parse({
+      vaultPath: dir,
+      embeddings: { maxChunkChars: 1500 },
+    });
+    const customCtx: JobContext = {
+      vaultPath: dir,
+      projectRoot: dir,
+      vault,
+      enqueue: async (i) =>
+        ({
+          ...i,
+          id: 'q',
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          retryCount: 0,
+          maxRetries: 3,
+          debounceMs: 0,
+          priority: i.priority ?? 50,
+          payload: i.payload ?? {},
+          trigger: i.trigger ?? 'cascade',
+        }) as Job,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      llm: {} as any,
+      config: customConfig,
+    };
+
+    await embeddingIndexHandler.execute(makeJob('wiki/concepts/long.md'), customCtx);
+
+    const store = openEmbeddingStore({
+      dbPath: join(dir, '.karpathy/state/embeddings.sqlite'),
+      provider: createDeterministicProvider(),
+    });
+    try {
+      const rows = store.getByDoc('wiki/concepts/long.md');
+      expect(rows.length).toBeGreaterThan(1); // the ~4000-char paragraph must have been split
+      expect(rows.every((r) => r.text.length <= 1500)).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
 });

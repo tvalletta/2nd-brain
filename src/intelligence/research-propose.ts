@@ -101,8 +101,15 @@ export async function proposeResearch(deps: ProposeDeps, opts: ProposeOptions = 
 
   // Pre-compute per-slug mention stats from the embedding store. We treat any
   // chunk whose text *contains the slug-as-a-token* (or the title) as a mention.
-  const allRows = deps.store.all();
   const recentCutoff = nowMs - RECENT_WINDOW_DAYS * 86400_000;
+  // Fix C (resource-boundedness): `mentionStats` below already discards every
+  // row older than `recentCutoff`, so the unfiltered `deps.store.all()` this
+  // used to call materialized the entire (2GB/250-400k-row) provider table
+  // just to throw most of it away. Pushing the same cutoff into SQL via
+  // `allSince` shrinks the materialized set to the last-14-day window while
+  // leaving `mentionStats`'s own logic (and results) unchanged.
+  const recentCutoffIso = new Date(recentCutoff).toISOString();
+  const allRows = deps.store.allSince(recentCutoffIso);
   const activeProjects = await listActiveProjectSlugs(deps.vault, layout);
 
   const candidates: ResearchCandidate[] = [];

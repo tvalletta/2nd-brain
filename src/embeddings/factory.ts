@@ -26,6 +26,7 @@ export function createProviderFromConfig(config: KarpathyConfig): EmbeddingProvi
         model: config.embeddings.model ?? 'nomic-embed-text',
         dimensions: config.embeddings.dimensions ?? 768,
         timeoutMs: config.embeddings.timeoutMs,
+        maxInputChars: config.embeddings.maxChunkChars,
       });
     case 'deterministic':
     default:

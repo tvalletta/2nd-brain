@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import Database from 'better-sqlite3';
 import { z } from 'zod';
 import { createFsAdapter } from '../../src/vault/fs-adapter.js';
 import {
@@ -193,5 +194,93 @@ describe('weekly digest (B1)', () => {
       expect(result.clusters[0].label).toBe('fsrs / spaced / repetition');
       expect(result.clusters[0].summary).toBe(FSRS_TEXT);
     });
+  });
+});
+
+describe('weekly digest — allSince windowing (Fix C)', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  let db: Database.Database;
+  let store: ReturnType<typeof openEmbeddingStore>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-dig-fixc-'));
+    vault = createFsAdapter(dir);
+    db = new Database(join(dir, 'embeddings.sqlite'));
+    db.pragma('journal_mode = WAL');
+    store = openEmbeddingStore({ db, provider: createDeterministicProvider() });
+  });
+
+  afterEach(async () => {
+    store.close();
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('excludes chunks older than the window via the SQL-pushed cutoff, same as the old JS-filter path', async () => {
+    const FSRS_TEXT = 'fsrs spaced repetition stability difficulty retrievability scheduling';
+    // 5 chunks inside the 7-day window, 5 chunks well outside it.
+    for (let i = 0; i < 5; i++) {
+      await store.upsert([
+        {
+          doc_id: `wiki/sessions/recent-${i}.md`,
+          chunk_index: 0,
+          chunk_hash: `r${i}`,
+          text: FSRS_TEXT,
+          metadata: { type: 'session_summary' },
+        },
+      ]);
+    }
+    for (let i = 0; i < 5; i++) {
+      await store.upsert([
+        {
+          doc_id: `wiki/sessions/stale-${i}.md`,
+          chunk_index: 0,
+          chunk_hash: `s${i}`,
+          text: FSRS_TEXT,
+          metadata: { type: 'session_summary' },
+        },
+      ]);
+    }
+    const nowMs = Date.parse('2026-05-06T00:00:00Z');
+    const cutoffIso = new Date(nowMs - 7 * 86400_000).toISOString();
+    const staleIso = new Date(nowMs - 30 * 86400_000).toISOString();
+    db.prepare(
+      `UPDATE embeddings SET updated_at = ? WHERE doc_id LIKE 'wiki/sessions/stale-%'`,
+    ).run(staleIso);
+    // Recent rows get stamped just inside the window.
+    const recentIso = new Date(nowMs - 1 * 86400_000).toISOString();
+    db.prepare(
+      `UPDATE embeddings SET updated_at = ? WHERE doc_id LIKE 'wiki/sessions/recent-%'`,
+    ).run(recentIso);
+
+    // Sanity: this is exactly the equivalence the store-level test proves —
+    // restated here against the real caller (runWeeklyDigest) so a future
+    // regression in how digest.ts wires the cutoff is caught even if the
+    // store-level test still passes.
+    const expectedRecent = store
+      .all()
+      .filter((r) => new Date(r.updated_at).getTime() >= new Date(cutoffIso).getTime());
+    expect(expectedRecent).toHaveLength(5);
+
+    const llm: LLMClient = {
+      async complete() {
+        return '';
+      },
+      async extractStructured<T>(_p: string, schema: z.ZodType<T>): Promise<T> {
+        return schema.parse({ label: 'FSRS', summary: 'FSRS cluster' });
+      },
+    };
+
+    const result = await runWeeklyDigest(
+      { vault, llm, store },
+      { windowDays: 7, minClusterSize: 3, maxClusters: 5, nowMs, joinThreshold: 0.5 },
+    );
+
+    expect(result.totalChunks).toBe(5);
+    expect(result.clusters).toHaveLength(1);
+    expect(result.clusters[0].size).toBe(5);
+    const allSourcedPaths = result.clusters[0].topPaths;
+    expect(allSourcedPaths.every((p) => p.startsWith('wiki/sessions/recent-'))).toBe(true);
   });
 });

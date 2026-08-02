@@ -152,6 +152,45 @@ describe('embedding store', () => {
     localStore.close();
   });
 
+  it('allSince returns only rows with updated_at >= cutoff, without materializing the rest (Fix C)', async () => {
+    // upsert() always stamps `updated_at` with the real wall-clock time, so
+    // to get rows on both sides of a cutoff we upsert then directly poke the
+    // column via raw SQL — same pattern hybrid-store.test.ts uses to
+    // backdate rows.
+    const db = new Database(join(dir, 'embeddings.sqlite'));
+    await store.upsert([
+      { doc_id: 'old.md', chunk_index: 0, chunk_hash: 'ho1', text: 'old chunk one' },
+      { doc_id: 'old2.md', chunk_index: 0, chunk_hash: 'ho2', text: 'old chunk two' },
+      { doc_id: 'new.md', chunk_index: 0, chunk_hash: 'hn1', text: 'new chunk one' },
+      { doc_id: 'new2.md', chunk_index: 0, chunk_hash: 'hn2', text: 'new chunk two' },
+    ]);
+    const oldIso = '2020-01-01T00:00:00.000Z';
+    const cutoffIso = '2026-01-01T00:00:00.000Z';
+    const newIso = '2026-06-01T00:00:00.000Z';
+    db.prepare(`UPDATE embeddings SET updated_at = ? WHERE doc_id IN ('old.md', 'old2.md')`).run(oldIso);
+    db.prepare(`UPDATE embeddings SET updated_at = ? WHERE doc_id IN ('new.md', 'new2.md')`).run(newIso);
+    db.close();
+
+    const since = store.allSince(cutoffIso);
+    expect(since.map((r) => r.doc_id).sort()).toEqual(['new.md', 'new2.md']);
+
+    // Equivalence check: allSince() must return the exact same *set* of rows
+    // (content, not necessarily row order — neither query specifies ORDER BY,
+    // and allSince's WHERE clause may pick a different index than all()'s) as
+    // the old JS-filter path (all().filter(...)) it replaces.
+    const viaJsFilter = store
+      .all()
+      .filter((r) => new Date(r.updated_at).getTime() >= new Date(cutoffIso).getTime());
+    const sortByDoc = (rows: typeof since) => [...rows].sort((a, b) => a.doc_id.localeCompare(b.doc_id));
+    expect(sortByDoc(since)).toEqual(sortByDoc(viaJsFilter));
+  });
+
+  it('allSince excludes everything when cutoff is in the future', async () => {
+    await store.upsert([{ doc_id: 'x.md', chunk_index: 0, chunk_hash: 'hx', text: 'x' }]);
+    const farFuture = '2999-01-01T00:00:00.000Z';
+    expect(store.allSince(farFuture)).toEqual([]);
+  });
+
   it('cosineSimilarity is bounded', async () => {
     const provider = createDeterministicProvider();
     const [a, b] = await provider.embed(['hello world', 'hello world']);

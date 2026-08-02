@@ -66,6 +66,17 @@ export interface EmbeddingStore {
   ): Promise<SearchHit[]>;
   /** Iterate every row — used by clustering / digest jobs. */
   all(filter?: (row: EmbeddingRow) => boolean): EmbeddingRow[];
+  /**
+   * Fix C (resource-boundedness): same as `all()`, but pushes an
+   * `updated_at >= cutoffIso` predicate into SQL instead of materializing
+   * every row (Float32Array + parsed metadata + full chunk text) and
+   * filtering in JS. `cutoffIso` must be an ISO-8601 UTC string in the same
+   * format `upsert()` writes (`new Date().toISOString()`) — lexicographic
+   * string comparison is sound because that format is fixed-width and
+   * monotonic with wall-clock time. Used by `digest.ts` and
+   * `research-propose.ts`, both of which only ever need a recent window.
+   */
+  allSince(cutoffIso: string): EmbeddingRow[];
   count(): number;
   /** Cumulative cache hit/miss counters since the store was opened. */
   getCacheStats(): CacheStats;
@@ -126,6 +137,7 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
     );
     CREATE INDEX IF NOT EXISTS idx_emb_doc ON embeddings(provider_id, doc_id);
     CREATE INDEX IF NOT EXISTS idx_emb_hash ON embeddings(provider_id, chunk_hash);
+    CREATE INDEX IF NOT EXISTS idx_emb_provider_updated ON embeddings(provider_id, updated_at);
   `);
 
   db.exec(`
@@ -152,6 +164,13 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
   const selectAllStmt = db.prepare(
     `SELECT doc_id, chunk_index, chunk_hash, text, vector, metadata, updated_at
      FROM embeddings WHERE provider_id = ?`,
+  );
+  // Fix C: pushes the `updated_at >= ?` predicate into SQL (backed by
+  // idx_emb_provider_updated) so callers that only need a recent window
+  // never materialize the whole table.
+  const selectSinceStmt = db.prepare(
+    `SELECT doc_id, chunk_index, chunk_hash, text, vector, metadata, updated_at
+     FROM embeddings WHERE provider_id = ? AND updated_at >= ?`,
   );
   const deleteDocStmt = db.prepare(`DELETE FROM embeddings WHERE provider_id = ? AND doc_id = ?`);
   const deleteChunkStmt = db.prepare(
@@ -395,6 +414,12 @@ export function openEmbeddingStore(opts: EmbeddingStoreOptions): EmbeddingStore 
         rowToTyped,
       );
       return filter ? rows.filter(filter) : rows;
+    },
+
+    allSince(cutoffIso: string): EmbeddingRow[] {
+      return (
+        selectSinceStmt.all(opts.provider.id, cutoffIso) as Parameters<typeof rowToTyped>[0][]
+      ).map(rowToTyped);
     },
 
     count(): number {

@@ -27,7 +27,10 @@ export function openHybridStoreFromConfig(
 
   const provider = createProviderFromConfig(config);
   const embeddings = openEmbeddingStore({ db, provider });
-  const fts = openFTSIndex(db, { vaultRoot: config.vaultPath });
+  const fts = openFTSIndex(db, {
+    vaultRoot: config.vaultPath,
+    batchSize: config.search.ftsSyncBatchSize,
+  });
 
   const hybrid = createHybridStore({ config, db, fts, embeddings });
 

@@ -150,6 +150,38 @@ describe('KarpathyConfigSchema — intelligence.lifecycle', () => {
   });
 });
 
+describe('KarpathyConfigSchema — embeddings.maxChunkChars (Fix K)', () => {
+  it('defaults maxChunkChars to 2048', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.embeddings.maxChunkChars).toBe(2048);
+  });
+
+  it('allows overriding maxChunkChars', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      embeddings: { maxChunkChars: 500 },
+    });
+    expect(config.embeddings.maxChunkChars).toBe(500);
+  });
+});
+
+describe('KarpathyConfigSchema — search.ftsSyncBatchSize (Fix D)', () => {
+  it('defaults ftsSyncBatchSize to 500', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.search.ftsSyncBatchSize).toBe(500);
+  });
+
+  it('allows overriding ftsSyncBatchSize', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      search: { ftsSyncBatchSize: 50 },
+    });
+    expect(config.search.ftsSyncBatchSize).toBe(50);
+    // Other search fields still default.
+    expect(config.search.semanticFallbackEnabled).toBe(false);
+  });
+});
+
 describe('KarpathyConfigSchema — intelligence.research.autoDrainEnabled', () => {
   it('defaults autoDrainEnabled to false', () => {
     const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });

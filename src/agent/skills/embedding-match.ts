@@ -9,15 +9,28 @@ import { type EmbeddingProvider, cosineSimilarity } from '../../embeddings/provi
 
 const MIN_SIMILARITY = 0.3;
 
+// Fix K (resource-boundedness): matches `embeddings.maxChunkChars`'s default.
+// Used when a caller doesn't thread the configured value through.
+const DEFAULT_MAX_CHUNK_CHARS = 2048;
+
 export async function matchSkillByEmbedding(
   content: string,
   skills: SynthesisSkill[],
   provider: EmbeddingProvider,
+  maxChunkChars: number = DEFAULT_MAX_CHUNK_CHARS,
 ): Promise<SkillMatch | null> {
   if (skills.length === 0 || !content.trim()) return null;
 
-  const skillTexts = skills.map((s) => `${s.name}\n${s.description}\n${s.patterns.join(' ')}`);
-  const inputs = [content, ...skillTexts];
+  // Fix K: this call previously embedded `content` with zero chunking or
+  // truncation — a large source document could exceed the embedding
+  // provider's token cap and 500. Truncate both the query content and each
+  // skill's text defensively before embedding.
+  const truncate = (s: string) => (s.length > maxChunkChars ? s.slice(0, maxChunkChars) : s);
+
+  const skillTexts = skills.map((s) =>
+    truncate(`${s.name}\n${s.description}\n${s.patterns.join(' ')}`),
+  );
+  const inputs = [truncate(content), ...skillTexts];
   const vectors = await provider.embed(inputs);
   const queryVec = vectors[0];
 

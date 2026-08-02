@@ -70,7 +70,17 @@ export interface FTSIndexOptions {
    * `upsert(docId, ...)` callers AND the `sync()` walker resolve against this.
    */
   vaultRoot: string;
+  /**
+   * Fix D (resource-boundedness): number of changed-file bodies `sync()`
+   * reads into memory and commits per batch. Defaults to
+   * `DEFAULT_SYNC_BATCH_SIZE` (500) — override from
+   * `config.search.ftsSyncBatchSize` via `openHybridStoreFromConfig`.
+   */
+  batchSize?: number;
 }
+
+/** Fix D default — see `FTSIndexOptions.batchSize`. */
+const DEFAULT_SYNC_BATCH_SIZE = 500;
 
 /**
  * Open an FTSIndex over an existing SQLite handle. The handle is shared with
@@ -228,54 +238,74 @@ export function openFTSIndex(db: Database.Database, opts: FTSIndexOptions): FTSI
         indexed.set(row.doc_id, row.file_mtime);
       }
 
-      // Pre-read all changed files outside the txn (better-sqlite3 transactions
-      // must run synchronously). We then apply every mutation in one transaction.
-      type Upsert = { kind: 'upsert'; rel: string; mtime: number; title: string; body: string };
-      type Delete = { kind: 'delete'; rel: string };
-      const mutations: Array<Upsert | Delete> = [];
+      // Fix D (resource-boundedness): identify changed/new vs. deleted docs
+      // up front (paths + mtimes only — cheap, O(file count) in memory), but
+      // do NOT pre-read every changed file's full body into one array before
+      // committing. On a first `--populate-fts` or after a bulk mtime-
+      // touching resync (e.g. a OneDrive re-sync), that used to hold all
+      // ~22k file bodies in memory at once (100s of MB) before the single
+      // write transaction ran.
+      const changedRels: string[] = [];
       let unchanged = 0;
-
       for (const [rel, mtime] of onDisk) {
         const prior = indexed.get(rel);
         if (prior === mtime) {
           unchanged++;
-          continue;
-        }
-        try {
-          const raw = await readFile(resolve(opts.vaultRoot, rel), 'utf-8');
-          const { data, body } = parseNote(raw);
-          const title =
-            typeof data.title === 'string' && data.title.length > 0 ? data.title : rel;
-          mutations.push({ kind: 'upsert', rel, mtime, title, body });
-        } catch {
-          /* unreadable file — leave the prior index entry intact */
+        } else {
+          changedRels.push(rel);
         }
       }
+      const deletedRels: string[] = [];
       for (const docId of indexed.keys()) {
-        if (!onDisk.has(docId)) mutations.push({ kind: 'delete', rel: docId });
+        if (!onDisk.has(docId)) deletedRels.push(docId);
       }
 
       let added = 0;
       let updated = 0;
       let removed = 0;
 
-      const writeTx = db.transaction((muts: Array<Upsert | Delete>) => {
-        for (const m of muts) {
-          if (m.kind === 'delete') {
-            deleteImpl(m.rel);
+      // Deletes need no body read — cheap, apply in one transaction up front.
+      if (deletedRels.length > 0) {
+        const deleteTx = db.transaction((rels: string[]) => {
+          for (const rel of rels) {
+            deleteImpl(rel);
             removed++;
-          } else {
-            const isNew = !indexed.has(m.rel);
+          }
+        });
+        deleteTx(deletedRels);
+      }
+
+      // Upserts: read + commit one batch at a time so peak memory is bounded
+      // to `batchSize` file bodies, not the entire changed set.
+      type Upsert = { rel: string; mtime: number; title: string; body: string };
+      const batchSize = Math.max(1, opts.batchSize ?? DEFAULT_SYNC_BATCH_SIZE);
+      for (let i = 0; i < changedRels.length; i += batchSize) {
+        const batchRels = changedRels.slice(i, i + batchSize);
+        const batch: Upsert[] = [];
+        for (const rel of batchRels) {
+          try {
+            const raw = await readFile(resolve(opts.vaultRoot, rel), 'utf-8');
+            const { data, body } = parseNote(raw);
+            const title =
+              typeof data.title === 'string' && data.title.length > 0 ? data.title : rel;
+            batch.push({ rel, mtime: onDisk.get(rel)!, title, body });
+          } catch {
+            /* unreadable file — leave the prior index entry intact */
+          }
+        }
+        const writeTx = db.transaction((items: Upsert[]) => {
+          for (const it of items) {
+            const isNew = !indexed.has(it.rel);
             // Pass the on-disk mtime so the meta stamp matches what the next
             // sync sees on disk — `unchanged` skips kick in immediately on
             // the next run.
-            upsertImpl(m.rel, m.title, m.body, m.mtime);
+            upsertImpl(it.rel, it.title, it.body, it.mtime);
             if (isNew) added++;
             else updated++;
           }
-        }
-      });
-      writeTx(mutations);
+        });
+        writeTx(batch);
+      }
 
       return { added, updated, removed, unchanged };
     },

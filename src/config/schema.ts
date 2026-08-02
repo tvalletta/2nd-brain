@@ -94,6 +94,16 @@ export const EmbeddingsConfigSchema = z.object({
   baseUrl: z.string().default('http://localhost:11434'),
   /** Ollama probe timeout (ms). Used by `isOllamaAvailable()` and per-call embed timeouts. */
   timeoutMs: z.number().int().positive().default(5000),
+  /**
+   * Fix K (resource-boundedness): hard cap (chars) on a single embedding
+   * input, used both as `chunkText()`'s `maxChars` in `embedding-index.ts`
+   * and as the Ollama provider's defensive truncation backstop. nomic-embed-
+   * text caps inputs at 2048 tokens; wikilink-dense markdown can tokenize as
+   * low as ~1.5 chars/token, so a 4000-char cap (the old hardcoded value,
+   * assuming ~2.5 chars/token) could exceed the model's limit and 500. 2048
+   * chars stays safe (≈1365 tokens even at 1.5 ch/tok) with margin to spare.
+   */
+  maxChunkChars: z.number().int().positive().default(2048),
 });
 
 /**
@@ -400,6 +410,15 @@ export const SearchConfigSchema = z.object({
    * unconditionally on every query. Defaults off — see the
    * semantic-latency-fallback design spec's rollout-care requirement. */
   semanticFallbackEnabled: z.boolean().default(false),
+  /**
+   * Fix D (resource-boundedness): number of changed-file bodies `FTSIndex.sync()`
+   * reads into memory and commits per batch, instead of pre-reading every
+   * changed file's full body into one array before the write transaction. On
+   * a first `--populate-fts` or after a bulk mtime-touching resync (e.g. a
+   * OneDrive re-sync), that unbounded array held ~22k file bodies (100s of
+   * MB) at once. Bounds peak memory to `ftsSyncBatchSize` bodies at a time.
+   */
+  ftsSyncBatchSize: z.number().int().positive().default(500),
 });
 
 export const KarpathyConfigSchema = z.object({

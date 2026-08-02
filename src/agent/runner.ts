@@ -57,7 +57,12 @@ export async function runIngestAgent(
   const skills = await loadSkills(jobContext.vault, layout);
   const skillMatch =
     jobContext.config.agent.skillMatch === 'embedding'
-      ? await matchSkillByEmbedding(input.sourceContent, skills, createProviderFromConfig(jobContext.config))
+      ? await matchSkillByEmbedding(
+          input.sourceContent,
+          skills,
+          createProviderFromConfig(jobContext.config),
+          jobContext.config.embeddings.maxChunkChars,
+        )
       : matchSkill(input.sourceContent, skills);
   const skillStrategy = skillMatch?.skill.strategy ?? undefined;
 

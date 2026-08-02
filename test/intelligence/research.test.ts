@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import Database from 'better-sqlite3';
 import { z } from 'zod';
 import { createFsAdapter } from '../../src/vault/fs-adapter.js';
 import {
@@ -93,6 +94,88 @@ body.`,
 
     const queue = await readResearchQueue(vault);
     expect(queue.candidates).toHaveLength(1);
+  });
+});
+
+describe('research-propose — allSince windowing (Fix C)', () => {
+  let dir: string;
+  let vault: ReturnType<typeof createFsAdapter>;
+  let db: Database.Database;
+  let store: ReturnType<typeof openEmbeddingStore>;
+  const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp' });
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-prop-fixc-'));
+    vault = createFsAdapter(dir);
+    db = new Database(join(dir, 'embeddings.sqlite'));
+    db.pragma('journal_mode = WAL');
+    store = openEmbeddingStore({ db, provider: createDeterministicProvider() });
+    await vault.ensureFolder('wiki/topics');
+  });
+  afterEach(async () => {
+    store.close();
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('ignores mentions older than the 14-day recent window, matching the pre-Fix-C JS-filter behavior', async () => {
+    await vault.create(
+      'wiki/topics/fsrs.md',
+      `---
+id: fsrs
+type: topic
+title: FSRS
+created_at: 2025-09-01T00:00:00Z
+updated_at: 2025-09-01T00:00:00Z
+last_verified: 2025-09-01T00:00:00Z
+stability: 30
+half_life_domain: ai-research
+confidence: low
+---
+body.`,
+    );
+    // 3 mentions inside the 14-day recent window...
+    for (let i = 0; i < 3; i++) {
+      await store.upsert([
+        {
+          doc_id: `wiki/sessions/recent${i}.md`,
+          chunk_index: 0,
+          chunk_hash: `r${i}`,
+          text: 'discussion of FSRS spaced repetition algorithm and stability',
+          metadata: { type: 'session_summary' },
+        },
+      ]);
+    }
+    // ...and 10 mentions well outside it. Before Fix C, `mentionStats` already
+    // discarded these in JS (RECENT_WINDOW_DAYS = 14), so the count/frequency
+    // score was identical; this proves the SQL-pushed cutoff drops the exact
+    // same rows the old code path did, not a different set.
+    for (let i = 0; i < 10; i++) {
+      await store.upsert([
+        {
+          doc_id: `wiki/sessions/old${i}.md`,
+          chunk_index: 0,
+          chunk_hash: `o${i}`,
+          text: 'discussion of FSRS spaced repetition algorithm and stability',
+          metadata: { type: 'session_summary' },
+        },
+      ]);
+    }
+    const nowMs = Date.parse('2026-05-06T00:00:00Z');
+    const oldIso = new Date(nowMs - 60 * 86400_000).toISOString();
+    db.prepare(`UPDATE embeddings SET updated_at = ? WHERE doc_id LIKE 'wiki/sessions/old%'`).run(oldIso);
+    const recentIso = new Date(nowMs - 2 * 86400_000).toISOString();
+    db.prepare(`UPDATE embeddings SET updated_at = ? WHERE doc_id LIKE 'wiki/sessions/recent%'`).run(
+      recentIso,
+    );
+
+    const result = await proposeResearch({ vault, config, store }, { nowMs });
+
+    const fsrsCandidate = result.topCandidates.find((c) => c.slug === 'fsrs');
+    expect(fsrsCandidate).toBeDefined();
+    // frequencyScore = clamp01(count/10); if the 10 stale mentions leaked in,
+    // count would be 13 and the reason would read "13 mentions" instead.
+    expect(fsrsCandidate!.reason).toContain('3 mentions in last 14d');
   });
 });
 

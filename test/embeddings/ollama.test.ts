@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { AddressInfo } from 'node:net';
 import { createOllamaProvider, isOllamaAvailable } from '../../src/embeddings/ollama.js';
@@ -132,6 +132,72 @@ describe('ollama embedding provider', () => {
     } finally {
       await new Promise<void>((r) => server.close(() => r()));
     }
+  });
+
+  it('truncates oversized input to maxInputChars before the fetch body is built (Fix K)', async () => {
+    mock = await startMockServer((_req, res) => {
+      res.body = { embedding: [1, 0, 0, 0] };
+    });
+    const oversized = 'x'.repeat(100);
+    const provider = createOllamaProvider({
+      baseUrl: mock.url,
+      model: 'nomic-embed-text',
+      dimensions: 4,
+      maxInputChars: 20,
+    });
+    await provider.embed([oversized]);
+    const req = mock.lastRequest()!;
+    const sentPrompt = (req.body as { prompt: string }).prompt;
+    expect(sentPrompt).toHaveLength(20);
+    expect(sentPrompt).toBe(oversized.slice(0, 20));
+  });
+
+  it('logs a warning when truncating an oversized input', async () => {
+    mock = await startMockServer((_req, res) => {
+      res.body = { embedding: [1, 0, 0, 0] };
+    });
+    const provider = createOllamaProvider({
+      baseUrl: mock.url,
+      model: 'm',
+      dimensions: 4,
+      maxInputChars: 10,
+    });
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await provider.embed(['a'.repeat(50)]);
+      expect(stderrSpy).toHaveBeenCalled();
+      const logged = stderrSpy.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(logged).toMatch(/Truncating oversized embedding input/);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it('does not truncate input at or under maxInputChars', async () => {
+    mock = await startMockServer((_req, res) => {
+      res.body = { embedding: [1, 0, 0, 0] };
+    });
+    const exact = 'y'.repeat(20);
+    const provider = createOllamaProvider({
+      baseUrl: mock.url,
+      model: 'm',
+      dimensions: 4,
+      maxInputChars: 20,
+    });
+    await provider.embed([exact]);
+    const req = mock.lastRequest()!;
+    expect((req.body as { prompt: string }).prompt).toBe(exact);
+  });
+
+  it('defaults maxInputChars to 2048 when omitted', async () => {
+    mock = await startMockServer((_req, res) => {
+      res.body = { embedding: [1, 0, 0, 0] };
+    });
+    const overDefault = 'z'.repeat(3000);
+    const provider = createOllamaProvider({ baseUrl: mock.url, model: 'm', dimensions: 4 });
+    await provider.embed([overDefault]);
+    const req = mock.lastRequest()!;
+    expect((req.body as { prompt: string }).prompt).toHaveLength(2048);
   });
 
   it('strips trailing slashes from baseUrl', async () => {

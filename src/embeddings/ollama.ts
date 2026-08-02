@@ -11,6 +11,9 @@
 // resolve to `false`.
 
 import type { EmbeddingProvider } from './provider.js';
+import { createLogger } from '../shared/logger.js';
+
+const log = createLogger('ollama-provider');
 
 export interface OllamaProviderOptions {
   /** Ollama HTTP base URL — typically `http://localhost:11434`. */
@@ -21,10 +24,21 @@ export interface OllamaProviderOptions {
   dimensions?: number;
   /** Per-call HTTP timeout. Defaults to 5000ms. */
   timeoutMs?: number;
+  /**
+   * Fix K (resource-boundedness): defensive hard cap (chars) on a single
+   * embedding input before it's POSTed to `/api/embeddings`. Callers
+   * (`embedding-index.ts`, `matchSkillByEmbedding`) already chunk/truncate to
+   * `embeddings.maxChunkChars`, but this is a last-resort backstop so no
+   * oversized input — regardless of caller — can ever 500 the provider (the
+   * daemon log's "input length exceeds the context length" error). Defaults
+   * to the same 2048-char value as `embeddings.maxChunkChars`.
+   */
+  maxInputChars?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_DIMENSIONS = 768;
+const DEFAULT_MAX_INPUT_CHARS = 2048;
 
 interface OllamaEmbedResponse {
   embedding: number[];
@@ -39,19 +53,30 @@ function normalize(vec: Float32Array): Float32Array {
   return vec;
 }
 
+function truncateForProvider(prompt: string, maxInputChars: number): string {
+  if (prompt.length <= maxInputChars) return prompt;
+  log.warn('Truncating oversized embedding input before POST', {
+    originalLength: prompt.length,
+    maxInputChars,
+  });
+  return prompt.slice(0, maxInputChars);
+}
+
 async function postEmbedding(
   baseUrl: string,
   model: string,
   prompt: string,
   timeoutMs: number,
+  maxInputChars: number,
 ): Promise<Float32Array> {
+  const safePrompt = truncateForProvider(prompt, maxInputChars);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/api/embeddings`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model, prompt }),
+      body: JSON.stringify({ model, prompt: safePrompt }),
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -73,6 +98,7 @@ export function createOllamaProvider(opts: OllamaProviderOptions): EmbeddingProv
   const model = opts.model;
   const dimensions = opts.dimensions ?? DEFAULT_DIMENSIONS;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxInputChars = opts.maxInputChars ?? DEFAULT_MAX_INPUT_CHARS;
 
   return {
     id: `ollama-${model}-${dimensions}`,
@@ -80,7 +106,7 @@ export function createOllamaProvider(opts: OllamaProviderOptions): EmbeddingProv
     async embed(texts: string[]): Promise<Float32Array[]> {
       const out: Float32Array[] = [];
       for (const text of texts) {
-        out.push(await postEmbedding(baseUrl, model, text, timeoutMs));
+        out.push(await postEmbedding(baseUrl, model, text, timeoutMs, maxInputChars));
       }
       return out;
     },

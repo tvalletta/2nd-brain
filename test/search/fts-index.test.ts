@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm, writeFile, mkdir, utimes, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -238,5 +238,92 @@ describe('AND-first, OR-fallback query relaxation', () => {
     const result = index.query('we absolutely trust the meeting outcome', 5);
     expect(result.matchMode).toBe('and');
     expect(result.hits.map((h) => h.docId)).toEqual(['doc7.md']);
+  });
+});
+
+describe('sync() batching (Fix D)', () => {
+  let dir: string;
+  let db: Database.Database;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'karpathy-fts-batch-'));
+    db = new Database(join(dir, 'fts.sqlite'));
+    db.pragma('journal_mode = WAL');
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('indexes every file correctly when the changed set exceeds batchSize, committing in batches rather than one giant array', async () => {
+    const wiki = join(dir, 'wiki');
+    await mkdir(wiki, { recursive: true });
+    const totalFiles = 12;
+    for (let i = 0; i < totalFiles; i++) {
+      await writeFile(join(wiki, `f${i}.md`), `---\ntitle: F${i}\n---\ncontent-${i}`, 'utf-8');
+    }
+
+    const index = openFTSIndex(db, { vaultRoot: dir, batchSize: 5 });
+    const txSpy = vi.spyOn(db, 'transaction');
+
+    const stats = await index.sync(['wiki']);
+
+    expect(stats).toEqual({ added: totalFiles, updated: 0, removed: 0, unchanged: 0 });
+    expect(index.count()).toBe(totalFiles);
+    // Every file is still individually queryable/correct after batched commits.
+    for (let i = 0; i < totalFiles; i++) {
+      expect(index.query(`content-${i}`, 5).hits.map((h) => h.docId)).toEqual([`wiki/f${i}.md`]);
+    }
+    // 12 files / batch of 5 => 3 upsert-batch transactions (5, 5, 2); no
+    // deletes on a fresh index, so no additional delete transaction.
+    expect(txSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('defaults batchSize to 500 (DEFAULT_SYNC_BATCH_SIZE) when omitted, committing everything in one batch for a small changed set', async () => {
+    const wiki = join(dir, 'wiki');
+    await mkdir(wiki, { recursive: true });
+    for (let i = 0; i < 4; i++) {
+      await writeFile(join(wiki, `g${i}.md`), `---\ntitle: G${i}\n---\ncontent-g-${i}`, 'utf-8');
+    }
+    const index = openFTSIndex(db, { vaultRoot: dir });
+    const txSpy = vi.spyOn(db, 'transaction');
+
+    const stats = await index.sync(['wiki']);
+
+    expect(stats).toEqual({ added: 4, updated: 0, removed: 0, unchanged: 0 });
+    expect(txSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles a batch straddling mix of upserts and deletes, preserving exact final index state', async () => {
+    const wiki = join(dir, 'wiki');
+    await mkdir(wiki, { recursive: true });
+    // Each body is a single unique token (no shared substrings/tokens across
+    // files) so a query for one file's content can't spuriously match
+    // another via the AND-first/OR-fallback token overlap.
+    for (let i = 0; i < 6; i++) {
+      await writeFile(join(wiki, `h${i}.md`), `---\ntitle: H${i}\n---\nuniquebodyh${i}`, 'utf-8');
+    }
+    const index = openFTSIndex(db, { vaultRoot: dir, batchSize: 2 });
+    await index.sync(['wiki']);
+    expect(index.count()).toBe(6);
+
+    // Delete half, modify one of the rest, add two new ones.
+    await unlink(join(wiki, 'h0.md'));
+    await unlink(join(wiki, 'h1.md'));
+    await writeFile(join(wiki, 'h2.md'), `---\ntitle: H2\n---\nuniquebodyh2edited`, 'utf-8');
+    const future = new Date(Date.now() + 5000);
+    await utimes(join(wiki, 'h2.md'), future, future);
+    await writeFile(join(wiki, 'h6.md'), `---\ntitle: H6\n---\nuniquebodyh6`, 'utf-8');
+    await writeFile(join(wiki, 'h7.md'), `---\ntitle: H7\n---\nuniquebodyh7`, 'utf-8');
+
+    const stats = await index.sync(['wiki']);
+    expect(stats.removed).toBe(2);
+    expect(stats.added).toBe(2);
+    expect(stats.updated).toBe(1);
+    expect(index.count()).toBe(6); // 6 - 2 deleted + 2 added = 6
+    expect(index.query('uniquebodyh2edited', 5).hits.map((h) => h.docId)).toEqual(['wiki/h2.md']);
+    expect(index.query('uniquebodyh0', 5).hits).toHaveLength(0);
+    expect(index.query('uniquebodyh6', 5).hits.map((h) => h.docId)).toEqual(['wiki/h6.md']);
   });
 });

@@ -6,13 +6,13 @@ This is a local-first knowledge system that captures Claude Code sessions and ra
 
 ## Specification
 
-The authoritative design spec lives at `specs/specification.md`. Consult it before implementing features or making non-trivial changes. See sections 6-8 for the memory model, architectural lanes, and job system; section 9 for functional requirements; section 10 for the data model; section 12 for overwrite policy; section 18 for implementation phases; section 22 for the curator reconciliation workflow; section 25 for the draft/archival lifecycle; section 26 for the research queue redesign; section 27 for resource-boundedness fixes (multi-instance MCP server, and job-system boundedness).
+The authoritative design spec lives at `specs/specification.md`. Consult it before implementing features or making non-trivial changes. See sections 6-8 for the memory model, architectural lanes, and job system; section 9 for functional requirements; section 10 for the data model; section 12 for overwrite policy; section 18 for implementation phases; section 22 for the curator reconciliation workflow; section 25 for the draft/archival lifecycle; section 26 for the research queue redesign; section 27 for resource-boundedness fixes (multi-instance MCP server, job-system boundedness, and embedding-store/FTS/chunk-size memory-footprint fixes).
 
 ## Build & Test
 
 ```bash
 pnpm build            # Build with tsup → dist/
-pnpm test             # Vitest, 1299 tests across 156 files
+pnpm test             # Vitest, 1321 tests across 157 files
 pnpm lint             # tsc --noEmit (strict mode)
 ```
 
@@ -160,7 +160,7 @@ Implements [specs/intelligence-plan.md](specs/intelligence-plan.md). Hot paths:
 - **Topic refresh cascade** (`src/intelligence/topic-refresh.ts`) — on successful rewrite, clears `pending_evidence` and (when `intelligence.refresh.cascadeDepth >= 1`) calls `markDirty` on each direct neighbor referenced in the new `current-understanding` region. Neighbors are NOT auto-refreshed — the threshold gate decides on the next ingest cycle.
 - **Topic refresh budget** — `topic-refresh` handler reserves one `medium`-tier LLM call from `BudgetTracker` before invoking `refreshTopic`. On refusal, the job exits without modifying the note; the pending queue is preserved.
 - **Reflection budget** (`src/shared/budget.ts`) — `createBudgetTracker({ statePath, limits, enabled })` issues per-tier daily LLM-call reservations. Persists to `.karpathy/state/budget.json`. Rolls over at local midnight; corrupt-on-disk state falls back to fresh.
-- **Embedding cache** (`src/embeddings/store.ts`) — `upsert` and `replaceDoc` skip the provider call when `(provider_id, chunk_hash)` is already stored; `getCacheStats()` exposes hit/miss counters.
+- **Embedding cache** (`src/embeddings/store.ts`) — `upsert` and `replaceDoc` skip the provider call when `(provider_id, chunk_hash)` is already stored; `getCacheStats()` exposes hit/miss counters. `allSince(cutoffIso)` (Fix C, §27.11) pushes an `updated_at >= ?` predicate into SQL instead of materializing the whole provider-scoped table — use it instead of `all(filter)` for any recency-windowed scan.
 - **Vault root artifacts** — `log.md` (append-only, via `appendLogEntry`), `index.md` (rebuilt by `rebuildVaultIndex`), `wiki/_system/research-queue.md` (rebuilt on each `research-propose`).
 
 ## Configuration additions
@@ -172,7 +172,12 @@ Implements [specs/intelligence-plan.md](specs/intelligence-plan.md). Hot paths:
     "model": "nomic-embed-text",        // for "ollama"
     "baseUrl": "http://localhost:11434", // for "ollama"
     "timeoutMs": 5000,                   // for "ollama" probe + per-call timeout
-    "dimensions": 1024
+    "dimensions": 1024,
+    "maxChunkChars": 2048                // Fix K: hard cap on a single embedding input (chars); also the Ollama provider's defensive truncation backstop
+  },
+  "search": {
+    "semanticFallbackEnabled": false,
+    "ftsSyncBatchSize": 500              // Fix D: max changed-file bodies FTSIndex.sync() reads/commits per batch
   },
   "llm": {
     "model": "us.anthropic.claude-sonnet-4-6",
@@ -247,6 +252,12 @@ A follow-up audit found the job system itself unbounded in four further ways (Fi
 - **Fix F — capped transient retries** — `jobs.transientRetry.maxTransientRetries` (config, default 20). `src/jobs/queue.ts`'s `fail()` `transient` branch previously reset a job to `pending` and incremented `transientRetryCount` forever, never consulting `maxRetries` — a job against an unreachable Bedrock endpoint retried every ≤30 min indefinitely, re-spending LLM budget each attempt. Now, once `transientRetryCount` exceeds the cap, the job is marked terminally `failed` (same terminal path the non-transient branch uses) instead of re-queued; the log message dropped its now-inaccurate "retrying indefinitely" wording.
 - **Fix G — decay-scan fan-out cap** — `intelligence.decay.maxRefreshEnqueuePerRun` (config, default 25). `src/intelligence/decay-scan.ts` previously enqueued one `topic-refresh` per stale/thin note with no cap, growing 1:1 with vault size. Qualifying candidates are now collected across the whole scan, sorted by urgency (thin-content trigger first, then lowest retrievability first), and only the top N enqueued; the rest are skipped this run and logged (`decay-scan:capped`, only when non-zero) via the existing `appendLogEntry` convention. `DecayScanResult` gained `refreshCapped`; per-note scoring/write-back and the (uncapped, separately-bounded) research-candidate surfacing are unaffected.
 - **Fix H — active-queue cap + budget-tracker lock** — `jobs.maxActiveJobs` (config, default 1000, threaded into every production `createJobQueue` call site): `enqueue()` now refuses a new non-deduped job once the active (pending+running) count reaches this ceiling, logging a warning and returning `null` — `JobQueue.enqueue()`'s return type is now `Promise<Job | null>` (no production call site inspects the resolved value, so this is non-breaking); dedup lookups are unaffected. Separately, `createBudgetTracker` gained an optional `lockDir`: when set, `tryReserve`/`reset` re-read committed state from disk and serialize their read-modify-write via `createFileLock(lockDir)` under a `'budget'` key (bounded retry, ~500ms total, falling back to unlocked past that budget) — closing a lost-update race between tracker instances/processes racing between `budget.json`'s load and flush. `createBudgetTrackerFromConfig` derives `lockDir` automatically from `projectRoot` + `config.lockDir`, so every existing call site is covered without change; `BudgetTracker.tryReserve`/`reset` are now `Promise`-returning and all call sites `await` them.
+
+A third audit, focused on the ~2GB/250-400k-row `embeddings.sqlite` table, found three further unbounded-memory mechanisms (Fixes C, D, K):
+
+- **Fix C — bounded embedding-table scans** — `EmbeddingStore.all(filter)` (`src/embeddings/store.ts`) ran an unfiltered `SELECT ... WHERE provider_id = ?` and materialized every row (Float32Array + metadata + full chunk text) before filtering in JS. `EmbeddingStore` gained `allSince(cutoffIso: string): EmbeddingRow[]`, pushing an `updated_at >= ?` predicate into SQL (new composite index `idx_emb_provider_updated ON embeddings(provider_id, updated_at)`); `updated_at` is written as `new Date().toISOString()` (fixed-width, UTC `Z`-suffixed), so lexicographic string comparison in SQL is sound. `src/intelligence/digest.ts` (weekly) now calls `store.allSince(cutoffIso)` instead of `store.all(dateFilter)`; `src/intelligence/research-propose.ts` (daily) now calls `deps.store.allSince(recentCutoffIso)` instead of the unfiltered `deps.store.all()` — its own `mentionStats()` already discarded rows older than the same 14-day cutoff in JS, so results are unchanged while the materialized set shrinks from all-time to the relevant window. The unfiltered `all()`/`all(filter)` is unchanged for other callers.
+- **Fix D — batched FTS bulk body reads** — `src/search/fts-index.ts`'s `sync()` pre-read the full body of every changed file into one in-memory array before its write transaction — ~22k bodies (100s of MB) at once on a first `--populate-fts` run or after a bulk mtime-touching resync. `search.ftsSyncBatchSize` (config, default 500): `sync()` now computes the changed/deleted split up front (paths+mtimes only), applies deletes in one up-front transaction (no body read needed), then reads+commits upserts one `batchSize`-sized batch at a time — bounding peak memory to `batchSize` bodies. `FTSIndexOptions.batchSize` is threaded from `config.search.ftsSyncBatchSize` via `openHybridStoreFromConfig`. Final index state is unchanged regardless of batch size.
+- **Fix K — safe embedding chunk sizes** — the daemon log showed Ollama 500ing with "input length exceeds the context length": `embedding-index.ts` called `chunkText(body, 1200, 4000)`, but the 4000-char cap assumed ~2.5 chars/token while wikilink-dense markdown can tokenize as low as ~1.5 chars/token, exceeding nomic-embed-text's 2048-token cap. `embeddings.maxChunkChars` (config, default 2048 — safe even at 1.5 ch/tok): `embedding-index.ts` now uses it in place of the hardcoded 4000. `matchSkillByEmbedding` (`src/agent/skills/embedding-match.ts`), which previously embedded its `content` argument with zero chunking, gained an optional `maxChunkChars` parameter (same 2048 default) and now truncates both the query content and every skill's composed text before embedding; its call site (`src/agent/runner.ts`) threads `config.embeddings.maxChunkChars` through. As a caller-independent backstop, the Ollama provider (`src/embeddings/ollama.ts`) gained `maxInputChars` (same default, wired from `embeddings.maxChunkChars`) and truncates any oversized input before POSTing, logging a warning when it does.
 
 ## Common Tasks
 

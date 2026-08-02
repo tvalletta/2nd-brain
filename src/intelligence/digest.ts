@@ -67,7 +67,11 @@ export async function runWeeklyDigest(
   const cutoffIso = new Date(cutoff).toISOString();
   const nowIso = new Date(now).toISOString();
 
-  const recent = deps.store.all((row) => new Date(row.updated_at).getTime() >= cutoff);
+  // Fix C (resource-boundedness): push the date predicate into SQL
+  // (EmbeddingStore.allSince) instead of materializing the entire
+  // provider-scoped table and filtering in JS — this ran unbounded against a
+  // ~2GB/250-400k-row embeddings table on every weekly digest.
+  const recent = deps.store.allSince(cutoffIso);
   const total = recent.length;
 
   // Cluster.

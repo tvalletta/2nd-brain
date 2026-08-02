@@ -43,12 +43,14 @@ export const embeddingIndexHandler: JobHandler = {
           const raw = await ctx.vault.read(path);
           const { data, body } = parseNote(raw);
           const fm = data as Record<string, unknown>;
-          // Ollama's nomic-embed-text caps at 2048 tokens. For wikilink-dense
-          // markdown (e.g. an auto-generated `_index.md`) tokens are ~2.5
-          // chars each — a 6 000 char chunk is ~2 400 tokens, over the cap.
-          // 4 000 chars × 2.5 ch/tok = 1 600 tokens, safe for any density.
+          // Fix K (resource-boundedness): Ollama's nomic-embed-text caps at
+          // 2048 tokens. For wikilink-dense markdown (e.g. an auto-generated
+          // `_index.md`) tokens can be as low as ~1.5 chars each, so the
+          // configured `embeddings.maxChunkChars` (default 2048 — safe even
+          // at 1.5 ch/tok) replaces the old hardcoded 4000-char cap, which
+          // assumed ~2.5 chars/token and could exceed the model's limit.
           // Bedrock Titan v2 (8 192 tokens) accepts these too.
-          const chunks = chunkText(body, 1200, 4000);
+          const chunks = chunkText(body, 1200, ctx.config.embeddings.maxChunkChars);
           const title = typeof fm.title === 'string' && fm.title.length > 0 ? fm.title : path;
           await store.upsertDoc(
             path,
