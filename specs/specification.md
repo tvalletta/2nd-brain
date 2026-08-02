@@ -1194,3 +1194,38 @@ Companion config fix: the live operator config (`~/.karpathy/config.json`) had `
 - Skipping a Stop/PostCompact-hook drain MUST NOT strand the job queue indefinitely — the scheduled `intel tick` (5 min) drains regardless of the throttle/lock outcome.
 - Process-tree reaping MUST only ever signal descendants of the tracked per-call subprocess PID — never a process group that could include the parent Karpathy/Claude Code process itself.
 
+### 27.6 Global runner lock (Fix E)
+
+A follow-up root-cause audit found the job system itself unbounded in four further ways, independent of the multi-instance MCP issue above — none of them mitigated by §27.1's single-watcher lock, since they concern the job *queue* rather than the file watcher. First: `src/jobs/runner.ts`'s `runAll()` drained the whole queue with no cross-process lock of its own. The launchd `intel tick`, the Stop-hook background drain, MCP `runDeterministicJobs`, and CLI `enqueueAndDrain` could all invoke `runAll()` concurrently against the same `job-queue.json`, causing duplicate LLM calls and last-writer-wins `flush()` corruption — and jobs without a `targetPath` (`decay-scan`, `rot-scan`, `sync-fts-index`, `digest-weekly`, `archive-stale-drafts`) took no lock at all under the pre-existing per-`targetPath` lock in `runOne`.
+
+Fix: `runAll()` now acquires one global lock (key `'queue-runner'`, on the same `FileLock`/`lockDir` already threaded into every `createJobRunner` call site for per-`targetPath` locking — no new config plumbing needed) before draining, and releases it in a `finally`. Acquisition is a bounded wait: since `FileLock.acquire` throws `LockError` immediately rather than blocking when a *different* `FileLock` instance already holds a key, `runAll()` retries a few times (defaults: 8 attempts, 1s apart — ~7s bounded total, overridable via the test-only `queueRunnerLock` option) before giving up. If still held after the wait, it logs `queue-runner lock held — another drain in progress, skipping` and returns `0` without draining — never throws, and jobs stay pending for the current holder or the next scheduled tick. The per-`targetPath` lock inside `runOne` is unchanged (a different key, no deadlock risk).
+
+### 27.7 Capped transient retries (Fix F)
+
+Second: `src/jobs/queue.ts`'s `fail()` `transient` branch reset a job to `pending` and incremented `transientRetryCount` forever, never consulting `maxRetries` — a job against a slow/unreachable Bedrock endpoint (`TransientLLMError` from the 120s abort timeout) retried every ≤30 min indefinitely, re-spending LLM budget on every attempt.
+
+Fix: `jobs.transientRetry.maxTransientRetries` (config, default 20). Once `transientRetryCount` exceeds this, `fail()` marks the job terminally `failed` (same terminal path the non-transient branch uses after `maxRetries`) instead of re-queuing, logging the give-up. The exponential backoff + 30-min ceiling for retries under the cap is unchanged.
+
+### 27.8 Decay-scan fan-out cap (Fix G)
+
+Third: `src/intelligence/decay-scan.ts` enqueued one `topic-refresh` job per stale/thin note across the scanned folders with no cap — growing 1:1 with vault size.
+
+Fix: `intelligence.decay.maxRefreshEnqueuePerRun` (config, default 25). Qualifying candidates are now collected across the whole scan (not enqueued as encountered), sorted by urgency — thin-content trigger first, then lowest retrievability first — and only the top N are enqueued; the remainder are skipped this run (re-collected and re-considered on the next scheduled scan) and logged via `appendLogEntry` (`decay-scan:capped`) when any are actually dropped. `DecayScanResult` gained `refreshCapped` (count skipped); all prior fields are unchanged, and per-note retrievability scoring/persistence and research-candidate surfacing (uncapped — a separate, already-bounded mechanism) are unaffected.
+
+### 27.9 Active-queue cap and budget-tracker lock (Fix H)
+
+Fourth, two related gaps: `src/jobs/queue.ts`'s `enqueue()` had no guard on total active (pending+running) job count — `flush()` only capped the completed/failed tail at 100, so the active set could grow unbounded in `job-queue.json`. Separately, `src/shared/budget.ts`'s `tryReserve()` did an in-memory read-modify-write with no cross-process lock, so two tracker instances racing between load and flush (now rare after §27.6's runner-level lock, but still reachable via a synchronous CLI path invoked outside the job queue) could lose reservations and overspend the daily LLM cap.
+
+Fix (queue cap): `jobs.maxActiveJobs` (config, default 1000; threaded into every production `createJobQueue` call site). `enqueue()` refuses a new (non-deduped) job once the active count reaches this ceiling — logging `job queue at capacity (N) — dropping <type>` and returning `null` rather than adding it. Dedup lookups (an existing pending/running job with the same `dedupeKey`) are unaffected by the cap. `JobQueue.enqueue()`'s return type is now `Promise<Job | null>`; no production call site inspects the resolved value, so this is a non-breaking ripple.
+
+Fix (budget lock): `createBudgetTracker` gained an optional `lockDir`; when set, `tryReserve` (and `reset`) re-read committed state from disk and serialize their read-modify-write via `createFileLock(lockDir)` under a `'budget'` key (a bounded retry — 25 attempts, 20ms apart, ~500ms total — handles cross-instance contention the same way §27.6 does, falling back to proceeding unlocked past the retry budget rather than denying the reservation or hanging, since budget tracking is a soft rate-limit, not correctness-critical data). `createBudgetTrackerFromConfig` derives `lockDir` from the caller's `projectRoot` + `config.lockDir` (mirroring `defaultBudgetPath`'s convention) and passes it automatically, so every existing call site (topic-refresh, glossary-synthesize, research-execute, `generate-review-analysis`, the significance gate in `compiler.ts`) is covered without change. `BudgetTracker.tryReserve`/`reset` are now `Promise`-returning; all five call sites `await` them.
+
+### 27.10 Constraints (§27.6-27.9)
+
+- `runAll()`'s global lock acquisition MUST NOT throw on contention — a still-held lock after the bounded wait returns `0` (drains nothing), never an exception.
+- The per-`targetPath` lock inside `runOne` and the global `'queue-runner'` lock MUST use distinct keys on the same `FileLock`/`lockDir` — no deadlock between them.
+- A job's transient-retry cap (`maxTransientRetries`) MUST NOT apply to the bounded (non-transient) retry path, and vice versa — the two counters (`transientRetryCount`, `retryCount`) and their caps stay independent.
+- `enqueue()`'s active-job cap MUST NOT interfere with dedup: an enqueue whose `dedupeKey` matches an existing pending/running job always returns that job, even at capacity.
+- Decay-scan's per-note retrievability scoring and write-back, and its (uncapped) research-candidate surfacing, MUST run for every scanned note regardless of the refresh-enqueue cap — only the `topic-refresh` fan-out is bounded.
+- The budget-tracker lock MUST degrade to today's unlocked behavior when `lockDir` is omitted — no call site is required to pass one.
+

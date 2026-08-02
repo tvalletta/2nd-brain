@@ -8,6 +8,7 @@ describe('KarpathyConfigSchema — jobs.transientRetry', () => {
       backoffCeilingMs: 1_800_000,
       alertAfterMs: 3_600_000,
       probeTrustWindowMs: 120_000,
+      maxTransientRetries: 20,
     });
   });
 
@@ -19,6 +20,45 @@ describe('KarpathyConfigSchema — jobs.transientRetry', () => {
     expect(config.jobs.transientRetry.alertAfterMs).toBe(0);
     expect(config.jobs.transientRetry.backoffCeilingMs).toBe(1_800_000);
     expect(config.jobs.transientRetry.probeTrustWindowMs).toBe(120_000);
+    expect(config.jobs.transientRetry.maxTransientRetries).toBe(20);
+  });
+
+  it('allows overriding maxTransientRetries', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      jobs: { transientRetry: { maxTransientRetries: 5 } },
+    });
+    expect(config.jobs.transientRetry.maxTransientRetries).toBe(5);
+  });
+});
+
+describe('KarpathyConfigSchema — jobs.maxActiveJobs (Fix H)', () => {
+  it('defaults maxActiveJobs to 1000', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.jobs.maxActiveJobs).toBe(1000);
+  });
+
+  it('allows overriding maxActiveJobs', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      jobs: { maxActiveJobs: 50 },
+    });
+    expect(config.jobs.maxActiveJobs).toBe(50);
+  });
+});
+
+describe('KarpathyConfigSchema — intelligence.decay.maxRefreshEnqueuePerRun (Fix G)', () => {
+  it('defaults maxRefreshEnqueuePerRun to 25', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.intelligence.decay.maxRefreshEnqueuePerRun).toBe(25);
+  });
+
+  it('allows overriding maxRefreshEnqueuePerRun', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      intelligence: { decay: { maxRefreshEnqueuePerRun: 5 } },
+    });
+    expect(config.intelligence.decay.maxRefreshEnqueuePerRun).toBe(5);
   });
 });
 

@@ -101,7 +101,7 @@ export async function compileFromSource(
         const decision =
           heuristicResult.action === 'keep' &&
           config.enrichment.significanceGate === 'llm' &&
-          budget.tryReserve('fast')
+          (await budget.tryReserve('fast'))
             ? await llmGate(llm, gateInput, [])
             : heuristicResult;
 

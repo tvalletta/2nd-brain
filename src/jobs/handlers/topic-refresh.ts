@@ -24,7 +24,7 @@ export const topicRefreshHandler: JobHandler = {
     // Reserve from the daily budget. On refusal, log + return — the linker's
     // mark-dirty trail is preserved so the next ingest will retry the gate.
     const budget = createBudgetTrackerFromConfig(ctx.config, ctx.projectRoot);
-    if (!budget.tryReserve('medium')) {
+    if (!(await budget.tryReserve('medium'))) {
       log.info('topic-refresh skipped: daily medium-tier budget exhausted', {
         notePath: job.targetPath,
         remaining: budget.remaining('medium'),

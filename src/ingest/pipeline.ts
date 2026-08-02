@@ -143,8 +143,8 @@ export async function ingestFile(
  */
 export async function ingestFileQueued(
   filePath: string,
-  enqueue: (input: JobCreateInput) => Promise<Job>,
-): Promise<Job> {
+  enqueue: (input: JobCreateInput) => Promise<Job | null>,
+): Promise<Job | null> {
   return enqueue({
     type: 'ingest-raw-file',
     payload: { filePath: resolve(filePath) },

@@ -9,13 +9,27 @@ import { dirname } from 'node:path';
 const log = createLogger('queue');
 
 const DEFAULT_TRANSIENT_BACKOFF_CEILING_MS = 1_800_000; // 30 min — matches config default (see config/schema.ts)
+const DEFAULT_MAX_TRANSIENT_RETRIES = 20; // Fix F — matches config default (see config/schema.ts)
+const DEFAULT_MAX_ACTIVE_JOBS = 1000; // Fix H — matches config default (see config/schema.ts)
+
+export interface JobQueueOptions {
+  /** Fix H: ceiling on total active (pending+running) jobs. `enqueue()` refuses
+   *  new (non-deduped) jobs once this is reached. Defaults to 1000, matching
+   *  `config.jobs.maxActiveJobs`. */
+  maxActiveJobs?: number;
+}
 
 export interface JobQueue {
-  enqueue(input: JobCreateInput): Promise<Job>;
+  /** Fix H: resolves to `null` (and logs a warning) when the active-job cap is reached. */
+  enqueue(input: JobCreateInput): Promise<Job | null>;
   dequeue(): Promise<Job | null>;
   peek(): Promise<Job | null>;
   complete(jobId: string): Promise<void>;
-  fail(jobId: string, error: string, opts?: { transient?: boolean; backoffCeilingMs?: number }): Promise<void>;
+  fail(
+    jobId: string,
+    error: string,
+    opts?: { transient?: boolean; backoffCeilingMs?: number; maxTransientRetries?: number },
+  ): Promise<void>;
   markAlerted(jobId: string): Promise<void>;
   cancel(jobId: string): Promise<void>;
   list(filter?: { status?: JobStatus; type?: JobType }): Promise<Job[]>;
@@ -24,7 +38,8 @@ export interface JobQueue {
   load(): Promise<void>;
 }
 
-export function createJobQueue(filePath: string): JobQueue {
+export function createJobQueue(filePath: string, options?: JobQueueOptions): JobQueue {
+  const maxActiveJobs = options?.maxActiveJobs ?? DEFAULT_MAX_ACTIVE_JOBS;
   let jobs: Job[] = [];
 
   function findIndex(jobId: string): number {
@@ -61,6 +76,12 @@ export function createJobQueue(filePath: string): JobQueue {
           (j) => j.dedupeKey === input.dedupeKey && (j.status === 'pending' || j.status === 'running'),
         )!;
         return existing;
+      }
+
+      const activeCount = jobs.filter((j) => j.status === 'pending' || j.status === 'running').length;
+      if (activeCount >= maxActiveJobs) {
+        log.warn(`job queue at capacity (${activeCount}) — dropping ${input.type}`);
+        return null;
       }
 
       const job = JobSchema.parse({
@@ -104,13 +125,28 @@ export function createJobQueue(filePath: string): JobQueue {
       if (opts?.transient) {
         job.transientRetryCount += 1;
         if (!job.transientSince) job.transientSince = nowISO();
+
+        // Fix F: cap indefinite transient retries. Previously this branch
+        // reset the job to 'pending' forever, re-spending LLM budget on
+        // every attempt against a persistently-unreachable endpoint.
+        const maxTransientRetries = opts.maxTransientRetries ?? DEFAULT_MAX_TRANSIENT_RETRIES;
+        if (job.transientRetryCount > maxTransientRetries) {
+          job.status = 'failed';
+          job.completedAt = nowISO();
+          job.startedAt = undefined;
+          log.error('Job failed transiently too many times, giving up', {
+            id: jobId, transientRetry: job.transientRetryCount, maxTransientRetries,
+          });
+          return;
+        }
+
         job.status = 'pending';
         job.startedAt = undefined;
         const ceiling = opts.backoffCeilingMs ?? DEFAULT_TRANSIENT_BACKOFF_CEILING_MS;
         const baseDelay = Math.min(1000 * Math.pow(2, job.transientRetryCount - 1), ceiling);
         const jitter = Math.random() * baseDelay * 0.25;
         job.retryAfter = Date.now() + baseDelay + jitter;
-        log.warn('Job failed transiently, retrying indefinitely', {
+        log.warn('Job failed transiently, retrying', {
           id: jobId, transientRetry: job.transientRetryCount, retryAfter: job.retryAfter,
         });
         return;

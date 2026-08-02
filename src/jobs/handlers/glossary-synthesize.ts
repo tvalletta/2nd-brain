@@ -25,7 +25,7 @@ export const glossarySynthesizeHandler: JobHandler = {
     if (!ctx.config.intelligence.richness.enabled) return;
 
     const budget = createBudgetTrackerFromConfig(ctx.config, ctx.projectRoot);
-    if (!budget.tryReserve('fast')) {
+    if (!(await budget.tryReserve('fast'))) {
       log.info('glossary-synthesize skipped: fast-tier budget exhausted', { conceptName });
       return; // no queue to preserve — next ingest that grows this concept re-fires the gate naturally
     }

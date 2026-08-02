@@ -184,4 +184,82 @@ describe('JobQueue — transient retry lane', () => {
     const [stored] = await queue.list();
     expect(stored.transientAlertSentAt).toBeTruthy();
   });
+
+  it('Fix F: caps transient retries at maxTransientRetries, then marks the job terminally failed', async () => {
+    const queue = createJobQueue(queuePath);
+    const job = await queue.enqueue({ type: 'rebuild-index' });
+
+    for (let i = 0; i < 3; i++) {
+      await queue.fail(job!.id, 'simulated outage', { transient: true, maxTransientRetries: 3 });
+    }
+    const afterThree = await queue.list();
+    expect(afterThree[0].status).toBe('pending'); // at the cap, not yet exceeding it
+    expect(afterThree[0].transientRetryCount).toBe(3);
+
+    await queue.fail(job!.id, 'simulated outage', { transient: true, maxTransientRetries: 3 });
+    const afterFour = await queue.list();
+    expect(afterFour[0].status).toBe('failed'); // exceeded the cap — no longer retried forever
+    expect(afterFour[0].transientRetryCount).toBe(4);
+    expect(afterFour[0].completedAt).toBeTruthy();
+  });
+
+  it('Fix F: defaults maxTransientRetries to 20 when the caller does not pass one', async () => {
+    const queue = createJobQueue(queuePath);
+    const job = await queue.enqueue({ type: 'rebuild-index' });
+
+    for (let i = 0; i < 20; i++) {
+      await queue.fail(job!.id, 'simulated outage', { transient: true });
+    }
+    expect((await queue.list())[0].status).toBe('pending');
+
+    await queue.fail(job!.id, 'simulated outage', { transient: true });
+    expect((await queue.list())[0].status).toBe('failed');
+  });
+});
+
+describe('JobQueue — active job cap (Fix H)', () => {
+  let tempDir: string;
+  let queuePath: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'karpathy-queue-'));
+    queuePath = join(tempDir, 'queue.json');
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('refuses to enqueue once the active (pending+running) count reaches maxActiveJobs', async () => {
+    const queue = createJobQueue(queuePath, { maxActiveJobs: 2 });
+    const job1 = await queue.enqueue({ type: 'rebuild-index' });
+    const job2 = await queue.enqueue({ type: 'update-backlinks' });
+    expect(job1).not.toBeNull();
+    expect(job2).not.toBeNull();
+
+    const job3 = await queue.enqueue({ type: 'lint-wiki' });
+    expect(job3).toBeNull();
+    expect(queue.size()).toBe(2);
+  });
+
+  it('still allows dedup lookups to return the existing job even at capacity', async () => {
+    const queue = createJobQueue(queuePath, { maxActiveJobs: 1 });
+    const job1 = await queue.enqueue({ type: 'rebuild-index', dedupeKey: 'idx:full' });
+    expect(job1).not.toBeNull();
+
+    // Same dedupeKey — must return the existing job, not be refused by the cap.
+    const job2 = await queue.enqueue({ type: 'rebuild-index', dedupeKey: 'idx:full' });
+    expect(job2).not.toBeNull();
+    expect(job2!.id).toBe(job1!.id);
+    expect(queue.size()).toBe(1);
+  });
+
+  it('defaults maxActiveJobs to 1000 when not provided', async () => {
+    const queue = createJobQueue(queuePath);
+    for (let i = 0; i < 5; i++) {
+      const job = await queue.enqueue({ type: 'rebuild-index', dedupeKey: `job-${i}` });
+      expect(job).not.toBeNull();
+    }
+    expect(queue.size()).toBe(5);
+  });
 });

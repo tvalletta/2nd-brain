@@ -40,7 +40,7 @@ export const researchExecuteHandler: JobHandler = {
 
     // G2: reserve one call from the daily budget before doing any real work.
     const budget = createBudgetTrackerFromConfig(ctx.config, ctx.projectRoot);
-    if (!budget.tryReserve(tier)) {
+    if (!(await budget.tryReserve(tier))) {
       log.info('research-execute skipped: daily budget exhausted', {
         slug: payload.slug,
         depth: payload.depth,

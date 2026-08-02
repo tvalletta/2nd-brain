@@ -19,6 +19,7 @@ import { upsertCandidate } from '../maintenance/research-queue.js';
 import { layoutFromConfig } from '../vault/paths.js';
 import { REFRESH_TARGETS, isPlaceholderContent, type RefreshTarget } from './refresh-targets.js';
 import { getProtectedRegion } from '../vault/protected-regions.js';
+import { appendLogEntry } from '../maintenance/vault-log.js';
 
 /** Folders we scan for decay (subset of wiki kinds). */
 function targetFolders(layout: ReturnType<typeof layoutFromConfig>): string[] {
@@ -38,6 +39,18 @@ export interface DecayScanResult {
   refreshEnqueued: number;
   thinContentEnqueued: number;
   researchCandidates: number;
+  /** Fix G: count of qualifying refresh candidates skipped by `maxRefreshEnqueuePerRun`. */
+  refreshCapped: number;
+}
+
+/** Fix G: a qualifying topic-refresh candidate, collected during the scan and
+ *  enqueued only after sorting + capping across the whole run. */
+interface RefreshCandidate {
+  path: string;
+  r: number;
+  isThin: boolean;
+  trigger: 'thin-content' | 'cascade';
+  priority: number;
 }
 
 export interface DecayScanDeps {
@@ -65,7 +78,12 @@ export async function runDecayScan(deps: DecayScanDeps): Promise<DecayScanResult
     refreshEnqueued: 0,
     thinContentEnqueued: 0,
     researchCandidates: 0,
+    refreshCapped: 0,
   };
+  // Fix G: collected across the whole scan (not enqueued as we go), so the
+  // cap below can prioritize the most urgent candidates vault-wide instead
+  // of whichever folder happens to be scanned first.
+  const refreshCandidates: RefreshCandidate[] = [];
   const refreshThreshold = deps.config.intelligence.decay.retrievabilityRefresh;
   // Sub-project C (G6) removed the dead `if (r < archiveThreshold && inbound
   // === 0)` archive_candidate write below, but `archiveThreshold` itself is
@@ -123,15 +141,13 @@ export async function runDecayScan(deps: DecayScanDeps): Promise<DecayScanResult
           relatedConceptsEmpty);
 
       if ((r < refreshThreshold || isThin) && target) {
-        await deps.enqueue({
-          type: 'topic-refresh',
-          targetPath: path,
+        refreshCandidates.push({
+          path,
+          r,
+          isThin,
           trigger: isThin ? 'thin-content' : 'cascade',
           priority: isThin ? 80 : 75, // thin-content backfill takes slight priority
-          dedupeKey: `topic-refresh:${path}`,
         });
-        result.refreshEnqueued += 1;
-        if (isThin) result.thinContentEnqueued += 1;
       }
 
       // Surface low-confidence concept/topic notes as research candidates.
@@ -160,6 +176,48 @@ export async function runDecayScan(deps: DecayScanDeps): Promise<DecayScanResult
       await deps.vault.atomicWrite(path, serializeNote(fm, body));
     }
   }
+
+  // Fix G: bound the fan-out. Sort by urgency — thin-content trigger first,
+  // then lowest retrievability first — and enqueue only the top
+  // maxRefreshEnqueuePerRun; the rest are skipped this run (they'll be
+  // re-collected, and re-considered, on the next scheduled scan).
+  const cap = deps.config.intelligence.decay.maxRefreshEnqueuePerRun;
+  refreshCandidates.sort((a, b) => {
+    if (a.isThin !== b.isThin) return a.isThin ? -1 : 1;
+    return a.r - b.r;
+  });
+  const toEnqueue = refreshCandidates.slice(0, cap);
+  const skipped = refreshCandidates.length - toEnqueue.length;
+
+  for (const candidate of toEnqueue) {
+    await deps.enqueue({
+      type: 'topic-refresh',
+      targetPath: candidate.path,
+      trigger: candidate.trigger,
+      priority: candidate.priority,
+      dedupeKey: `topic-refresh:${candidate.path}`,
+    });
+    result.refreshEnqueued += 1;
+    if (candidate.isThin) result.thinContentEnqueued += 1;
+  }
+  result.refreshCapped = skipped;
+
+  if (skipped > 0) {
+    await appendLogEntry(
+      deps.vault,
+      {
+        kind: 'decay-scan:capped',
+        message: `${skipped} refresh candidate(s) capped (cap ${cap}): ${refreshCandidates
+          .slice(cap)
+          .map((c) => c.path)
+          .slice(0, 10)
+          .join(', ')}`,
+        at: nowIso,
+      },
+      layout,
+    );
+  }
+
   return result;
 }
 

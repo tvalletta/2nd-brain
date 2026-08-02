@@ -5,10 +5,21 @@ import type { LLMClient } from '../enrichment/llm-client.js';
 import type { VaultAdapter } from '../vault/adapter.js';
 import type { KarpathyConfig } from '../config/schema.js';
 import { createLogger } from '../shared/logger.js';
-import { TransientLLMError } from '../shared/errors.js';
+import { TransientLLMError, LockError } from '../shared/errors.js';
 import { checkStuckJobAlert } from './stuck-alert.js';
 
 const log = createLogger('runner');
+
+/**
+ * Fix E: dedicated key on the same `FileLock`/`lockDir` already threaded
+ * into every `createJobRunner` call site (it's the per-`targetPath` lock
+ * used by `executeJob`) — a distinct key namespace, so no collision with
+ * real note paths.
+ */
+const QUEUE_RUNNER_LOCK_KEY = 'queue-runner';
+/** Bounded-wait retry defaults for the queue-runner lock — ~7s total across processes. */
+const DEFAULT_QUEUE_RUNNER_LOCK_RETRY_MS = 1000;
+const DEFAULT_QUEUE_RUNNER_LOCK_MAX_ATTEMPTS = 8;
 
 /** Default timeouts by architectural lane. */
 const DEFAULT_TIMEOUTS: Partial<Record<JobType, number>> = {
@@ -62,6 +73,12 @@ export interface JobRunnerOptions {
   llm: LLMClient;
   vault: VaultAdapter;
   config: KarpathyConfig;
+  /**
+   * Fix E: bounded-wait retry tuning for the global queue-runner lock
+   * acquired at the start of `runAll()`. Test-only override — production
+   * call sites rely on the defaults (~7s bounded wait total).
+   */
+  queueRunnerLock?: { retryMs?: number; maxAttempts?: number };
 }
 
 export interface JobRunner {
@@ -73,6 +90,8 @@ export interface JobRunner {
 export function createJobRunner(options: JobRunnerOptions): JobRunner {
   const { queue, lock, handlers } = options;
   let stopped = false;
+  const queueRunnerRetryMs = options.queueRunnerLock?.retryMs ?? DEFAULT_QUEUE_RUNNER_LOCK_RETRY_MS;
+  const queueRunnerMaxAttempts = options.queueRunnerLock?.maxAttempts ?? DEFAULT_QUEUE_RUNNER_LOCK_MAX_ATTEMPTS;
 
   const context: JobContext = {
     vaultPath: options.vaultPath,
@@ -82,6 +101,28 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
     vault: options.vault,
     config: options.config,
   };
+
+  /**
+   * Fix E: acquire the whole-queue drain lock with a bounded wait (a few
+   * retries over ~7s by default), since `FileLock.acquire` throws
+   * `LockError` immediately rather than blocking when a different `FileLock`
+   * instance (i.e. a different process) already holds it. Returns `null`
+   * (never throws) when still held after the wait — the caller must skip
+   * draining and leave jobs pending for the holder or the next scheduled
+   * tick to pick up.
+   */
+  async function acquireQueueRunnerLock(): Promise<(() => Promise<void>) | null> {
+    for (let attempt = 1; attempt <= queueRunnerMaxAttempts; attempt++) {
+      try {
+        return await lock.acquire(QUEUE_RUNNER_LOCK_KEY);
+      } catch (err) {
+        if (!(err instanceof LockError)) throw err;
+        if (attempt === queueRunnerMaxAttempts) return null;
+        await new Promise((resolve) => setTimeout(resolve, queueRunnerRetryMs));
+      }
+    }
+    return null;
+  }
 
   async function executeJob(job: Job): Promise<void> {
     const handler = handlers.get(job.type as JobType);
@@ -149,14 +190,23 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
     },
 
     async runAll() {
-      let processed = 0;
-      while (!stopped) {
-        const hadWork = await this.runOne();
-        if (!hadWork) break;
-        processed++;
+      const release = await acquireQueueRunnerLock();
+      if (!release) {
+        log.warn('queue-runner lock held — another drain in progress, skipping');
+        return 0;
       }
-      await queue.flush();
-      return processed;
+      try {
+        let processed = 0;
+        while (!stopped) {
+          const hadWork = await this.runOne();
+          if (!hadWork) break;
+          processed++;
+        }
+        await queue.flush();
+        return processed;
+      } finally {
+        await release();
+      }
     },
 
     stop() {

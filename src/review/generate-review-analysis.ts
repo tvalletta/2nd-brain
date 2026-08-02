@@ -59,7 +59,7 @@ export async function generateReviewAnalysis(
 
   let fastResult: ReviewAnalysisResult | null = null;
 
-  if (budget.tryReserve('fast')) {
+  if (await budget.tryReserve('fast')) {
     try {
       const fastClient = createLLMFromConfig(config, stateDir, 'fast');
       const parsed = await fastClient.extractStructured<ParsedAnalysis>(prompt, responseSchema as never);
@@ -71,7 +71,7 @@ export async function generateReviewAnalysis(
     }
   }
 
-  if (budget.tryReserve('medium')) {
+  if (await budget.tryReserve('medium')) {
     try {
       const mediumClient = createLLMFromConfig(config, stateDir, 'medium');
       const parsed = await mediumClient.extractStructured<ParsedAnalysis>(prompt, responseSchema as never);

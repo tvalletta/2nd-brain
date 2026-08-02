@@ -38,7 +38,7 @@ function buildContext(config: KarpathyConfig): HookContext {
 
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
-  const queue = createJobQueue(join(stateDir, 'job-queue.json'));
+  const queue = createJobQueue(join(stateDir, 'job-queue.json'), { maxActiveJobs: config.jobs.maxActiveJobs });
 
   return {
     config,

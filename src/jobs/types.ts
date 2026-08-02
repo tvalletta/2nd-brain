@@ -122,7 +122,8 @@ export interface JobHandler {
 export interface JobContext {
   vaultPath: string;
   projectRoot: string;
-  enqueue: (partial: JobCreateInput) => Promise<Job>;
+  /** Fix H: resolves to `null` (and logs a warning) when the active-job cap is reached. */
+  enqueue: (partial: JobCreateInput) => Promise<Job | null>;
   llm: import('../enrichment/llm-client.js').LLMClient;
   vault: import('../vault/adapter.js').VaultAdapter;
   config: import('../config/schema.js').KarpathyConfig;

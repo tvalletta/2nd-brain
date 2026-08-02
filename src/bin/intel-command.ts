@@ -73,7 +73,7 @@ async function enqueueAndDrain(
 ): Promise<Drained> {
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
-  const queue = createJobQueue(join(stateDir, 'job-queue.json'));
+  const queue = createJobQueue(join(stateDir, 'job-queue.json'), { maxActiveJobs: config.jobs.maxActiveJobs });
   await queue.load();
   for (const i of inputs) await queue.enqueue(i);
   const vault = createFsAdapter(config.vaultPath);
@@ -265,7 +265,7 @@ export async function intelCommand(args: string[]): Promise<void> {
         process.stderr.write(`Cursor import failed (non-fatal): ${(err as Error).message}\n`);
       }
 
-      const queue = createJobQueue(join(stateDir, 'job-queue.json'));
+      const queue = createJobQueue(join(stateDir, 'job-queue.json'), { maxActiveJobs: config.jobs.maxActiveJobs });
       await queue.load();
       const tickResult = await tickScheduler({
         stateDir,

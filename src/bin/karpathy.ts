@@ -198,7 +198,7 @@ async function maintainCommand(): Promise<void> {
   const lockDir = resolveLockDir(config);
   const queuePath = join(stateDir, 'job-queue.json');
 
-  const queue = createJobQueue(queuePath);
+  const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
   await queue.load();
 
   // Enqueue maintenance jobs
@@ -258,7 +258,7 @@ async function drainQueueCommand(): Promise<void> {
 
   try {
     const queuePath = join(stateDir, 'job-queue.json');
-    const queue = createJobQueue(queuePath);
+    const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
     await queue.load();
 
     if (queue.size() === 0) return;
@@ -318,7 +318,7 @@ async function ingestCommand(args: string[]): Promise<void> {
     const stateDir = resolveStateDir(config);
     const lockDir = resolveLockDir(config);
     const queuePath = join(stateDir, 'job-queue.json');
-    const queue = createJobQueue(queuePath);
+    const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
     await queue.load();
 
     // Enqueue classify-source to kick off the enrichment cascade
@@ -540,7 +540,7 @@ async function reingestCommand(args: string[]): Promise<void> {
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
   const queuePath = join(stateDir, 'job-queue.json');
-  const queue = createJobQueue(queuePath);
+  const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
   await queue.load();
 
   // Ingest each raw file
@@ -824,7 +824,7 @@ async function importSessionsCommand(args: string[]): Promise<void> {
     process.stdout.write('Running ingest pipeline...\n');
     const lockDir = resolveLockDir(config);
     const queuePath = join(stateDir, 'job-queue.json');
-    const queue = createJobQueue(queuePath);
+    const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
     await queue.load();
 
     for (const stagingPath of exportedPaths) {
@@ -873,7 +873,7 @@ async function importCursorSessionsCommand(args: string[]): Promise<void> {
     process.stdout.write('Running ingest pipeline...\n');
     const lockDir = resolveLockDir(config);
     const queuePath = join(stateDir, 'job-queue.json');
-    const queue = createJobQueue(queuePath);
+    const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
     await queue.load();
 
     for (const stagingPath of exportedPaths) {
@@ -1094,7 +1094,7 @@ async function synthesizeCommand(args: string[]): Promise<void> {
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
   const queuePath = join(stateDir, 'job-queue.json');
-  const queue = createJobQueue(queuePath);
+  const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
   await queue.load();
 
   await queue.enqueue({
@@ -1130,7 +1130,7 @@ async function checkDecayCommand(): Promise<void> {
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
   const queuePath = join(stateDir, 'job-queue.json');
-  const queue = createJobQueue(queuePath);
+  const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
   await queue.load();
 
   await queue.enqueue({
@@ -1165,7 +1165,7 @@ async function crossProjectCommand(): Promise<void> {
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
   const queuePath = join(stateDir, 'job-queue.json');
-  const queue = createJobQueue(queuePath);
+  const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
   await queue.load();
 
   await queue.enqueue({
@@ -1259,7 +1259,7 @@ async function reprocessAgentCommand(): Promise<void> {
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
   const queuePath = join(stateDir, 'job-queue.json');
-  const queue = createJobQueue(queuePath);
+  const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
   await queue.load();
 
   for (const item of toProcess) {
@@ -1309,7 +1309,7 @@ async function skillsCommand(args: string[]): Promise<void> {
     const stateDir = resolveStateDir(config);
     const lockDir = resolveLockDir(config);
     const queuePath = join(stateDir, 'job-queue.json');
-    const queue = createJobQueue(queuePath);
+    const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
     await queue.load();
 
     await queue.enqueue({
@@ -1547,7 +1547,7 @@ async function touchCommand(args: string[]): Promise<void> {
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
   const queuePath = join(stateDir, 'job-queue.json');
-  const queue = createJobQueue(queuePath);
+  const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
   await queue.load();
 
   await queue.enqueue({
@@ -1635,7 +1635,7 @@ async function maintenanceCommand(args: string[]): Promise<void> {
     const stateDir = resolveStateDir(config);
     const lockDir = resolveLockDir(config);
     const queuePath = join(stateDir, 'job-queue.json');
-    const queue = createJobQueue(queuePath);
+    const queue = createJobQueue(queuePath, { maxActiveJobs: config.jobs.maxActiveJobs });
     await queue.load();
     await queue.enqueue({
       type: 'embedding-index',

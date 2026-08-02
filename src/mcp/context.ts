@@ -55,7 +55,7 @@ export async function createMCPContext(projectRoot?: string): Promise<MCPContext
 
   const stateDir = resolveStateDir(config);
   const lockDir = resolveLockDir(config);
-  const queue = createJobQueue(join(stateDir, 'job-queue.json'));
+  const queue = createJobQueue(join(stateDir, 'job-queue.json'), { maxActiveJobs: config.jobs.maxActiveJobs });
 
   const usageLogPath = join(resolveLogDir(config), 'mcp-usage.jsonl');
 

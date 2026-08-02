@@ -163,6 +163,15 @@ export const IntelligenceConfigSchema = z.object({
       enabled: z.boolean().default(true),
       retrievabilityRefresh: z.number().min(0).max(1).default(0.5),
       retrievabilityArchive: z.number().min(0).max(1).default(0.2),
+      /**
+       * Fix G (resource-boundedness): cap on `topic-refresh` jobs enqueued by
+       * a single decay-scan run. Qualifying candidates are collected across
+       * the whole scan, sorted by urgency (thin-content trigger first, then
+       * lowest retrievability first), and only the top N are enqueued — the
+       * rest are skipped (and logged) rather than fanning out 1:1 with vault
+       * size.
+       */
+      maxRefreshEnqueuePerRun: z.number().int().positive().default(25),
     })
     .default({}),
   /**
@@ -312,8 +321,23 @@ export const JobsConfigSchema = z.object({
       backoffCeilingMs: z.number().int().positive().default(1_800_000), // 30 min
       alertAfterMs: z.number().int().nonnegative().default(3_600_000), // 1 hour
       probeTrustWindowMs: z.number().int().positive().default(120_000), // 2 min
+      /**
+       * Fix F (resource-boundedness): once a job's `transientRetryCount`
+       * exceeds this, `queue.ts`'s `fail()` marks it terminally `failed`
+       * instead of resetting it to `pending` forever. Previously unbounded —
+       * a job against a slow/unreachable endpoint retried every ≤30 min
+       * indefinitely, re-spending LLM budget each attempt.
+       */
+      maxTransientRetries: z.number().int().positive().default(20),
     })
     .default({}),
+  /**
+   * Fix H (resource-boundedness): ceiling on total active (pending+running)
+   * jobs held in `job-queue.json`. `enqueue()` refuses new jobs once this is
+   * reached (logging a warning) rather than growing the active set without
+   * bound — `flush()` already capped only the completed/failed tail at 100.
+   */
+  maxActiveJobs: z.number().int().positive().default(1000),
 });
 
 export const ReviewConfigSchema = z.object({

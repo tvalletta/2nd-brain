@@ -347,6 +347,81 @@ body content for old concept.`,
     expect(enqueued[0].trigger).toBe('cascade');
     expect(enqueued[0].priority).toBe(75);
   });
+
+  it('Fix G: caps refresh enqueue fan-out at maxRefreshEnqueuePerRun, prioritizing lowest retrievability first', async () => {
+    const cappedConfig = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp',
+      intelligence: { decay: { maxRefreshEnqueuePerRun: 2 } },
+    });
+
+    // Three qualifying stale concepts with different stabilities → different
+    // retrievability, so ordering is deterministic (lowest stability decays
+    // fastest → lowest retrievability → most urgent → enqueued first).
+    for (const [name, stability] of [['a', 10], ['b', 20], ['c', 30]] as const) {
+      await vault.create(
+        `wiki/concepts/${name}.md`,
+        `---
+id: ${name}
+type: concept
+title: ${name}
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+last_verified: 2025-01-01T00:00:00Z
+stability: ${stability}
+half_life_domain: concept
+---
+body content for ${name}.`,
+      );
+    }
+
+    const enqueued: JobCreateInput[] = [];
+    const result = await runDecayScan({
+      vault,
+      config: cappedConfig,
+      enqueue: async (i) => { enqueued.push(i); return {} as never; },
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+    });
+
+    expect(result.scanned).toBe(3);
+    expect(enqueued).toHaveLength(2); // capped — one of the three qualifying candidates skipped
+    expect(result.refreshEnqueued).toBe(2);
+    expect(result.refreshCapped).toBe(1);
+    // Lowest-stability (fastest-decaying, lowest retrievability) candidates enqueued first.
+    expect(enqueued.map((e) => e.targetPath)).toEqual([
+      'wiki/concepts/a.md',
+      'wiki/concepts/b.md',
+    ]);
+  });
+
+  it('Fix G: does not cap when qualifying candidates are within maxRefreshEnqueuePerRun', async () => {
+    for (const name of ['x', 'y']) {
+      await vault.create(
+        `wiki/concepts/${name}.md`,
+        `---
+id: ${name}
+type: concept
+title: ${name}
+created_at: 2025-01-01T00:00:00Z
+updated_at: 2025-01-01T00:00:00Z
+last_verified: 2025-01-01T00:00:00Z
+stability: 30
+half_life_domain: concept
+---
+body content for ${name}.`,
+      );
+    }
+
+    const enqueued: JobCreateInput[] = [];
+    const result = await runDecayScan({
+      vault,
+      config, // default maxRefreshEnqueuePerRun: 25
+      enqueue: async (i) => { enqueued.push(i); return {} as never; },
+      nowMs: Date.parse('2026-05-06T00:00:00Z'),
+    });
+
+    expect(enqueued).toHaveLength(2);
+    expect(result.refreshCapped).toBe(0);
+  });
 });
 
 describe('rot-scan (C2)', () => {

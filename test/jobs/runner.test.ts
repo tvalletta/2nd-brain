@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createJobQueue } from '../../src/jobs/queue.js';
@@ -174,5 +174,65 @@ describe('JobRunner', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('Fix E: skips draining (drains nothing) when the queue-runner lock is held by a live process', async () => {
+    const queue = createJobQueue(join(tempDir, 'queue.json'));
+    const lockDir = join(tempDir, 'locks');
+    const lock = createFileLock(lockDir);
+    let executed = false;
+
+    const handlers = new Map<JobType, JobHandler>();
+    handlers.set('rebuild-index', {
+      async execute() {
+        executed = true;
+      },
+    });
+
+    await queue.enqueue({ type: 'rebuild-index' });
+
+    // Simulate another live process already holding the global queue-runner
+    // lock (own PID is alive, so this reads as "held", not stale).
+    await mkdir(lockDir, { recursive: true });
+    await writeFile(
+      join(lockDir, 'queue_runner.lock'),
+      JSON.stringify({ pid: process.pid, path: 'queue-runner', acquiredAt: new Date().toISOString() }),
+      'utf-8',
+    );
+
+    const runner = createJobRunner({
+      queue,
+      lock,
+      handlers,
+      vaultPath: tempDir,
+      projectRoot: tempDir,
+      ...runnerDefaults(),
+      queueRunnerLock: { retryMs: 5, maxAttempts: 2 }, // keep the bounded wait fast for the test
+    });
+
+    const processed = await runner.runAll();
+
+    expect(processed).toBe(0);
+    expect(executed).toBe(false);
+    const pending = await queue.list({ status: 'pending' });
+    expect(pending).toHaveLength(1); // job untouched, stays for the next drain
+  });
+
+  it('drains normally when no other process holds the queue-runner lock', async () => {
+    const queue = createJobQueue(join(tempDir, 'queue.json'));
+    const lock = createFileLock(join(tempDir, 'locks'));
+
+    const handlers = new Map<JobType, JobHandler>();
+    handlers.set('rebuild-index', {
+      async execute() {},
+    });
+    await queue.enqueue({ type: 'rebuild-index' });
+
+    const runner = createJobRunner({
+      queue, lock, handlers, vaultPath: tempDir, projectRoot: tempDir, ...runnerDefaults(),
+    });
+
+    const processed = await runner.runAll();
+    expect(processed).toBe(1);
   });
 });
