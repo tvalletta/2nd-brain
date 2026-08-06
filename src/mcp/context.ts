@@ -26,13 +26,40 @@ import { createLLMFromConfig } from '../enrichment/llm-factory.js';
  * every file change but dropped before the next drain ever saw them.
  * `queue.load()` first so a flush doesn't clobber jobs persisted by another
  * process (e.g. a concurrent drain) since this queue instance last loaded.
+ *
+ * Shared-daemon fix: in the shared MCP daemon, every session and the file
+ * watcher share ONE `MCPContext` and thus ONE `JobQueue` instance. Without
+ * serialization, two concurrent calls against that instance can interleave
+ * at the `load()`/`enqueue()`/`flush()` awaits — `queue.load()` *replaces*
+ * the shared in-memory jobs array, so one caller's `load()` can clobber
+ * another caller's not-yet-flushed `enqueue()`, silently dropping a job.
+ * `withQueueMutex` chains each call onto the previous call *for the same
+ * queue instance* via a module-level `WeakMap<JobQueue, Promise<void>>`
+ * tail mutex, so the load->enqueue->flush critical section never overlaps
+ * for that instance. The chain is keyed off a *settled* continuation (via
+ * `.catch(() => undefined)`) so one call's rejection never wedges later
+ * calls — the rejection still propagates to that call's own caller via the
+ * promise returned here. Cross-*process* races (daemon vs. a separate CLI
+ * or hook process) are intentionally out of scope: rarer, pre-existing, and
+ * self-healing via dedupe + the 5-min scheduled full sync — deliberately not
+ * closed with per-enqueue file locking, which would add I/O contention on
+ * the hot watcher path.
  * Exported standalone so the fix is testable without booting a full
  * `MCPContext` (which requires a real global config on disk).
  */
-export async function enqueueAndPersist(queue: JobQueue, input: JobCreateInput): Promise<void> {
+const queueTails = new WeakMap<JobQueue, Promise<void>>();
+
+async function enqueueAndPersistUnlocked(queue: JobQueue, input: JobCreateInput): Promise<void> {
   await queue.load();
   await queue.enqueue(input);
   await queue.flush();
+}
+
+export async function enqueueAndPersist(queue: JobQueue, input: JobCreateInput): Promise<void> {
+  const previousTail = queueTails.get(queue) ?? Promise.resolve();
+  const run = previousTail.catch(() => undefined).then(() => enqueueAndPersistUnlocked(queue, input));
+  queueTails.set(queue, run.catch(() => undefined));
+  return run;
 }
 
 export interface MCPContext {
