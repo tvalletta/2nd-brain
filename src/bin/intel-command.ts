@@ -20,9 +20,8 @@ import {
   writeResearchQueue,
   researchQueuePath,
 } from '../maintenance/research-queue.js';
-import { tickScheduler, readSchedulerState, defaultSchedule } from '../intelligence/scheduler.js';
-import { maybeRunAutoBackfill } from '../intelligence/auto-backfill.js';
-import { importNewCursorSessions } from '../session/import-cursor-sessions.js';
+import { readSchedulerState } from '../intelligence/scheduler.js';
+import { runSchedulerTick } from '../intelligence/scheduler-tick.js';
 import {
   runHealthCheck,
   formatHealthReport,
@@ -241,54 +240,11 @@ export async function intelCommand(args: string[]): Promise<void> {
     case 'tick': {
       const config = await loadConfig();
       const stateDir = resolveStateDir(config);
-
-      // First-run backfill: idempotent, only runs once per state dir.
-      const vaultForBackfill = createFsAdapter(config.vaultPath);
-      const backfill = await maybeRunAutoBackfill(vaultForBackfill, stateDir);
-      if (backfill.ran) {
-        process.stdout.write(
-          `Auto-backfill (first run): updated ${backfill.filesUpdated} files. Fields: ${JSON.stringify(backfill.fieldsAdded)}\n`,
-        );
-      }
-
-      // Import any new Cursor sessions before the scheduler fires. Newly
-      // exported staging files get picked up by the file watcher / file-mtime
-      // ingest path. Silent unless something was exported.
-      try {
-        const cursor = await importNewCursorSessions(config, stateDir);
-        if (cursor.exported > 0) {
-          process.stdout.write(
-            `Cursor sessions: ${cursor.exported} new exported (${cursor.skipped} skipped of ${cursor.total} total)\n`,
-          );
-        }
-      } catch (err) {
-        process.stderr.write(`Cursor import failed (non-fatal): ${(err as Error).message}\n`);
-      }
-
-      const queue = createJobQueue(join(stateDir, 'job-queue.json'), { maxActiveJobs: config.jobs.maxActiveJobs });
-      await queue.load();
-      const tickResult = await tickScheduler({
-        stateDir,
-        enqueue: async (i) => queue.enqueue(i),
-        schedule: defaultSchedule({ reviewEnabled: config.maintenance.reviewEnabled }),
-      });
-      // Drain whatever was just enqueued.
-      const vault = createFsAdapter(config.vaultPath);
-      const runner = createJobRunner({
-        queue,
-        lock: createFileLock(resolveLockDir(config)),
-        handlers: createHandlerRegistry(),
-        vaultPath: config.vaultPath,
-        projectRoot: config.projectRoot!,
-        llm: createLLMFromConfig(config, stateDir),
-        vault,
-        config,
-      });
-      const processed = await runner.runAll();
-      const fired = tickResult.fired.map((f) => `${f.type} (${f.reason})`).join(', ') || 'nothing';
-      const skipped = tickResult.skipped.length;
+      const res = await runSchedulerTick({ config, stateDir });
+      const fired = res.fired.map((f) => `${f.type} (${f.reason})`).join(', ') || 'nothing';
       process.stdout.write(
-        `Scheduler tick: fired ${fired}; skipped ${skipped}; drained ${processed} job(s).\n`,
+        `Scheduler tick: fired ${fired}; skipped ${res.skipped.length}; drained ${res.processed} job(s)` +
+          `${res.heavyDeferred ? ' [heavy deferred: low power]' : ''}.\n`,
       );
       process.exit(0);
     }
