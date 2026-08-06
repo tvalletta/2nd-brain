@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { KarpathyConfigSchema } from '../../src/config/schema.js';
@@ -88,4 +88,32 @@ describe('powerState (real pmset probe)', () => {
     expect(typeof ps.onBattery).toBe('boolean');
     expect(typeof ps.thermallyConstrained).toBe('boolean');
   });
+
+  it('does not hang when pmset itself hangs -- resolves to unconstrained within the timeout bound', async () => {
+    // Shadow the real `pmset` with a fake binary that sleeps far past the
+    // implementation's per-call timeout, by prepending a temp bin dir to
+    // PATH. `powerState()` must bound each of its two sequential pmset
+    // calls (batt, therm) individually rather than awaiting either one
+    // forever -- this is the regression test for that timeout.
+    const binDir = await mkdtemp(join(tmpdir(), 'karpathy-fake-pmset-'));
+    const fakePmset = join(binDir, 'pmset');
+    await writeFile(fakePmset, '#!/bin/sh\nsleep 10\n');
+    await chmod(fakePmset, 0o755);
+
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${binDir}:${originalPath ?? ''}`;
+    try {
+      const start = Date.now();
+      const ps = await powerState();
+      const elapsed = Date.now() - start;
+
+      // Two sequential 2s-bounded probes should resolve in a few seconds,
+      // never anywhere near the fake pmset's 10s sleep.
+      expect(elapsed).toBeLessThan(6000);
+      expect(ps).toEqual({ onBattery: false, thermallyConstrained: false });
+    } finally {
+      process.env.PATH = originalPath;
+      await rm(binDir, { recursive: true, force: true });
+    }
+  }, 10000);
 });

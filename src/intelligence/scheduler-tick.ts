@@ -30,6 +30,16 @@ const log = createLogger('scheduler-tick');
 const execFileAsync = promisify(execFile);
 
 /**
+ * Bounds each `pmset` probe call in `powerState()`. `execFile`'s `timeout`
+ * option sends `killSignal` and rejects the promise once exceeded -- caught
+ * by the existing try/catch below, which already treats any probe failure
+ * as "assume unconstrained." Without this, a hung `pmset` would await
+ * forever, blocking `runSchedulerTick` (and, via Task 7, the daemon's
+ * scheduler interval) indefinitely.
+ */
+const PMSET_TIMEOUT_MS = 2000;
+
+/**
  * Scheduled job types expensive enough (LLM calls and/or whole-vault scans)
  * that they should be deferred while the machine is on battery or
  * thermally constrained. Everything else in `defaultSchedule()` (e.g.
@@ -101,13 +111,19 @@ export async function powerState(): Promise<PowerState> {
   let onBattery = false;
   let thermallyConstrained = false;
   try {
-    const { stdout } = await execFileAsync('pmset', ['-g', 'batt']);
+    const { stdout } = await execFileAsync('pmset', ['-g', 'batt'], {
+      timeout: PMSET_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    });
     onBattery = parseBatteryOutput(stdout);
   } catch (err) {
     log.debug('pmset -g batt probe failed; assuming AC power', { error: (err as Error).message });
   }
   try {
-    const { stdout } = await execFileAsync('pmset', ['-g', 'therm']);
+    const { stdout } = await execFileAsync('pmset', ['-g', 'therm'], {
+      timeout: PMSET_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    });
     thermallyConstrained = parseThermalOutput(stdout);
   } catch (err) {
     log.debug('pmset -g therm probe failed; assuming unconstrained', { error: (err as Error).message });
