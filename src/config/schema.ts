@@ -421,6 +421,26 @@ export const SearchConfigSchema = z.object({
   ftsSyncBatchSize: z.number().int().positive().default(500),
 });
 
+/**
+ * Shared MCP daemon (docs/superpowers/specs/2026-08-06-shared-mcp-daemon-
+ * design.md): the long-lived HTTP transport that consolidates the per-window
+ * stdio MCP servers + the launchd tick into one process. Binds loopback-only
+ * by default; `authToken`, when set, is validated against the `Authorization`
+ * header by the HTTP transport (optional hardening — default is no token).
+ */
+export const DaemonConfigSchema = z.object({
+  host: z.string().default('127.0.0.1'),
+  port: z.number().int().positive().default(8765),
+  /** Scheduler tick cadence (ms) — replaces the standalone launchd `com.karpathy.tick` job. */
+  tickIntervalMs: z.number().int().positive().default(300_000),
+  /** MCP session idle timeout (ms) before the HTTP transport closes it. */
+  sessionIdleTimeoutMs: z.number().int().positive().default(1_800_000),
+  /** `--max-old-space-size` (MB) applied to the daemon process. */
+  heapMb: z.number().int().positive().default(512),
+  /** Optional bearer token for `Authorization` header validation. Unset = loopback trust. */
+  authToken: z.string().optional(),
+});
+
 export const KarpathyConfigSchema = z.object({
   vaultPath: z.string(),
   projectRoot: z.string().optional(),
@@ -441,6 +461,7 @@ export const KarpathyConfigSchema = z.object({
   review: ReviewConfigSchema.default({}),
   layout: LayoutConfigSchema.default({}),
   search: SearchConfigSchema.default({}),
+  daemon: DaemonConfigSchema.default({}),
 });
 
 // Partial versions of sub-configs for use in GlobalConfigSchema overrides
@@ -457,6 +478,7 @@ const PartialJobsConfigSchema = JobsConfigSchema.partial();
 const PartialReviewConfigSchema = ReviewConfigSchema.partial();
 const PartialLayoutConfigSchema = LayoutConfigSchema.partial();
 const PartialSearchConfigSchema = SearchConfigSchema.partial();
+const PartialDaemonConfigSchema = DaemonConfigSchema.partial();
 
 export const ProjectOverrideSchema = z.object({
   vaultPath: z.string().optional(),
@@ -477,6 +499,7 @@ export const ProjectOverrideSchema = z.object({
   review: PartialReviewConfigSchema.optional(),
   layout: PartialLayoutConfigSchema.optional(),
   search: PartialSearchConfigSchema.optional(),
+  daemon: PartialDaemonConfigSchema.optional(),
 });
 
 export const GlobalDefaultsSchema = z.object({
@@ -498,6 +521,7 @@ export const GlobalDefaultsSchema = z.object({
   review: PartialReviewConfigSchema.optional(),
   layout: PartialLayoutConfigSchema.optional(),
   search: PartialSearchConfigSchema.optional(),
+  daemon: PartialDaemonConfigSchema.optional(),
 });
 
 export const GlobalConfigSchema = z.object({

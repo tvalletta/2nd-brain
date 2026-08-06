@@ -182,6 +182,34 @@ describe('KarpathyConfigSchema — search.ftsSyncBatchSize (Fix D)', () => {
   });
 });
 
+describe('KarpathyConfigSchema — daemon', () => {
+  it('applies daemon defaults when unset', () => {
+    const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
+    expect(config.daemon).toEqual({
+      host: '127.0.0.1',
+      port: 8765,
+      tickIntervalMs: 300_000,
+      sessionIdleTimeoutMs: 1_800_000,
+      heapMb: 512,
+    });
+    expect(config.daemon.authToken).toBeUndefined();
+  });
+
+  it('allows partial overrides, filling in the rest with defaults', () => {
+    const config = KarpathyConfigSchema.parse({
+      vaultPath: '/tmp/vault',
+      daemon: { port: 9999, authToken: 'secret' },
+    });
+    expect(config.daemon.port).toBe(9999);
+    expect(config.daemon.authToken).toBe('secret');
+    // Other fields still default.
+    expect(config.daemon.host).toBe('127.0.0.1');
+    expect(config.daemon.tickIntervalMs).toBe(300_000);
+    expect(config.daemon.sessionIdleTimeoutMs).toBe(1_800_000);
+    expect(config.daemon.heapMb).toBe(512);
+  });
+});
+
 describe('KarpathyConfigSchema — intelligence.research.autoDrainEnabled', () => {
   it('defaults autoDrainEnabled to false', () => {
     const config = KarpathyConfigSchema.parse({ vaultPath: '/tmp/vault' });
