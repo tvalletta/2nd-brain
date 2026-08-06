@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { spawn } from 'node:child_process';
+import { spawnLowPriority } from '../../src/shared/low-priority.js';
 import { mkdtemp, rm, writeFile, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-vi.mock('node:child_process', () => ({
-  spawn: vi.fn(() => ({
+vi.mock('../../src/shared/low-priority.js', () => ({
+  spawnLowPriority: vi.fn(() => ({
     unref: vi.fn(),
     pid: 12345,
   })),
@@ -34,12 +34,27 @@ describe('spawnBackgroundDrain', () => {
     const { spawnBackgroundDrain } = await import('../../src/hooks/background-drain.js');
     await spawnBackgroundDrain({ lockDir, stateDir });
 
-    expect(spawn).toHaveBeenCalledOnce();
-    const [execPath, args, options] = (spawn as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(spawnLowPriority).toHaveBeenCalledOnce();
+    const [execPath, args, options] = (spawnLowPriority as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(execPath).toBe(process.execPath);
     expect(args).toContain('drain-queue');
     expect(options.detached).toBe(true);
     expect(options.stdio).toBe('ignore');
+  });
+
+  it('spawns the drain child through the low-priority (background QoS) path', async () => {
+    // Confirms the *mechanism* wiring: background-drain now calls
+    // spawnLowPriority (which composes buildLowPriorityInvocation +
+    // taskpolicy -b, falling back to a direct spawn) rather than calling
+    // node:child_process's spawn directly. Fix-B's throttle/lock logic is
+    // asserted separately below and is unchanged.
+    const { spawnBackgroundDrain } = await import('../../src/hooks/background-drain.js');
+    await spawnBackgroundDrain({ lockDir, stateDir });
+
+    expect(spawnLowPriority).toHaveBeenCalledOnce();
+    const [command, args] = (spawnLowPriority as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(command).toBe(process.execPath);
+    expect(args).toEqual(expect.arrayContaining(['drain-queue']));
   });
 
   it('returns promptly without blocking on the spawned process itself', async () => {
@@ -54,7 +69,7 @@ describe('spawnBackgroundDrain', () => {
   });
 
   it('does not throw if spawn fails', async () => {
-    (spawn as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => {
+    (spawnLowPriority as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => {
       throw new Error('spawn failed');
     });
 
@@ -71,7 +86,7 @@ describe('spawnBackgroundDrain', () => {
     await spawnBackgroundDrain({ lockDir, stateDir, minIntervalMs: 60_000 });
     await spawnBackgroundDrain({ lockDir, stateDir, minIntervalMs: 60_000 });
 
-    expect(spawn).toHaveBeenCalledOnce();
+    expect(spawnLowPriority).toHaveBeenCalledOnce();
   });
 
   it('spawns again once the min interval has elapsed', async () => {
@@ -81,7 +96,7 @@ describe('spawnBackgroundDrain', () => {
     await new Promise((r) => setTimeout(r, 20));
     await spawnBackgroundDrain({ lockDir, stateDir, minIntervalMs: 10 });
 
-    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(spawnLowPriority).toHaveBeenCalledTimes(2);
   });
 
   it('skips spawning when the __drain__ lock is held by a live PID', async () => {
@@ -96,7 +111,7 @@ describe('spawnBackgroundDrain', () => {
 
     await spawnBackgroundDrain({ lockDir, stateDir });
 
-    expect(spawn).not.toHaveBeenCalled();
+    expect(spawnLowPriority).not.toHaveBeenCalled();
   });
 
   it('spawns when the __drain__ lock file references a dead PID', async () => {
@@ -110,7 +125,7 @@ describe('spawnBackgroundDrain', () => {
 
     await spawnBackgroundDrain({ lockDir, stateDir });
 
-    expect(spawn).toHaveBeenCalledOnce();
+    expect(spawnLowPriority).toHaveBeenCalledOnce();
   });
 
   it('records the spawn timestamp to <stateDir>/last-drain.json', async () => {

@@ -1,9 +1,9 @@
-import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile, writeFile } from 'node:fs/promises';
 import { ensureDir } from '../shared/fs-utils.js';
 import { createLogger } from '../shared/logger.js';
+import { spawnLowPriority } from '../shared/low-priority.js';
 
 const log = createLogger('hook:background-drain');
 
@@ -64,7 +64,11 @@ export async function spawnBackgroundDrain(opts: BackgroundDrainOptions): Promis
     const thisDir = dirname(fileURLToPath(import.meta.url));
     const script = resolve(thisDir, '../../dist/bin/karpathy.js');
 
-    const child = spawn(process.execPath, [script, 'drain-queue'], {
+    // Runs at macOS background QoS (`taskpolicy -b`, via spawnLowPriority)
+    // when available, so this transient drain never competes with
+    // interactive work sharing the same machine. detached/unref and the
+    // pid-based logging below are unaffected by the wrapping.
+    const child = spawnLowPriority(process.execPath, [script, 'drain-queue'], {
       detached: true,
       stdio: 'ignore',
       env: { ...process.env },
