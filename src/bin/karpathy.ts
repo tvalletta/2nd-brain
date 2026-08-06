@@ -59,6 +59,8 @@ import { rebuildAllIndexes } from '../maintenance/indexes.js';
 import { seedBuiltinSkills, loadSkills } from '../agent/skills/registry.js';
 import { archiveCurrentSpec, listSupersededVersions } from '../specs/versioner.js';
 import { intelCommand } from './intel-command.js';
+import { runDaemon } from '../mcp/daemon.js';
+import { parseProjectRootArg } from '../mcp/server-args.js';
 import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
 import { createLogger } from '../shared/logger.js';
 import { LLMConfigSchema, IngestConfigSchema, MaintenanceConfigSchema } from '../config/schema.js';
@@ -1795,6 +1797,32 @@ async function specVersionsCommand(args: string[]): Promise<void> {
   }
 }
 
+/**
+ * Long-lived: `runDaemon` resolves once the HTTP server is bound, the
+ * watcher (if any) is started, and the scheduler interval is armed, but
+ * the process itself keeps running afterward — the HTTP server's
+ * listening socket keeps the event loop alive. `main()` must NOT call
+ * `process.exit` after this returns; unlike every other CLI command,
+ * this one is meant to stay up until SIGTERM/SIGINT.
+ */
+async function mcpDaemonCommand(args: string[]): Promise<void> {
+  const projectRoot = parseProjectRootArg(args) ?? resolve(process.cwd());
+
+  const portIdx = args.indexOf('--port');
+  const portArg = portIdx !== -1 ? args[portIdx + 1] : undefined;
+  const port = portArg !== undefined ? Number(portArg) : undefined;
+  if (port !== undefined && !Number.isInteger(port)) {
+    throw new Error(`--port must be an integer, got: ${portArg}`);
+  }
+
+  const handle = await runDaemon({ projectRoot, port });
+  if (handle.port === -1) {
+    process.stdout.write('karpathy mcp-daemon: another daemon is already running for this project — exiting.\n');
+    return;
+  }
+  process.stdout.write(`karpathy mcp-daemon: listening at ${handle.url} (pid ${process.pid})\n`);
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -1817,6 +1845,9 @@ async function main(): Promise<void> {
       break;
     case 'mcp':
       await import('../mcp/server.js');
+      break;
+    case 'mcp-daemon':
+      await mcpDaemonCommand(args.slice(1));
       break;
     case 'maintain':
       await maintainCommand();
@@ -1925,6 +1956,7 @@ async function main(): Promise<void> {
           '  hook <event>        Handle a Claude Code hook event',
           '  install-mcp         Register MCP server in Claude Code + Cursor',
           '  mcp                 Start MCP server (stdio transport)',
+          '  mcp-daemon [--port <n>] [--project-root <path>]  Start the shared MCP daemon (HTTP transport, long-lived)',
           '  review              Show review queue',
           '  synthesize <slug>   Run full re-synthesis for a project (Opus model)',
           '  check-decay         Check for stale project specs and trigger re-synthesis',
