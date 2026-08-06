@@ -1,5 +1,5 @@
 import { createMCPContext } from './context.js';
-import { startHttpMcpServer } from './http-transport.js';
+import { startHttpMcpServer, type HttpMcpServerHandle } from './http-transport.js';
 import { startVaultWatcher, type VaultWatcherHandle } from './vault-watcher.js';
 import { runSchedulerTick } from '../intelligence/scheduler-tick.js';
 import { applySelfLowPriority } from '../shared/low-priority.js';
@@ -26,6 +26,40 @@ export interface RunDaemonOptions {
 }
 
 /**
+ * Runs a set of independent teardown/cleanup steps such that a rejection
+ * in one can never prevent the others from running -- in this module,
+ * that property is what guarantees the daemon lock (and, if bound, the
+ * watcher lock) is always released even when e.g. `http.close()` throws.
+ * Each step is wrapped individually (via `Promise.allSettled`), every
+ * failure is logged, and -- once all steps have run -- the first failure
+ * (or an `AggregateError` of all of them) is rethrown so callers still
+ * observe that teardown was not fully clean.
+ *
+ * Exported standalone so the exception-safety property itself has direct,
+ * mock-free unit coverage (test/mcp/daemon.test.ts) without needing to
+ * fake failures inside the real `startHttpMcpServer`/watcher/lock
+ * dependencies, which are themselves written to swallow their own
+ * errors defensively and so can't be forced to reject in an integration
+ * test without brittle module mocking.
+ */
+export async function runTeardownSteps(steps: Array<() => void | Promise<void>>): Promise<void> {
+  const results = await Promise.allSettled(steps.map((step) => Promise.resolve().then(step)));
+  const errors = results
+    .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    .map((r) => (r.reason instanceof Error ? r.reason : new Error(String(r.reason))));
+
+  for (const err of errors) {
+    log.error('daemon teardown step failed', { error: err.message });
+  }
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, 'daemon teardown encountered multiple errors');
+  }
+}
+
+/**
  * Starts the shared MCP daemon: one long-lived process serving MCP over
  * HTTP to every window against this project, owning the single vault
  * watcher, and running the scheduler tick internally in place of the
@@ -42,6 +76,21 @@ export interface RunDaemonOptions {
  * (never a real bound port/URL), `close()` resolving immediately. No port
  * is bound and nothing is started. Callers that only care about "is a
  * daemon now reachable" can check `port > 0`.
+ *
+ * Exception safety: once the daemon lock is acquired, every resource
+ * created afterward (`http`, `vw`, the two intervals) is tracked in
+ * mutable outer-scope bindings and torn down through the single
+ * `teardown()` closure below -- reachable from three places that can each
+ * fire independently and in any order: the returned `handle.close()`, the
+ * `SIGTERM`/`SIGINT` handlers (registered immediately after the lock is
+ * acquired, before startup begins, so a signal arriving mid-startup still
+ * routes here instead of falling through to Node's default handler), and
+ * the startup `catch` block below (so a failure partway through startup
+ * -- e.g. `EADDRINUSE` -- releases whatever was already acquired instead
+ * of leaking the daemon lock for the rest of the process's life).
+ * `teardown()` itself is idempotent (`closed` latch) and exception-safe
+ * (`runTeardownSteps`): every step runs regardless of whether an earlier
+ * one threw.
  */
 export async function runDaemon(opts: RunDaemonOptions): Promise<DaemonHandle> {
   applySelfLowPriority(5);
@@ -68,62 +117,28 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<DaemonHandle> {
     throw err;
   }
 
-  const http = await startHttpMcpServer({
-    ctx,
-    host: opts.host ?? ctx.config.daemon.host,
-    port: opts.port ?? ctx.config.daemon.port,
-    sessionIdleTimeoutMs: ctx.config.daemon.sessionIdleTimeoutMs,
-    authToken: ctx.config.daemon.authToken,
-  });
-
-  const vw: VaultWatcherHandle | null = await startVaultWatcher(ctx);
-
-  // Scheduler tick: replaces the standalone launchd `com.karpathy.tick`
-  // job for this project. Re-entrancy guard (`tickInFlight`) prevents a
-  // slow tick from overlapping the next timer fire; `runSchedulerTick`
-  // itself also takes the global job-runner lock (Fix E, §27) as a second,
-  // cross-process layer of protection.
-  let tickInFlight = false;
-  const iv = setInterval(() => {
-    if (tickInFlight) return;
-    tickInFlight = true;
-    runSchedulerTick({ config: ctx.config, stateDir: resolveStateDir(ctx.config) })
-      .catch((err) => {
-        log.error('scheduler tick failed', { error: (err as Error).message });
-      })
-      .finally(() => {
-        tickInFlight = false;
-      });
-  }, ctx.config.daemon.tickIntervalMs);
-  // The HTTP server's listening socket is what keeps this process alive;
-  // these timers are periodic maintenance, not liveness anchors.
-  iv.unref?.();
-
-  const idleIv = setInterval(() => {
-    http.sweepIdle();
-  }, ctx.config.daemon.sessionIdleTimeoutMs);
-  idleIv.unref?.();
-
+  // Mutable, possibly-partial state from here on -- `teardown()` must be
+  // safe to call at any point from this line forward, including before
+  // any of these are assigned (see the module-level doc comment above).
+  let http: HttpMcpServerHandle | undefined;
+  let vw: VaultWatcherHandle | null = null;
+  let iv: NodeJS.Timeout | undefined;
+  let idleIv: NodeJS.Timeout | undefined;
   let closed = false;
 
-  /**
-   * Shared teardown, used both by the exported `handle.close()` (no
-   * `process.exit` -- tests call this directly) and the signal handlers
-   * below (which call this, then exit). Idempotent: a signal arriving
-   * after an explicit `close()` (or vice versa) is a no-op on the second
-   * call.
-   */
   async function teardown(): Promise<void> {
     if (closed) return;
     closed = true;
     process.off('SIGTERM', onSigterm);
     process.off('SIGINT', onSigint);
-    clearInterval(iv);
-    clearInterval(idleIv);
-    await http.close();
-    vw?.stop();
-    await vw?.release();
-    await releaseLock();
+    if (iv) clearInterval(iv);
+    if (idleIv) clearInterval(idleIv);
+    await runTeardownSteps([
+      () => http?.close(),
+      () => vw?.stop(),
+      () => vw?.release(),
+      () => releaseLock(),
+    ]);
   }
 
   function onSignal(signal: string): void {
@@ -137,8 +152,61 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<DaemonHandle> {
   }
   const onSigterm = () => onSignal('SIGTERM');
   const onSigint = () => onSignal('SIGINT');
+  // Registered before startup begins: a SIGTERM/SIGINT arriving mid-
+  // startup must still route to teardown() rather than fall through to
+  // Node's default handler and leak whatever had already started.
   process.on('SIGTERM', onSigterm);
   process.on('SIGINT', onSigint);
+
+  try {
+    http = await startHttpMcpServer({
+      ctx,
+      host: opts.host ?? ctx.config.daemon.host,
+      port: opts.port ?? ctx.config.daemon.port,
+      sessionIdleTimeoutMs: ctx.config.daemon.sessionIdleTimeoutMs,
+      authToken: ctx.config.daemon.authToken,
+    });
+
+    vw = await startVaultWatcher(ctx);
+
+    // Scheduler tick: replaces the standalone launchd `com.karpathy.tick`
+    // job for this project. Re-entrancy guard (`tickInFlight`) prevents a
+    // slow tick from overlapping the next timer fire; `runSchedulerTick`
+    // itself also takes the global job-runner lock (Fix E, §27) as a
+    // second, cross-process layer of protection.
+    let tickInFlight = false;
+    iv = setInterval(() => {
+      if (tickInFlight) return;
+      tickInFlight = true;
+      runSchedulerTick({ config: ctx.config, stateDir: resolveStateDir(ctx.config) })
+        .catch((err) => {
+          log.error('scheduler tick failed', { error: (err as Error).message });
+        })
+        .finally(() => {
+          tickInFlight = false;
+        });
+    }, ctx.config.daemon.tickIntervalMs);
+    // The HTTP server's listening socket is what keeps this process
+    // alive; these timers are periodic maintenance, not liveness anchors.
+    iv.unref?.();
+
+    const httpHandle = http;
+    idleIv = setInterval(() => {
+      httpHandle.sweepIdle();
+    }, ctx.config.daemon.sessionIdleTimeoutMs);
+    idleIv.unref?.();
+  } catch (err) {
+    // Startup failed partway through -- release whatever was already
+    // acquired/started (Important 2) instead of leaking the daemon lock
+    // (and, if it got that far, the watcher lock) for the rest of the
+    // process's life.
+    await teardown().catch((teardownErr) => {
+      log.error('daemon startup cleanup (after failed start) also failed', {
+        error: (teardownErr as Error).message,
+      });
+    });
+    throw err;
+  }
 
   log.info('daemon started', { url: http.url, pid: process.pid });
 
