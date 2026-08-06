@@ -1256,3 +1256,71 @@ Fix: `embeddings.maxChunkChars` (config, default 2048 — safe even at 1.5 chars
 - The Ollama provider's defensive truncation (`maxInputChars`) MUST apply regardless of whether an upstream caller already truncated — it is a backstop, not a replacement for caller-side chunking.
 - Lowering `embeddings.maxChunkChars` below the embedding-index handler's fixed `targetChars` (1200) is not a supported configuration — `chunkText`'s buffering re-joins hard-split pieces up to `targetChars` before re-emitting, so a `maxChars` below `targetChars` does not bound individual chunk size as intended.
 
+## 28. Shared MCP daemon
+
+§27's fixes made the multi-instance stdio topology *safe* (single-watcher lock, global runner lock, bounded caches) but not *efficient*: a root-cause audit measured **22 concurrent `dist/mcp/server.js` processes** (one per Claude Code window and per subagent/Task) at ~920 MB RSS idle, ~80% of which is the Node runtime duplicated 22×, plus a `launchd` `StartInterval` job (`com.karpathy.tick`) spawning a fresh process every 5 minutes and firing a catch-up burst on wake from sleep. This section collapses that topology into **one long-lived, low-priority, sleep-aware HTTP daemon** that every window/subagent connects to as a client, retiring `com.karpathy.tick` entirely. Full design rationale (including the recorded decision not to rewrite in Rust — consolidation to one process removes the case for it) is in `docs/superpowers/specs/2026-08-06-shared-mcp-daemon-design.md`.
+
+### 28.1 Architecture
+
+`runDaemon` (`src/mcp/daemon.ts`) builds one `MCPContext` for a fixed `--project-root` and, inside it, starts three cooperating pieces against that single shared `ctx`:
+
+- an HTTP MCP transport (`startHttpMcpServer`, `src/mcp/http-transport.ts`) serving every client session;
+- the single vault file watcher (`startVaultWatcher`, `src/mcp/vault-watcher.ts`), reusing §27.1's `acquireWatcherLock` guard so at most one process — stdio or daemon — ever watches the vault;
+- an internal `setInterval` that calls `runSchedulerTick` (`src/intelligence/scheduler-tick.ts`) on a `daemon.tickIntervalMs` cadence (default 300000ms / 5 min), replacing the standalone `com.karpathy.tick` launchd job for this project.
+
+`createMcpServer` (`src/mcp/create-server.ts`) builds the actual `Server` (tool/resource handlers wired to `ctx`) and is shared verbatim by both the stdio entry point (`src/mcp/server.ts`) and the HTTP transport — one place defines tool wiring, two transports connect to it.
+
+### 28.2 Transport & session contract
+
+`startHttpMcpServer` runs a bare `node:http` server on `daemon.host:daemon.port` (default `127.0.0.1:8765`, loopback-only) using the MCP SDK's `StreamableHTTPServerTransport` in stateful mode:
+
+- `POST/GET/DELETE /mcp` — a session-less `initialize` `POST` creates a fresh `Server` + transport pair (via `createMcpServer(ctx)`) and assigns a session id (`randomUUID()`); every subsequent request carries `mcp-session-id` and is routed to that session's transport. An unknown session id returns HTTP 404 with a JSON-RPC error so the client re-initializes. All sessions share the one `ctx` built at daemon startup — SQLite/embedding/FTS handles stay per-call open/close inside tool handlers, unchanged from the stdio path.
+- `GET /health` — returns `{ status, pid, version, uptimeSec, sessions }`.
+- Request bodies are capped at 4 MB (`MAX_MCP_REQUEST_BODY_BYTES`); an oversized `content-length` or an oversized accumulated body is rejected (413) without buffering it, matching §27's bounded-memory posture.
+- Optional bearer-token auth: when `daemon.authToken` is set, every request must carry `Authorization: Bearer <token>` or receives 401. Default is no token (loopback trust, single-user machine).
+- **Idle sweep** — a periodic `sweepIdle()` call (same cadence as `daemon.sessionIdleTimeoutMs`, default 1800000ms / 30 min) closes sessions whose `lastActivityAt` predates the cutoff, so a client that vanishes without sending `DELETE` doesn't leak a session forever; the client transparently re-initializes on its next call.
+
+### 28.3 Scheduler tick and power-gating
+
+`runSchedulerTick` (extracted from the CLI's former inline `intel tick` case, which now delegates to it) runs first-run backfill, Cursor session import, `tickScheduler` (fires whatever's due from `defaultSchedule()`), and drains the queue via `runner.runAll()` — the latter already guarded by §27.6's global `'queue-runner'` lock, so the daemon's internal timer and a manual `karpathy intel tick` can never double-drain. The daemon's own `setInterval` callback adds a re-entrancy guard (`tickInFlight`) so a slow tick can never overlap the next timer fire; the interval is `unref()`'d since the HTTP listening socket, not these timers, is what keeps the process alive.
+
+Before running `HEAVY_SCHEDULED_JOBS` (`decay-scan`, `digest-weekly`, `research-propose`, `rot-scan` — the LLM-calling/whole-vault-scanning jobs), `runSchedulerTick` calls `powerState()`, a best-effort `pmset -g batt`/`pmset -g therm` probe (each bounded to a 2s timeout via `execFile`'s own `timeout` option, so a hung `pmset` can never block a tick) that defaults to fully unconstrained on any error, timeout, or non-macOS platform. On battery or under thermal throttling, `HEAVY_SCHEDULED_JOBS` are filtered out of that cycle's schedule (`heavyDeferred: true` in the result) while the light, deterministic jobs (`sync-fts-index`, `rebuild-vault-artifacts`, `archive-stale-drafts`, the `maintenance.reviewEnabled`-gated `detect-*` jobs) still fire and drain regardless. Interactive tool calls (search, etc.) are never gated by power state.
+
+### 28.4 Efficiency, sleep-awareness, low-priority (the three NFRs)
+
+- **Efficient (NFR-1)** — one process instead of N; per-session-call SQLite/embedding/FTS handles (no daemon-lifetime handle held at idle); `daemon.heapMb` (default 512) applied as `--max-old-space-size` via the launchd plist's `NODE_OPTIONS`, bounding a runaway tool call's heap instead of letting it grow unbounded; the idle-session sweep (§28.2) prevents session-map growth from an abandoned client.
+- **Sleep-aware (NFR-2)** — the launchd plist (`renderDaemonPlist`, `src/mcp/daemon-plist.ts`) deliberately omits `StartInterval`/`StartCalendarInterval`/`WakeInterval`, using `KeepAlive` instead: no periodic wake-and-poll cycle, no power assertion, no `caffeinate`. `setInterval` is paused by the OS during sleep and fires once on wake; the daemon's own `tickInFlight` re-entrancy guard (§28.3) means that one post-wake fire can never stack into a catch-up burst.
+- **Low-priority (NFR-3)** — the plist sets `ProcessType: Adaptive` (low priority idle, responsive while serving), `LowPriorityIO: true`, `Nice: 5`; `runDaemon` additionally calls `applySelfLowPriority(5)` (`src/shared/low-priority.ts`, wrapping `os.setPriority`) defensively at boot, since plist QoS settings are launchd-enforced only when the process is actually launched by launchd. Any process the daemon spawns (currently: the Stop-hook background drain, via `spawnLowPriority`) is wrapped in `taskpolicy -b` when available (checked at both `/usr/bin/taskpolicy` and `/usr/sbin/taskpolicy`), falling back to a bare spawn + `os.setPriority` on platforms without it.
+
+### 28.5 Single-instance, lifecycle, and stdio fallback
+
+`runDaemon` acquires a cross-process advisory lock (`createFileLock`, keyed `'mcp-daemon'`) before starting anything. A second `runDaemon` call against the same project root while a live daemon holds the lock is treated as an expected steady state, not a failure: it returns a well-typed no-op `DaemonHandle` (`port: -1`, `url: ''`, no-op `close()`) rather than throwing — the CLI prints "another daemon is already running for this project — exiting." and returns 0.
+
+Once the lock is held, `SIGTERM`/`SIGINT` handlers are registered *before* startup begins, so a signal arriving mid-startup still routes to the same `teardown()` closure a clean shutdown or a startup failure would use. `teardown()` is idempotent and exception-safe: every cleanup step (close the HTTP server, stop the watcher, release the watcher lock, release the daemon lock) runs via `runTeardownSteps`, which uses `Promise.allSettled` so one step throwing can never prevent the others from running — the daemon lock is always released, even on a partial failure.
+
+The existing **stdio** transport (`src/mcp/server.ts`, `karpathy mcp`) is unchanged and remains the fallback: `createMcpServer` is the one place both transports get their tool/resource wiring, so stdio and HTTP behave identically at the tool-call level. Nothing about this section requires migrating away from stdio — it's an available, tested, functional alternative at all times.
+
+CLI surface (`src/bin/karpathy.ts`):
+- `karpathy mcp-daemon [--port <n>] [--project-root <path>]` — starts the daemon; the process stays alive until `SIGTERM`/`SIGINT`.
+- `karpathy daemon install [--port <n>] [--project-root <path>]` — renders the launchd plist and writes it to `~/Library/LaunchAgents/com.karpathy.daemon.plist`, backing up any pre-existing file at that path to `.bak` first. Prints (but does not run) the `launchctl load`/`unload` commands and the exact `carpathi` MCP config stanza to migrate to — both are manual runbook steps.
+- `karpathy daemon status [--port <n>] [--project-root <path>]` — `GET`s `/health` and prints the response, or a clear "not reachable" message on connection failure.
+
+### 28.6 Rollout and rollback (reversible by construction)
+
+Rollout is staged, never a single irreversible cutover:
+
+1. Build + `pnpm build/lint/test` green; the stdio path is untouched throughout.
+2. `karpathy daemon install` to render/write the plist, then `launchctl load` it manually; verify with `karpathy daemon status`.
+3. **Pilot** — point 1-2 windows' `carpathi` MCP config entry at `{ "type": "http", "url": "http://127.0.0.1:<port>/mcp" }` while every other window stays on stdio; verify search/hot-cache work and that exactly one `mcp-daemon` process exists across the piloted windows.
+4. **Flip** — once satisfied, update both `~/.claude.json` and `~/.claude/settings.json` (backed up first) to `type: "http"` for every window, `launchctl unload` and retire `com.karpathy.tick.plist` (the daemon now schedules internally).
+5. **Rollback**, at any point — restore the config `.bak` files and re-enable the tick plist. The stdio `dist/mcp/server.js` binary was never touched and works immediately.
+
+### 28.7 Constraints
+
+- The daemon MUST bind loopback (`127.0.0.1`) only, never `0.0.0.0` — no multi-machine/networked access.
+- A second daemon instance for the same project root MUST NOT disrupt the first — it exits cleanly without binding a port or touching the watcher/daemon locks.
+- `runSchedulerTick` and the daemon's `setInterval` callback MUST NOT call `process.exit` — the CLI's `intel tick` and the daemon's internal timer are the only two callers, and only the CLI path exits afterward.
+- The scheduler's power-gating MUST only defer `HEAVY_SCHEDULED_JOBS` — light/deterministic scheduled jobs and all interactive tool calls run regardless of power state.
+- `teardown()` MUST be idempotent and MUST run every cleanup step even when an earlier step throws — no code path may leak the daemon or watcher lock past process exit.
+- The stdio transport (`src/mcp/server.ts`) MUST remain fully functional and untouched in behavior — this section adds a second transport, it does not replace or deprecate the first.
+

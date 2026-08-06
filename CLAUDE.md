@@ -6,13 +6,13 @@ This is a local-first knowledge system that captures Claude Code sessions and ra
 
 ## Specification
 
-The authoritative design spec lives at `specs/specification.md`. Consult it before implementing features or making non-trivial changes. See sections 6-8 for the memory model, architectural lanes, and job system; section 9 for functional requirements; section 10 for the data model; section 12 for overwrite policy; section 18 for implementation phases; section 22 for the curator reconciliation workflow; section 25 for the draft/archival lifecycle; section 26 for the research queue redesign; section 27 for resource-boundedness fixes (multi-instance MCP server, job-system boundedness, and embedding-store/FTS/chunk-size memory-footprint fixes).
+The authoritative design spec lives at `specs/specification.md`. Consult it before implementing features or making non-trivial changes. See sections 6-8 for the memory model, architectural lanes, and job system; section 9 for functional requirements; section 10 for the data model; section 12 for overwrite policy; section 18 for implementation phases; section 22 for the curator reconciliation workflow; section 25 for the draft/archival lifecycle; section 26 for the research queue redesign; section 27 for resource-boundedness fixes (multi-instance MCP server, job-system boundedness, and embedding-store/FTS/chunk-size memory-footprint fixes); section 28 for the shared MCP daemon (consolidates per-window stdio servers + the launchd tick into one low-priority, sleep-aware HTTP process).
 
 ## Build & Test
 
 ```bash
 pnpm build            # Build with tsup → dist/
-pnpm test             # Vitest, 1321 tests across 157 files
+pnpm test             # Vitest, 1380 tests across 164 files
 pnpm lint             # tsc --noEmit (strict mode)
 ```
 
@@ -205,6 +205,14 @@ Implements [specs/intelligence-plan.md](specs/intelligence-plan.md). Hot paths:
     }
   },
   "notifications": { "slack": { "enabled": false, "webhookUrl": "...", "target": "#channel" } },
+  "daemon": {
+    "host": "127.0.0.1",
+    "port": 8765,
+    "tickIntervalMs": 300000,        // scheduler cadence; replaces the standalone com.karpathy.tick launchd job
+    "sessionIdleTimeoutMs": 1800000, // idle MCP sessions are swept after this
+    "heapMb": 512                    // --max-old-space-size applied via the launchd plist's NODE_OPTIONS
+    // "authToken": "<token>"        // optional bearer token for Authorization header validation; unset (default) = loopback trust
+  },
   "ingest": {
     "stopDrainMinIntervalMs": 30000 // Fix B: min ms between Stop/PostCompact-hook-spawned background drains; scheduled intel tick still drains every 5 min regardless
   },
@@ -258,6 +266,17 @@ A third audit, focused on the ~2GB/250-400k-row `embeddings.sqlite` table, found
 - **Fix C — bounded embedding-table scans** — `EmbeddingStore.all(filter)` (`src/embeddings/store.ts`) ran an unfiltered `SELECT ... WHERE provider_id = ?` and materialized every row (Float32Array + metadata + full chunk text) before filtering in JS. `EmbeddingStore` gained `allSince(cutoffIso: string): EmbeddingRow[]`, pushing an `updated_at >= ?` predicate into SQL (new composite index `idx_emb_provider_updated ON embeddings(provider_id, updated_at)`); `updated_at` is written as `new Date().toISOString()` (fixed-width, UTC `Z`-suffixed), so lexicographic string comparison in SQL is sound. `src/intelligence/digest.ts` (weekly) now calls `store.allSince(cutoffIso)` instead of `store.all(dateFilter)`; `src/intelligence/research-propose.ts` (daily) now calls `deps.store.allSince(recentCutoffIso)` instead of the unfiltered `deps.store.all()` — its own `mentionStats()` already discarded rows older than the same 14-day cutoff in JS, so results are unchanged while the materialized set shrinks from all-time to the relevant window. The unfiltered `all()`/`all(filter)` is unchanged for other callers.
 - **Fix D — batched FTS bulk body reads** — `src/search/fts-index.ts`'s `sync()` pre-read the full body of every changed file into one in-memory array before its write transaction — ~22k bodies (100s of MB) at once on a first `--populate-fts` run or after a bulk mtime-touching resync. `search.ftsSyncBatchSize` (config, default 500): `sync()` now computes the changed/deleted split up front (paths+mtimes only), applies deletes in one up-front transaction (no body read needed), then reads+commits upserts one `batchSize`-sized batch at a time — bounding peak memory to `batchSize` bodies. `FTSIndexOptions.batchSize` is threaded from `config.search.ftsSyncBatchSize` via `openHybridStoreFromConfig`. Final index state is unchanged regardless of batch size.
 - **Fix K — safe embedding chunk sizes** — the daemon log showed Ollama 500ing with "input length exceeds the context length": `embedding-index.ts` called `chunkText(body, 1200, 4000)`, but the 4000-char cap assumed ~2.5 chars/token while wikilink-dense markdown can tokenize as low as ~1.5 chars/token, exceeding nomic-embed-text's 2048-token cap. `embeddings.maxChunkChars` (config, default 2048 — safe even at 1.5 ch/tok): `embedding-index.ts` now uses it in place of the hardcoded 4000. `matchSkillByEmbedding` (`src/agent/skills/embedding-match.ts`), which previously embedded its `content` argument with zero chunking, gained an optional `maxChunkChars` parameter (same 2048 default) and now truncates both the query content and every skill's composed text before embedding; its call site (`src/agent/runner.ts`) threads `config.embeddings.maxChunkChars` through. As a caller-independent backstop, the Ollama provider (`src/embeddings/ollama.ts`) gained `maxInputChars` (same default, wired from `embeddings.maxChunkChars`) and truncates any oversized input before POSTing, logging a warning when it does.
+
+## Shared MCP daemon (§28)
+
+§27 made the 22-process, one-watcher-each stdio topology *safe*; this consolidates it into **one long-lived, low-priority, sleep-aware HTTP process** that every window/subagent connects to, retiring the standalone `com.karpathy.tick` launchd job. Full design: `docs/superpowers/specs/2026-08-06-shared-mcp-daemon-design.md`; spec: §28.
+
+- **Entry point** — `runDaemon` (`src/mcp/daemon.ts`) builds one `MCPContext`, acquires a single-instance advisory lock (`createFileLock`, key `'mcp-daemon'`; a second instance for the same project root exits cleanly with a no-op handle rather than erroring), then starts the HTTP transport, the single vault watcher (`startVaultWatcher`, reusing §27.1's `acquireWatcherLock`), and an internal scheduler interval — all sharing that one `ctx`. `applySelfLowPriority(5)` (`src/shared/low-priority.ts`, wraps `os.setPriority`) is applied defensively at boot. Shutdown (`SIGTERM`/`SIGINT`, or a failed startup) runs through one idempotent, exception-safe `teardown()` (`runTeardownSteps`, `Promise.allSettled`-based) so the daemon/watcher locks are always released even if one cleanup step throws.
+- **HTTP transport** — `startHttpMcpServer` (`src/mcp/http-transport.ts`) serves the MCP SDK's `StreamableHTTPServerTransport` in stateful mode over `node:http`: `POST/GET/DELETE /mcp` (session-less `initialize` creates a session; subsequent requests carry `mcp-session-id`) and `GET /health` (`{ status, pid, version, uptimeSec, sessions }`). Request bodies are capped at 4 MB; an idle-session sweep (`sweepIdle()`, cadence = `daemon.sessionIdleTimeoutMs`) closes sessions a client abandoned without `DELETE`. Optional bearer-token auth via `daemon.authToken` (unset = loopback trust). `createMcpServer` (`src/mcp/create-server.ts`) builds the actual tool/resource-wired `Server` and is shared verbatim by this transport and the stdio one (`src/mcp/server.ts`) — one wiring point, two transports.
+- **Scheduler** — `runSchedulerTick` (`src/intelligence/scheduler-tick.ts`, extracted from the CLI's former inline `intel tick` case, which now delegates to it) runs backfill/Cursor-import/`tickScheduler`/`runner.runAll()` on the daemon's `daemon.tickIntervalMs` interval (default 300000ms), re-entrancy-guarded (`tickInFlight`) and `unref()`'d. Power-gates `HEAVY_SCHEDULED_JOBS` (`decay-scan`, `digest-weekly`, `research-propose`, `rot-scan`) off battery/thermal state via a `pmset`-based `powerState()` probe (2s-timeout-bounded, defaults unconstrained on any failure) — light/deterministic jobs and interactive tool calls are never gated.
+- **Stdio fallback** — `src/mcp/server.ts` (`karpathy mcp`) is untouched and remains fully functional; nothing requires migrating off it.
+- **CLI** — `karpathy mcp-daemon [--port <n>] [--project-root <path>]` starts the daemon (stays alive until signaled). `karpathy daemon install [--port <n>] [--project-root <path>]` renders + writes the launchd plist (`renderDaemonPlist`/`installDaemonPlist`, `src/mcp/daemon-plist.ts`) to `~/Library/LaunchAgents/com.karpathy.daemon.plist` (backing up any existing file), printing but not running the `launchctl`/config-migration steps. `karpathy daemon status [--port <n>] [--project-root <path>]` GETs `/health` and prints it.
+- **Rollout/rollback** — piloted (1-2 windows' `carpathi` config flipped to `{ "type": "http", "url": "http://127.0.0.1:<port>/mcp" }` first), then flipped globally in `~/.claude.json`/`~/.claude/settings.json` (backed up first) once verified, at which point `com.karpathy.tick.plist` is unloaded/retired. Rollback at any point is restoring the config `.bak` files and re-enabling the tick plist — the stdio binary was never touched.
 
 ## Common Tasks
 
