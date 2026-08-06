@@ -1,17 +1,7 @@
 import { resolve } from 'node:path';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
 import { createMCPContext } from './context.js';
-import { TOOL_DEFINITIONS } from './tools/index.js';
-import { handleToolCall } from './tools/router.js';
-import { RESOURCE_DEFINITIONS, handleResourceRead } from './resources.js';
-import { buildInstructions } from './instructions.js';
+import { createMcpServer } from './create-server.js';
 import { scanRawDirectory } from '../ingest/scanner.js';
 import { createFileWatcher, acquireWatcherLock, type FileWatcher } from '../ingest/watcher.js';
 import { ingestFile } from '../ingest/pipeline.js';
@@ -30,29 +20,7 @@ const projectRoot = parseProjectRootArg(process.argv.slice(2)) ?? resolve(proces
 // Create context first so we can derive instructions from the actual runtime layout.
 const ctx = await createMCPContext(projectRoot);
 
-const server = new Server(
-  { name: 'karpathy', version: '0.1.0' },
-  {
-    capabilities: { tools: {}, resources: {} },
-    instructions: buildInstructions(ctx.config.layout),
-  },
-);
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: TOOL_DEFINITIONS,
-}));
-
-server.setRequestHandler(CallToolRequestSchema, async (request) =>
-  handleToolCall(request.params, ctx),
-);
-
-server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-  resources: RESOURCE_DEFINITIONS,
-}));
-
-server.setRequestHandler(ReadResourceRequestSchema, async (request) =>
-  handleResourceRead(request.params, ctx),
-);
+const server = createMcpServer(ctx);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
