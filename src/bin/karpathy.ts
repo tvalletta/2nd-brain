@@ -60,6 +60,7 @@ import { seedBuiltinSkills, loadSkills } from '../agent/skills/registry.js';
 import { archiveCurrentSpec, listSupersededVersions } from '../specs/versioner.js';
 import { intelCommand } from './intel-command.js';
 import { runDaemon } from '../mcp/daemon.js';
+import { renderDaemonPlist, installDaemonPlist } from '../mcp/daemon-plist.js';
 import { parseProjectRootArg } from '../mcp/server-args.js';
 import { OPEN_TAG, CLOSE_TAG } from '../vault/protected-regions.js';
 import { createLogger } from '../shared/logger.js';
@@ -1823,6 +1824,107 @@ async function mcpDaemonCommand(args: string[]): Promise<void> {
   process.stdout.write(`karpathy mcp-daemon: listening at ${handle.url} (pid ${process.pid})\n`);
 }
 
+/**
+ * `karpathy daemon install` — renders the launchd plist (design §9) and
+ * writes it to `~/Library/LaunchAgents/com.karpathy.daemon.plist`, backing
+ * up any existing file there first. Does NOT run `launchctl load` and does
+ * NOT edit `~/.claude*` MCP config — both are manual runbook steps (design
+ * §11); this command only prints them.
+ */
+async function daemonInstallCommand(args: string[]): Promise<void> {
+  const projectRoot = resolve(parseProjectRootArg(args) ?? process.cwd());
+  const config = await loadConfig(projectRoot);
+
+  const portIdx = args.indexOf('--port');
+  const portArg = portIdx !== -1 ? args[portIdx + 1] : undefined;
+  const port = portArg !== undefined ? Number(portArg) : config.daemon.port;
+  if (!Number.isInteger(port)) {
+    throw new Error(`--port must be an integer, got: ${portArg}`);
+  }
+
+  // bin/karpathy-with-env.sh lives at the repo root, i.e. two levels up from
+  // this file's own location (dist/bin/karpathy.js -> <repoRoot>/bin/...).
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
+  const scriptPath = join(repoRoot, 'bin', 'karpathy-with-env.sh');
+
+  const plist = renderDaemonPlist({
+    port,
+    projectRoot: config.projectRoot ?? projectRoot,
+    heapMb: config.daemon.heapMb,
+    scriptPath,
+  });
+
+  const { homedir } = await import('node:os');
+  const targetPath = join(homedir(), 'Library', 'LaunchAgents', 'com.karpathy.daemon.plist');
+  const result = await installDaemonPlist({ targetPath, plist });
+
+  if (result.backedUp) {
+    process.stdout.write(`Existing plist backed up to ${result.backupPath}\n`);
+  }
+  process.stdout.write(`Wrote ${result.path}\n\n`);
+  process.stdout.write(
+    [
+      'Manual next steps (not run automatically by this command):',
+      '',
+      '  launchctl unload ~/Library/LaunchAgents/com.karpathy.daemon.plist 2>/dev/null || true',
+      '  launchctl load ~/Library/LaunchAgents/com.karpathy.daemon.plist',
+      '',
+      'Then verify with `karpathy daemon status`. Once healthy, migrate the carpathi MCP config',
+      'in ~/.claude.json and ~/.claude/settings.json from stdio to (back up both files first):',
+      '',
+      `  "carpathi": { "type": "http", "url": "http://${config.daemon.host}:${port}/mcp" }`,
+      '',
+      'This migration is intentionally manual (design §11 runbook) — this command never edits',
+      '~/.claude* on its own.',
+      '',
+    ].join('\n'),
+  );
+}
+
+/**
+ * `karpathy daemon status` — GETs the daemon's `/health` endpoint and
+ * prints the response, or a clear unreachable message on connection error.
+ */
+async function daemonStatusCommand(args: string[]): Promise<void> {
+  const projectRoot = resolve(parseProjectRootArg(args) ?? process.cwd());
+  const config = await loadConfig(projectRoot);
+
+  const portIdx = args.indexOf('--port');
+  const portArg = portIdx !== -1 ? args[portIdx + 1] : undefined;
+  const port = portArg !== undefined ? Number(portArg) : config.daemon.port;
+
+  const url = `http://${config.daemon.host}:${port}/health`;
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    try {
+      process.stdout.write(`${JSON.stringify(JSON.parse(text), null, 2)}\n`);
+    } catch {
+      process.stdout.write(`${text}\n`);
+    }
+    if (!res.ok) process.exitCode = 1;
+  } catch (err) {
+    process.stdout.write(
+      `karpathy daemon status: daemon not reachable at ${url} (${(err as Error).message})\n`,
+    );
+    process.exitCode = 1;
+  }
+}
+
+async function daemonCommand(args: string[]): Promise<void> {
+  switch (args[0]) {
+    case 'install':
+      await daemonInstallCommand(args.slice(1));
+      return;
+    case 'status':
+      await daemonStatusCommand(args.slice(1));
+      return;
+    default:
+      process.stderr.write('Usage: karpathy daemon <install|status>\n');
+      process.exitCode = 1;
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
@@ -1848,6 +1950,9 @@ async function main(): Promise<void> {
       break;
     case 'mcp-daemon':
       await mcpDaemonCommand(args.slice(1));
+      break;
+    case 'daemon':
+      await daemonCommand(args.slice(1));
       break;
     case 'maintain':
       await maintainCommand();
@@ -1957,6 +2062,8 @@ async function main(): Promise<void> {
           '  install-mcp         Register MCP server in Claude Code + Cursor',
           '  mcp                 Start MCP server (stdio transport)',
           '  mcp-daemon [--port <n>] [--project-root <path>]  Start the shared MCP daemon (HTTP transport, long-lived)',
+          '  daemon install [--port <n>] [--project-root <path>]  Render + write the launchd plist for the shared daemon',
+          '  daemon status [--port <n>] [--project-root <path>]   GET the daemon /health endpoint and print it',
           '  review              Show review queue',
           '  synthesize <slug>   Run full re-synthesis for a project (Opus model)',
           '  check-decay         Check for stale project specs and trigger re-synthesis',
