@@ -147,4 +147,53 @@ describe('startHttpMcpServer', () => {
     });
     expect(r.status).toBe(404);
   });
+
+  it('rejects an oversized POST body with 413 and stays usable for later requests', async () => {
+    const h = await start();
+
+    // Well above any sane cap (spec picks 4 MB) — content-length alone
+    // should trip the guard before any buffering happens.
+    const oversized = 'x'.repeat(6 * 1024 * 1024);
+    const res = await fetch(`http://127.0.0.1:${h.port}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { big: oversized } }),
+    });
+    expect(res.status).toBe(413);
+    await res.text().catch(() => {});
+
+    // The server must stay up: a normal client can still connect afterward.
+    const c = new Client({ name: 't', version: '1' });
+    await c.connect(new StreamableHTTPClientTransport(new URL(h.url)));
+    const tools = await c.listTools();
+    expect(tools.tools.length).toBeGreaterThan(0);
+    expect(h.sessionCount()).toBe(1);
+    await c.close().catch(() => {});
+  });
+
+  it('DELETE /mcp closes the session server-side', async () => {
+    const h = await start();
+    const transport = new StreamableHTTPClientTransport(new URL(h.url));
+    const client = new Client({ name: 't', version: '1' });
+    await client.connect(transport);
+    expect(h.sessionCount()).toBe(1);
+
+    const sessionId = transport.sessionId;
+    expect(typeof sessionId).toBe('string');
+
+    const res = await fetch(`http://127.0.0.1:${h.port}/mcp`, {
+      method: 'DELETE',
+      headers: { 'mcp-session-id': sessionId! },
+    });
+    expect(res.status).toBe(200);
+    expect(h.sessionCount()).toBe(0);
+
+    await client.close().catch(() => {});
+  });
+
+  it('close() is idempotent — calling it twice resolves without throwing', async () => {
+    const h = await start();
+    await h.close();
+    await expect(h.close()).resolves.toBeUndefined();
+  });
 });

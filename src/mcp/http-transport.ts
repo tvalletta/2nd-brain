@@ -29,17 +29,54 @@ interface SessionEntry {
 
 const SERVER_VERSION = '0.1.0';
 
+/** Hard cap on a single `/mcp` request body (§27-style bounded-memory posture). */
+const MAX_MCP_REQUEST_BODY_BYTES = 4 * 1024 * 1024; // 4 MB
+
+/** Thrown by `readJsonBody` when a request body exceeds `MAX_MCP_REQUEST_BODY_BYTES`. */
+class PayloadTooLargeError extends Error {}
+
 /**
  * Reads and JSON-parses the full body of a `node:http` request. The SDK's
  * `StreamableHTTPServerTransport.handleRequest` accepts a pre-parsed body
  * (see streamableHttp.d.ts's usage example) — `node:http` has no built-in
  * body parser, so this does the minimal equivalent.
+ *
+ * Bounded to `maxBytes`: a `content-length` header over the cap rejects
+ * immediately (draining and discarding the socket via `req.resume()` so a
+ * misbehaving client doesn't stall the connection); absent/understated
+ * `content-length` is caught by capping the accumulated buffer as chunks
+ * arrive — once exceeded, further chunks are discarded (not buffered) but
+ * still drained so the request can reach `end` and the connection stays
+ * healthy for the next request on a keep-alive socket.
  */
-function readJsonBody(req: IncomingMessage): Promise<unknown> {
+function readJsonBody(req: IncomingMessage, maxBytes: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
+    const contentLength = Number(req.headers['content-length']);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      req.resume(); // drain + discard so the connection isn't left dangling
+      reject(new PayloadTooLargeError(`Request body exceeds ${maxBytes} bytes`));
+      return;
+    }
+
     const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    let total = 0;
+    let tooLarge = false;
+
+    req.on('data', (chunk: Buffer) => {
+      if (tooLarge) return; // already over cap — keep draining, discard the rest
+      total += chunk.length;
+      if (total > maxBytes) {
+        tooLarge = true;
+        chunks.length = 0; // free what's buffered so far right away
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on('end', () => {
+      if (tooLarge) {
+        reject(new PayloadTooLargeError(`Request body exceeds ${maxBytes} bytes`));
+        return;
+      }
       const raw = Buffer.concat(chunks).toString('utf-8');
       if (!raw) {
         resolve(undefined);
@@ -112,7 +149,8 @@ export async function startHttpMcpServer(
         return;
       }
       entry.lastActivityAt = now();
-      const body = req.method === 'POST' ? await readJsonBody(req) : undefined;
+      const body =
+        req.method === 'POST' ? await readJsonBody(req, MAX_MCP_REQUEST_BODY_BYTES) : undefined;
       await entry.transport.handleRequest(req, res, body);
       return;
     }
@@ -123,7 +161,7 @@ export async function startHttpMcpServer(
       return;
     }
 
-    const body = await readJsonBody(req);
+    const body = await readJsonBody(req, MAX_MCP_REQUEST_BODY_BYTES);
     if (!isInitializeRequest(body)) {
       sendJsonRpcError(res, 400, 'No valid session and request is not an initialize request');
       return;
@@ -166,7 +204,9 @@ export async function startHttpMcpServer(
     if (path === '/mcp') {
       handleMcpRequest(req, res).catch((err) => {
         if (!res.headersSent) {
-          sendJsonRpcError(res, 500, err instanceof Error ? err.message : 'Internal error');
+          const status = err instanceof PayloadTooLargeError ? 413 : 500;
+          const message = err instanceof Error ? err.message : 'Internal error';
+          sendJsonRpcError(res, status, message);
         } else {
           res.end();
         }
@@ -186,6 +226,7 @@ export async function startHttpMcpServer(
   const port =
     address && typeof address === 'object' ? address.port : opts.port;
   const url = `http://${opts.host}:${port}/mcp`;
+  let closed = false;
 
   return {
     port,
@@ -195,17 +236,23 @@ export async function startHttpMcpServer(
     },
     sweepIdle(): number {
       const cutoff = now() - opts.sessionIdleTimeoutMs;
-      let closed = 0;
+      let closedCount = 0;
       for (const [sid, entry] of sessions) {
         if (entry.lastActivityAt < cutoff) {
           sessions.delete(sid);
-          closed += 1;
+          closedCount += 1;
           entry.transport.close().catch(() => {});
         }
       }
-      return closed;
+      return closedCount;
     },
     async close(): Promise<void> {
+      // Idempotent: Task 7's shutdown path may call close() more than once
+      // (e.g. an explicit shutdown racing a signal handler); a second
+      // httpServer.close() would otherwise reject with
+      // ERR_SERVER_NOT_RUNNING.
+      if (closed) return;
+      closed = true;
       const entries = Array.from(sessions.values());
       sessions.clear();
       await Promise.all(entries.map((entry) => entry.transport.close()));
