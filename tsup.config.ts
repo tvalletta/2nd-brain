@@ -17,6 +17,7 @@ export default defineConfig([
     entry: {
       index: 'src/index.ts',
       'mcp/server': 'src/mcp/server.ts',
+      'mcp/watchdog-worker': 'src/mcp/watchdog-worker.ts',
     },
     format: ['esm'],
     target: 'node18',
