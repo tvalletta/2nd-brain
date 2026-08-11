@@ -12,7 +12,7 @@ The authoritative design spec lives at `specs/specification.md`. Consult it befo
 
 ```bash
 pnpm build            # Build with tsup → dist/
-pnpm test             # Vitest, 1380 tests across 164 files
+pnpm test             # Vitest, 1400 tests across 167 files
 pnpm lint             # tsc --noEmit (strict mode)
 ```
 
