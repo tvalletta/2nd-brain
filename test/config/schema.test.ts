@@ -191,6 +191,10 @@ describe('KarpathyConfigSchema — daemon', () => {
       tickIntervalMs: 300_000,
       sessionIdleTimeoutMs: 1_800_000,
       heapMb: 512,
+      watchdogEnabled: true,
+      watchdogTimeoutMs: 30_000,
+      watchdogHeartbeatMs: 1_000,
+      schedulerChildMaxRuntimeMs: 600_000,
     });
     expect(config.daemon.authToken).toBeUndefined();
   });
@@ -207,6 +211,14 @@ describe('KarpathyConfigSchema — daemon', () => {
     expect(config.daemon.tickIntervalMs).toBe(300_000);
     expect(config.daemon.sessionIdleTimeoutMs).toBe(1_800_000);
     expect(config.daemon.heapMb).toBe(512);
+  });
+
+  it('applies daemon watchdog + scheduler-child defaults', () => {
+    const cfg = KarpathyConfigSchema.parse({ vaultPath: '/v' });
+    expect(cfg.daemon.watchdogEnabled).toBe(true);
+    expect(cfg.daemon.watchdogTimeoutMs).toBe(30000);
+    expect(cfg.daemon.watchdogHeartbeatMs).toBe(1000);
+    expect(cfg.daemon.schedulerChildMaxRuntimeMs).toBe(600000);
   });
 });
 

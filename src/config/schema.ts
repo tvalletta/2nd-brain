@@ -439,6 +439,14 @@ export const DaemonConfigSchema = z.object({
   heapMb: z.number().int().positive().default(512),
   /** Optional bearer token for `Authorization` header validation. Unset = loopback trust. */
   authToken: z.string().optional(),
+  /** Enables the event-loop watchdog that detects a wedged daemon process. */
+  watchdogEnabled: z.boolean().default(true),
+  /** Max ms the watchdog allows the event loop to go unresponsive before acting. */
+  watchdogTimeoutMs: z.number().int().positive().default(30_000),
+  /** Watchdog heartbeat cadence (ms). */
+  watchdogHeartbeatMs: z.number().int().positive().default(1_000),
+  /** Max ms a scheduler-tick child process may run before it is treated as stuck. */
+  schedulerChildMaxRuntimeMs: z.number().int().positive().default(600_000),
 });
 
 export const KarpathyConfigSchema = z.object({
