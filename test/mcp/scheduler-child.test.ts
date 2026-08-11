@@ -64,4 +64,36 @@ describe('createSchedulerChildRunner', () => {
     child.emit('exit', 0);
     expect(r.current()).toBeNull();
   });
+
+  it('does not throw uncaught on a spawn-level "error" event, and clears tracking', () => {
+    const child = fakeChild();
+    const spawn = vi.fn(() => child);
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any;
+    const r = createSchedulerChildRunner({ scriptPath: '/x.js', projectRoot: '/p', maxRuntimeMs: 1000, spawn, log });
+    r.tick();
+    expect(r.current()).not.toBeNull();
+    expect(() => child.emit('error', new Error('ENOENT: spawn failed'))).not.toThrow();
+    expect(r.current()).toBeNull();
+    expect(log.error).toHaveBeenCalledWith(
+      'scheduler child spawn error',
+      expect.objectContaining({ error: expect.stringContaining('ENOENT') }),
+    );
+  });
+
+  it('an "error" event from a stale (already-replaced) child does not clear current tracking', () => {
+    const staleChild = fakeChild();
+    const freshChild = fakeChild();
+    const spawn = vi.fn().mockReturnValueOnce(staleChild).mockReturnValueOnce(freshChild);
+    let t = 0;
+    const now = () => t;
+    const r = createSchedulerChildRunner({ scriptPath: '/x.js', projectRoot: '/p', maxRuntimeMs: 5000, spawn, now });
+    r.tick(); // spawns staleChild at t=0
+    t = 6000;
+    r.tick(); // past cap -> kills staleChild, spawns freshChild
+    expect(r.current()?.child).toBe(freshChild);
+    // A late 'error' event from the already-replaced staleChild must not
+    // clear tracking for the current (fresh) child.
+    staleChild.emit('error', new Error('late error from stale child'));
+    expect(r.current()?.child).toBe(freshChild);
+  });
 });

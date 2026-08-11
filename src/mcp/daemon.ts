@@ -1,10 +1,12 @@
+import { fileURLToPath } from 'node:url';
 import { createMCPContext } from './context.js';
 import { startHttpMcpServer, type HttpMcpServerHandle } from './http-transport.js';
 import { startVaultWatcher, type VaultWatcherHandle } from './vault-watcher.js';
-import { runSchedulerTick } from '../intelligence/scheduler-tick.js';
+import { createSchedulerChildRunner } from './scheduler-child.js';
+import { startWatchdog, type WatchdogHandle } from './watchdog.js';
 import { applySelfLowPriority } from '../shared/low-priority.js';
 import { createFileLock } from '../jobs/lock.js';
-import { resolveLockDir, resolveStateDir } from '../config/defaults.js';
+import { resolveLockDir } from '../config/defaults.js';
 import { LockError } from '../shared/errors.js';
 import { createLogger } from '../shared/logger.js';
 
@@ -122,6 +124,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<DaemonHandle> {
   // any of these are assigned (see the module-level doc comment above).
   let http: HttpMcpServerHandle | undefined;
   let vw: VaultWatcherHandle | null = null;
+  let watchdog: WatchdogHandle | null = null;
   let iv: NodeJS.Timeout | undefined;
   let idleIv: NodeJS.Timeout | undefined;
   let closed = false;
@@ -134,6 +137,15 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<DaemonHandle> {
     if (iv) clearInterval(iv);
     if (idleIv) clearInterval(idleIv);
     await runTeardownSteps([
+      // Terminated first: the watchdog's worker thread is what would
+      // otherwise act on a wedged event loop (design §28) -- it must stop
+      // observing before the rest of teardown starts tearing down the
+      // very process it's watching, so a slow http.close()/watcher.stop()
+      // during shutdown can never be mistaken for a hang and trigger a
+      // watchdog action mid-teardown.
+      async () => {
+        await watchdog?.stop();
+      },
       () => http?.close(),
       () => vw?.stop(),
       () => vw?.release(),
@@ -170,22 +182,25 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<DaemonHandle> {
     vw = await startVaultWatcher(ctx);
 
     // Scheduler tick: replaces the standalone launchd `com.karpathy.tick`
-    // job for this project. Re-entrancy guard (`tickInFlight`) prevents a
-    // slow tick from overlapping the next timer fire; `runSchedulerTick`
-    // itself also takes the global job-runner lock (Fix E, §27) as a
-    // second, cross-process layer of protection.
-    let tickInFlight = false;
-    iv = setInterval(() => {
-      if (tickInFlight) return;
-      tickInFlight = true;
-      runSchedulerTick({ config: ctx.config, stateDir: resolveStateDir(ctx.config) })
-        .catch((err) => {
-          log.error('scheduler tick failed', { error: (err as Error).message });
-        })
-        .finally(() => {
-          tickInFlight = false;
-        });
-    }, ctx.config.daemon.tickIntervalMs);
+    // job for this project, AND (Task 5) runs off the daemon's own event
+    // loop entirely -- `intel tick` (which drains the job queue, including
+    // arbitrary LLM-calling handlers) is spawned as an isolated, detached,
+    // low-priority child process instead of awaited inline. This is the
+    // change that makes daemon event-loop isolation live: a slow/wedged
+    // handler inside a tick can no longer block `/mcp`/`/health` for every
+    // connected window, because it isn't running on this process at all.
+    // `createSchedulerChildRunner` itself guards against overlapping
+    // children and kills+respawns a runaway past `schedulerChildMaxRuntimeMs`;
+    // the spawned `intel tick` additionally takes the global job-runner
+    // lock (Fix E, §27) as a second, cross-process layer of protection.
+    const cliScriptPath = fileURLToPath(new URL('../bin/karpathy.js', import.meta.url));
+    const scheduler = createSchedulerChildRunner({
+      scriptPath: cliScriptPath,
+      projectRoot: ctx.config.projectRoot!,
+      maxRuntimeMs: ctx.config.daemon.schedulerChildMaxRuntimeMs,
+      log,
+    });
+    iv = setInterval(() => scheduler.tick(), ctx.config.daemon.tickIntervalMs);
     // The HTTP server's listening socket is what keeps this process
     // alive; these timers are periodic maintenance, not liveness anchors.
     iv.unref?.();
@@ -195,6 +210,38 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<DaemonHandle> {
       httpHandle.sweepIdle();
     }, ctx.config.daemon.sessionIdleTimeoutMs);
     idleIv.unref?.();
+
+    // Event-loop watchdog (design §28): a worker thread independently
+    // observes a `SharedArrayBuffer` heartbeat this process updates every
+    // `watchdogHeartbeatMs`; if the heartbeat goes stale past
+    // `watchdogTimeoutMs`, the main event loop is wedged badly enough that
+    // it can no longer even update a timer, and the worker acts
+    // (see watchdog-worker.ts) independently of anything on this loop.
+    // Started after the http/watcher/scheduler wiring above so a startup
+    // failure partway through never leaves a watchdog running with
+    // nothing to watch -- the `catch` block below tears it down via the
+    // same `teardown()` path as everything else.
+    if (ctx.config.daemon.watchdogEnabled) {
+      watchdog = startWatchdog({
+        heartbeatMs: ctx.config.daemon.watchdogHeartbeatMs,
+        timeoutMs: ctx.config.daemon.watchdogTimeoutMs,
+        // NOT `'./watchdog-worker.js'`: this module's code is statically
+        // imported from `src/bin/karpathy.ts` and, per `tsup.config.ts`
+        // (there is no separate `mcp/daemon` build entry), gets fully
+        // inlined into the single `dist/bin/karpathy.js` bundle -- so
+        // `import.meta.url` here evaluates to that bundle's own URL, NOT
+        // to a hypothetical standalone `dist/mcp/daemon.js`. Verified by
+        // building and resolving both candidates against the real output:
+        // `'./watchdog-worker.js'` resolves to the nonexistent
+        // `dist/bin/watchdog-worker.js`; `'../mcp/watchdog-worker.js'`
+        // correctly resolves to the real `dist/mcp/watchdog-worker.js`
+        // (its own tsup entry) in both this bundled layout AND a
+        // hypothetical future standalone `dist/mcp/daemon.js` layout,
+        // exactly like the `cliScriptPath` computation just above.
+        workerPath: fileURLToPath(new URL('../mcp/watchdog-worker.js', import.meta.url)),
+        log,
+      });
+    }
   } catch (err) {
     // Startup failed partway through -- release whatever was already
     // acquired/started (Important 2) instead of leaking the daemon lock

@@ -51,6 +51,16 @@ export function createSchedulerChildRunner(opts: {
       log.info('scheduler child exited', { pid: child.pid, code });
       if (tracked === entry) tracked = null;
     });
+    // An unhandled 'error' event (e.g. ENOENT if `scriptPath` doesn't
+    // exist, or a spawn-level EAGAIN) would otherwise throw uncaught and
+    // crash the daemon -- exactly the failure mode this whole isolation
+    // effort exists to prevent. Mirrors the 'exit' handler's identity
+    // guard so a stale listener from a since-replaced child can't clear
+    // tracking for the current one.
+    child.on('error', (err) => {
+      log.error('scheduler child spawn error', { pid: child.pid, error: (err as Error).message });
+      if (tracked === entry) tracked = null;
+    });
   }
 
   return {

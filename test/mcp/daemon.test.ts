@@ -1,10 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
+import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { createSchedulerChildRunner } from '../../src/mcp/scheduler-child.js';
+import type { Job } from '../../src/jobs/types.js';
+
+// Repo root -- resolves the REAL build output (`dist/bin/karpathy.js`) for
+// the "true project-root proof" integration test below, same pattern as
+// test/bin/intel-tick-exit.test.ts.
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 // `runDaemon` calls `createMCPContext()`, which goes through `loadConfig()`
 // (src/config/loader.ts) -- it always reads the REAL global config at
@@ -58,8 +66,22 @@ describe('runDaemon', () => {
    * without touching the filesystem -- this test is only exercising the
    * HTTP transport + single-instance lock, both of which are independent
    * of the watcher (covered separately by test/mcp/vault-watcher.test.ts).
+   *
+   * `daemon.watchdogEnabled` defaults to `false` here (real schema default
+   * is `true`): `startWatchdog`'s `workerPath` is computed from
+   * `import.meta.url` inside `daemon.ts`, which resolves correctly against
+   * the REAL BUILT `dist/mcp/watchdog-worker.js` (see the comment at that
+   * call site in daemon.ts) but has no source-mode equivalent -- this
+   * suite dynamically imports daemon.ts straight from `src/`, where no
+   * compiled watchdog-worker `.js` exists alongside it. Left at the real
+   * default, every `runDaemon()` call in this file would spawn a real
+   * `Worker` against a path that can never exist in this test environment,
+   * erroring and respawning in an un-throttled loop (`watchdog.ts`'s own
+   * behavior, already covered in isolation with a mocked `workerFactory`
+   * by test/mcp/watchdog.test.ts) until `close()`. `overrides.daemon` lets
+   * an individual test opt back in.
    */
-  async function makeProjectRoot(): Promise<string> {
+  async function makeProjectRoot(overrides: { daemon?: Record<string, unknown> } = {}): Promise<string> {
     const projectRoot = await mkdtemp(join(tmpdir(), 'karpathy-daemon-project-'));
     const vaultDir = await mkdtemp(join(tmpdir(), 'karpathy-daemon-vault-'));
     dirsToClean.push(projectRoot, vaultDir);
@@ -67,7 +89,13 @@ describe('runDaemon', () => {
     await mkdir(join(fakeHome, '.karpathy'), { recursive: true });
     await writeFile(
       join(fakeHome, '.karpathy', 'config.json'),
-      JSON.stringify({ defaults: { vaultPath: vaultDir }, projects: {} }),
+      JSON.stringify({
+        defaults: {
+          vaultPath: vaultDir,
+          daemon: { watchdogEnabled: false, ...overrides.daemon },
+        },
+        projects: {},
+      }),
       'utf-8',
     );
 
@@ -178,6 +206,85 @@ describe('runDaemon', () => {
     const r = await fetch(`http://127.0.0.1:${h.port}/health`);
     expect(r.status).toBe(200);
   });
+
+  // Task 5: the scheduler is now an isolated, detached child process
+  // (scheduler-child.ts), spawned fire-and-forget from a `setInterval`
+  // instead of an inline `await runSchedulerTick(...)` on the daemon's own
+  // event loop. With the default `tickIntervalMs` (5 min, unref'd), no tick
+  // fires during this short-lived test at all -- which is itself part of
+  // the proof: booting the daemon with the new wiring, and issuing two
+  // sequential requests, must not stall regardless of what the (dormant)
+  // scheduler timer is doing.
+  it('runs the scheduler as a separate child process, not inline (daemon stays responsive)', async () => {
+    const projectRoot = await makeProjectRoot();
+    const h = await runDaemon({ projectRoot, port: 0 });
+    try {
+      const r1 = await fetch(`http://127.0.0.1:${h.port}/health`);
+      expect((await r1.json()).status).toBe('ok');
+      const r2 = await fetch(`http://127.0.0.1:${h.port}/health`);
+      expect(r2.status).toBe(200);
+    } finally {
+      await h.close();
+    }
+  });
+
+  // Task 5, key proof: a real `createSchedulerChildRunner` pointed at the
+  // REAL built CLI (`dist/bin/karpathy.js`) -- the exact same code path
+  // `daemon.ts` now wires up on its tick interval -- spawned with
+  // `--project-root` set to a temp project, must drain THAT project's own
+  // job queue. This is the end-to-end proof that `intel tick` honors
+  // `--project-root` (Step 1) and that the isolated child, not some
+  // ambient `process.cwd()`-derived project, is what gets drained.
+  //
+  // The child's `intel tick` also runs the full first-run schedule
+  // (auto-backfill, cursor import, every `defaultSchedule()` job, since
+  // this project's scheduler state starts empty) against the fresh temp
+  // vault -- all of which is deterministic/local (the fake global config
+  // below sets no LLM/embedding provider overrides, so `embeddings.provider`
+  // stays at its offline `deterministic` default and no network call is
+  // ever made) -- before draining our seeded job. Bounded, generous
+  // timeout below accounts for that real cold-start cost.
+  it("a project-root-scoped tick child drains THIS project's queue", async () => {
+    const projectRoot = await makeProjectRoot();
+    const stateDir = join(projectRoot, '.karpathy', 'state');
+    await mkdir(stateDir, { recursive: true });
+    const queuePath = join(stateDir, 'job-queue.json');
+
+    const jobId = 'daemon-test-drain-proof-1';
+    const seededJob: Partial<Job> = {
+      id: jobId,
+      type: 'rebuild-index',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      dedupeKey: 'daemon-test-drain-proof',
+    };
+    await writeFile(queuePath, JSON.stringify([seededJob], null, 2), 'utf-8');
+
+    const scriptPath = resolve(ROOT, 'dist/bin/karpathy.js');
+    const runner = createSchedulerChildRunner({
+      scriptPath,
+      projectRoot,
+      maxRuntimeMs: 120_000,
+    });
+    runner.tick();
+
+    async function readJobStatus(): Promise<string | undefined> {
+      const raw = await readFile(queuePath, 'utf-8').catch(() => '[]');
+      const jobs: Job[] = JSON.parse(raw);
+      return jobs.find((j) => j.id === jobId)?.status;
+    }
+
+    const deadline = Date.now() + 90_000;
+    let status: string | undefined = 'pending';
+    while (Date.now() < deadline) {
+      status = await readJobStatus();
+      if (status !== 'pending') break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    expect(status).not.toBe('pending');
+    expect(status).toBe('completed');
+  }, 100_000);
 
   // Important 1: teardown must run every cleanup step independently -- a
   // rejection in one (e.g. http.close()) must never prevent the others

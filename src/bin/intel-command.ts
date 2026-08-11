@@ -32,6 +32,7 @@ import { parseSlackReply, applyDecisions } from '../intelligence/slack-notify.js
 import { openStoreFromConfig } from '../embeddings/factory.js';
 import { VAULT_LOG_PATH } from '../maintenance/vault-log.js';
 import { VAULT_HEALTH_PATH } from '../intelligence/rot-scan.js';
+import { parseProjectRootArg } from '../mcp/server-args.js';
 import type { JobCreateInput, JobType } from '../jobs/types.js';
 import type { KarpathyConfig } from '../config/schema.js';
 
@@ -238,7 +239,14 @@ export async function intelCommand(args: string[]): Promise<void> {
       return;
     }
     case 'tick': {
-      const config = await loadConfig();
+      // Honor `--project-root` (same helper `mcp-daemon`/`daemon install`/
+      // `daemon status` use) so a scheduler-child spawned by the daemon
+      // against a specific project resolves THAT project's config/state
+      // instead of silently falling back to `process.cwd()` -- which, for
+      // a detached child spawned with `cwd: opts.projectRoot`, usually
+      // happens to be right, but must not be left implicit.
+      const projectRoot = parseProjectRootArg(args);
+      const config = await loadConfig(projectRoot);
       const stateDir = resolveStateDir(config);
       const res = await runSchedulerTick({ config, stateDir });
       const fired = res.fired.map((f) => `${f.type} (${f.reason})`).join(', ') || 'nothing';
